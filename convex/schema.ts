@@ -10,6 +10,17 @@ export default defineSchema({
   })
     .index("by_tokenHash", ["tokenHash"])
     .index("by_expiresAt", ["expiresAt"]),
+  apiKeys: defineTable({
+    name: v.string(),
+    keyHash: v.string(),
+    prefix: v.string(),
+    last4: v.string(),
+    createdAt: v.number(),
+    revokedAt: v.union(v.number(), v.null()),
+  })
+    .index("by_keyHash", ["keyHash"])
+    .index("by_createdAt", ["createdAt"])
+    .index("by_revokedAt_and_createdAt", ["revokedAt", "createdAt"]),
   thoughts: defineTable({
     externalId: v.string(),
     rawText: v.string(),

@@ -105,6 +105,42 @@ export const apiClient = {
     });
   },
 
+  async listApiKeys() {
+    return requestJson<{
+      keys: Array<{
+        id: string;
+        name: string;
+        prefix: string;
+        last4: string;
+        createdAt: number;
+      }>;
+    }>("/api/api-keys", {
+      method: "GET",
+    });
+  },
+
+  async createApiKey(name: string) {
+    return requestJson<{
+      ok: true;
+      apiKey: string;
+      key: {
+        id: string;
+        name: string;
+        prefix: string;
+        last4: string;
+      };
+    }>("/api/api-keys", {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    });
+  },
+
+  async revokeApiKey(keyId: string) {
+    return requestJson<{ ok: true }>(`/api/api-keys/${keyId}`, {
+      method: "DELETE",
+    });
+  },
+
   async updateTodo(
     todoId: string,
     payload: {

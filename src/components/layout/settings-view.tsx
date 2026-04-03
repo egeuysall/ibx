@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -35,6 +35,13 @@ const PICKER_ITEM_CLASS =
   "border border-input aria-pressed:border-foreground aria-pressed:bg-foreground aria-pressed:text-background data-[state=on]:border-foreground data-[state=on]:bg-foreground data-[state=on]:text-background";
 
 type DefaultView = "today" | "upcoming" | "archive";
+type ApiKeySummary = {
+  id: string;
+  name: string;
+  prefix: string;
+  last4: string;
+  createdAt: number;
+};
 
 function readStoredDefaultView(): DefaultView {
   if (typeof window === "undefined") {
@@ -60,6 +67,12 @@ export function SettingsView() {
   const [isSigningOut, startSignOutTransition] = useTransition();
   const [defaultView, setDefaultView] = useState<DefaultView>(() => readStoredDefaultView());
   const [promptAutofocus, setPromptAutofocus] = useState(() => readStoredPromptAutofocus());
+  const [keyName, setKeyName] = useState("cli");
+  const [createdApiKey, setCreatedApiKey] = useState<string | null>(null);
+  const [apiKeys, setApiKeys] = useState<ApiKeySummary[]>([]);
+  const [isLoadingKeys, setIsLoadingKeys] = useState(true);
+  const [isCreatingKey, startCreateKeyTransition] = useTransition();
+  const [revokingKeyId, setRevokingKeyId] = useState<string | null>(null);
 
   const setThemeFromGroup = (values: string[]) => {
     const nextTheme = values[0];
@@ -106,6 +119,65 @@ export function SettingsView() {
       router.replace("/");
       router.refresh();
     });
+  };
+
+  const refreshApiKeys = async () => {
+    setIsLoadingKeys(true);
+    try {
+      const { keys } = await apiClient.listApiKeys();
+      setApiKeys(keys);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to load API keys.";
+      toast.error(message);
+    } finally {
+      setIsLoadingKeys(false);
+    }
+  };
+
+  useEffect(() => {
+    void refreshApiKeys();
+  }, []);
+
+  const handleCreateApiKey = () => {
+    startCreateKeyTransition(async () => {
+      try {
+        const created = await apiClient.createApiKey(keyName);
+        setCreatedApiKey(created.apiKey);
+        setKeyName("cli");
+        toast.message("API key created");
+        await refreshApiKeys();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Failed to create API key.";
+        toast.error(message);
+      }
+    });
+  };
+
+  const handleRevokeApiKey = async (keyId: string) => {
+    setRevokingKeyId(keyId);
+    try {
+      await apiClient.revokeApiKey(keyId);
+      toast.message("API key revoked");
+      await refreshApiKeys();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to revoke API key.";
+      toast.error(message);
+    } finally {
+      setRevokingKeyId(null);
+    }
+  };
+
+  const copyCreatedApiKey = async () => {
+    if (!createdApiKey) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(createdApiKey);
+      toast.message("API key copied");
+    } catch {
+      toast.error("Could not copy API key");
+    }
   };
 
   return (
@@ -249,6 +321,80 @@ export function SettingsView() {
                     </ToggleGroupItem>
                   </ToggleGroup>
                 </div>
+              </div>
+            </section>
+
+            <section className="border-b px-4 py-4 md:px-6">
+              <p className="text-sm">api keys</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                create keys for cli usage. keys are shown once and only hashed values are stored.
+              </p>
+
+              <div className="mt-3 flex max-w-xl flex-wrap items-center gap-1.5">
+                <input
+                  value={keyName}
+                  onChange={(event) => setKeyName(event.target.value.slice(0, 64))}
+                  className="h-8 w-44 rounded-md border border-input bg-background px-2 text-xs outline-none focus-visible:border-ring"
+                  placeholder="key name"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-auto"
+                  onClick={handleCreateApiKey}
+                  disabled={isCreatingKey}
+                >
+                  {isCreatingKey ? "generating..." : "generate key"}
+                </Button>
+              </div>
+
+              {createdApiKey ? (
+                <div className="mt-3 flex max-w-xl flex-col gap-2 rounded-md border border-input p-2">
+                  <p className="text-[11px] text-muted-foreground">copy now. this value will not be shown again.</p>
+                  <code className="break-all text-xs">{createdApiKey}</code>
+                  <div className="flex gap-1.5">
+                    <Button variant="outline" size="sm" className="w-auto" onClick={copyCreatedApiKey}>
+                      copy
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-auto"
+                      onClick={() => setCreatedApiKey(null)}
+                    >
+                      hide
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="mt-3 flex max-w-xl flex-col gap-1.5">
+                {isLoadingKeys ? (
+                  <p className="text-xs text-muted-foreground">loading keys...</p>
+                ) : apiKeys.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">no keys yet</p>
+                ) : (
+                  apiKeys.map((key) => (
+                    <div
+                      key={key.id}
+                      className="flex items-center justify-between rounded-md border border-input px-2 py-1.5 text-xs"
+                    >
+                      <div className="min-w-0">
+                        <p>{key.name}</p>
+                        <p className="text-muted-foreground">{key.prefix}_...{key.last4}</p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-auto"
+                        disabled={revokingKeyId === key.id}
+                        onClick={() => void handleRevokeApiKey(key.id)}
+                      >
+                        {revokingKeyId === key.id ? "revoking..." : "revoke"}
+                      </Button>
+                    </div>
+                  ))
+                )}
               </div>
             </section>
 
