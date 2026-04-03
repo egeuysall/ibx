@@ -1,31 +1,71 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
 import { LoginScreen } from "@/components/auth/login-screen";
 import { Toaster } from "@/components/ui/sonner";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarRail,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useTheme } from "@/hooks/useTheme";
 import { apiClient, ApiError } from "@/lib/apiClient";
+import { cn } from "@/lib/utils";
 import type { TodoItem, TodoRecurrence } from "@/lib/types";
 
 type AppShellProps = {
   initialAuthenticated: boolean;
+  initialFilter?: TodoFilter;
 };
 
-function formatDateInput(timestamp: number | null) {
-  if (!timestamp) {
+const PROMPT_INPUT_STORAGE_KEY = "inbox:prompt-input";
+const FILTER_STORAGE_KEY = "inbox:active-view";
+const DAY_MS = 24 * 60 * 60 * 1000;
+const NOTE_PREVIEW_LENGTH = 160;
+
+function readStoredPromptInput() {
+  if (typeof window === "undefined") {
     return "";
   }
 
-  return format(new Date(timestamp), "yyyy-MM-dd");
+  try {
+    return window.localStorage.getItem(PROMPT_INPUT_STORAGE_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function readStoredFilter() {
+  if (typeof window === "undefined") {
+    return "today" as TodoFilter;
+  }
+
+  try {
+    return normalizeFilter(window.localStorage.getItem(FILTER_STORAGE_KEY));
+  } catch {
+    return "today" as TodoFilter;
+  }
 }
 
 function displayDueDate(timestamp: number | null) {
@@ -34,6 +74,27 @@ function displayDueDate(timestamp: number | null) {
   }
 
   return format(new Date(timestamp), "MMM d, yyyy");
+}
+
+function displayDateInputValue(timestamp: number | null) {
+  if (!timestamp) {
+    return "mm/dd/yyyy";
+  }
+
+  return format(new Date(timestamp), "MM/dd/yyyy");
+}
+
+function getStartOfUtcDay(timestamp: number) {
+  const date = new Date(timestamp);
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+}
+
+function isDueTodayUtc(timestamp: number | null, todayStartUtc: number) {
+  if (!timestamp) {
+    return false;
+  }
+
+  return timestamp >= todayStartUtc && timestamp < todayStartUtc + DAY_MS;
 }
 
 function parseErrorMessage(error: unknown) {
@@ -48,10 +109,34 @@ function parseErrorMessage(error: unknown) {
   return "Unexpected error";
 }
 
+function displayRecurrence(recurrence: TodoRecurrence) {
+  if (recurrence === "none") {
+    return "once";
+  }
+
+  return recurrence;
+}
+
+function displayPriority(priority: number) {
+  return `p${priority}`;
+}
+
+function getPreviewNotes(notes: string) {
+  if (notes.length <= NOTE_PREVIEW_LENGTH) {
+    return notes;
+  }
+
+  return `${notes.slice(0, NOTE_PREVIEW_LENGTH)}…`;
+}
+
 function sortTodos(todos: TodoItem[]) {
   return [...todos].sort((a, b) => {
     if (a.status !== b.status) {
       return a.status === "open" ? -1 : 1;
+    }
+
+    if (a.status === "open" && b.status === "open" && a.priority !== b.priority) {
+      return a.priority - b.priority;
     }
 
     const aDueDate = a.dueDate ?? Number.MAX_SAFE_INTEGER;
@@ -65,35 +150,74 @@ function sortTodos(todos: TodoItem[]) {
   });
 }
 
+type TodoFilter = "today" | "upcoming" | "archive";
+
+function normalizeFilter(value: string | null | undefined): TodoFilter {
+  if (value === "upcoming" || value === "archive") {
+    return value;
+  }
+
+  return "today";
+}
+
 export function AppShell({ initialAuthenticated }: AppShellProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   useTheme();
 
   const [isAuthenticated, setIsAuthenticated] = useState(initialAuthenticated);
-  const [promptInput, setPromptInput] = useState("");
+  const [filter, setFilter] = useState<TodoFilter>(() => readStoredFilter());
+  const [promptInput, setPromptInput] = useState(() => readStoredPromptInput());
   const [todos, setTodos] = useState<TodoItem[]>([]);
+  const [hasLoadedTodos, setHasLoadedTodos] = useState(false);
   const [isLoadingTodos, setIsLoadingTodos] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [pendingTodoId, setPendingTodoId] = useState<string | null>(null);
+  const [editingTodoId, setEditingTodoId] = useState<string | null>(null);
+  const [expandedNoteIds, setExpandedNoteIds] = useState<Record<string, boolean>>({});
+  const promptInputRef = useRef<HTMLInputElement | null>(null);
+  const hasPlacedInitialCursor = useRef(false);
 
-  const refreshTodos = useCallback(async () => {
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(PROMPT_INPUT_STORAGE_KEY, promptInput);
+    } catch {
+      // Ignore localStorage failures (private mode, blocked storage)
+    }
+  }, [promptInput]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(FILTER_STORAGE_KEY, filter);
+    } catch {
+      // Ignore localStorage failures (private mode, blocked storage)
+    }
+  }, [filter]);
+
+  const refreshTodos = useCallback(async (showLoading = false) => {
     if (!isAuthenticated) {
       return;
     }
 
-    setIsLoadingTodos(true);
+    if (showLoading) {
+      setIsLoadingTodos(true);
+    }
+
     try {
       const { todos: nextTodos } = await apiClient.listAllTodos();
       setTodos(sortTodos(nextTodos));
+      setHasLoadedTodos(true);
     } catch (error) {
       toast.error(parseErrorMessage(error));
     } finally {
-      setIsLoadingTodos(false);
+      if (showLoading) {
+        setIsLoadingTodos(false);
+      }
     }
   }, [isAuthenticated]);
 
   useEffect(() => {
-    void refreshTodos();
+    void refreshTodos(true);
   }, [refreshTodos]);
 
   useEffect(() => {
@@ -107,6 +231,63 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
 
     return () => window.clearInterval(timer);
   }, [isAuthenticated, refreshTodos]);
+
+  const placePromptCursorAtEnd = useCallback(() => {
+    const input = promptInputRef.current;
+    if (!input || hasPlacedInitialCursor.current) {
+      return;
+    }
+
+    const cursorPosition = input.value.length;
+    input.setSelectionRange(cursorPosition, cursorPosition);
+    hasPlacedInitialCursor.current = true;
+  }, []);
+
+  useEffect(() => {
+    const animationFrame = window.requestAnimationFrame(() => {
+      const input = promptInputRef.current;
+      if (!input || hasPlacedInitialCursor.current) {
+        return;
+      }
+
+      input.focus({ preventScroll: true });
+      const cursorPosition = input.value.length;
+      input.setSelectionRange(cursorPosition, cursorPosition);
+      hasPlacedInitialCursor.current = true;
+    });
+
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [placePromptCursorAtEnd]);
+
+  useEffect(() => {
+    const viewParam = searchParams.get("view");
+    if (!viewParam) {
+      setFilter(readStoredFilter());
+      return;
+    }
+
+    setFilter(normalizeFilter(viewParam));
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (!searchParams.get("view")) {
+      const nextFilter = readStoredFilter();
+      setFilter(nextFilter);
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("view", nextFilter);
+      router.replace(`/?${params.toString()}`, { scroll: false });
+    }
+  }, [router, searchParams]);
+
+  const setActiveFilter = useCallback(
+    (nextFilter: TodoFilter) => {
+      setFilter(nextFilter);
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("view", nextFilter);
+      router.replace(`/?${params.toString()}`, { scroll: false });
+    },
+    [router, searchParams],
+  );
 
   const handleAuthenticated = () => {
     setIsAuthenticated(true);
@@ -133,15 +314,39 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
     }
   };
 
-  const updateTodoStatus = async (todo: TodoItem) => {
-    const nextStatus = todo.status === "open" ? "done" : "open";
-
+  const updateTodoStatus = async (todo: TodoItem, checked: boolean) => {
+    const nextStatus = checked ? "done" : "open";
     setPendingTodoId(todo.id);
+    setTodos((previousTodos) =>
+      sortTodos(
+        previousTodos.map((item) =>
+          item.id === todo.id
+            ? {
+                ...item,
+                status: nextStatus,
+              }
+            : item,
+        ),
+      ),
+    );
+
     try {
       await apiClient.updateTodo(todo.id, { status: nextStatus });
       await refreshTodos();
     } catch (error) {
       toast.error(parseErrorMessage(error));
+      setTodos((previousTodos) =>
+        sortTodos(
+          previousTodos.map((item) =>
+            item.id === todo.id
+              ? {
+                  ...item,
+                  status: todo.status,
+                }
+              : item,
+          ),
+        ),
+      );
     } finally {
       setPendingTodoId(null);
     }
@@ -186,10 +391,39 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
   };
 
   const groupedTodos = useMemo(() => {
+    const todayStartUtc = getStartOfUtcDay(Date.now());
+    const openTodos = todos.filter((todo) => todo.status === "open");
+
     return {
-      open: todos.filter((todo) => todo.status === "open"),
-      done: todos.filter((todo) => todo.status === "done"),
+      today: openTodos.filter((todo) => isDueTodayUtc(todo.dueDate, todayStartUtc)),
+      upcoming: openTodos.filter((todo) => !isDueTodayUtc(todo.dueDate, todayStartUtc)),
+      archive: todos.filter((todo) => todo.status === "done"),
     };
+  }, [todos]);
+
+  const filteredTodos = useMemo(() => {
+    if (filter === "today") {
+      return groupedTodos.today;
+    }
+
+    if (filter === "upcoming") {
+      return groupedTodos.upcoming;
+    }
+
+    return groupedTodos.archive;
+  }, [filter, groupedTodos]);
+
+  const todayProgressLabel = useMemo(() => {
+    const todayStartUtc = getStartOfUtcDay(Date.now());
+    const openToday = todos.filter(
+      (todo) => todo.status === "open" && isDueTodayUtc(todo.dueDate, todayStartUtc),
+    ).length;
+    const doneToday = todos.filter(
+      (todo) => todo.status === "done" && isDueTodayUtc(todo.dueDate, todayStartUtc),
+    ).length;
+    const total = openToday + doneToday;
+
+    return total > 0 ? `today ${doneToday}/${total}` : "today 0/0";
   }, [todos]);
 
   if (!isAuthenticated) {
@@ -203,126 +437,239 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
 
   return (
     <>
-      <div className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-4 py-4 md:px-6">
-        <header className="flex items-center justify-between border-b pb-3">
-          <div className="flex items-baseline gap-2">
-            <p className="text-sm tracking-tight">Todos</p>
-            <span className="text-xs text-muted-foreground">{format(new Date(), "EEE, MMM d")}</span>
-          </div>
-          <Button variant="ghost" size="sm" render={<Link href="/settings" prefetch={false} />}>
-            settings
-          </Button>
-        </header>
+      <SidebarProvider>
+        <Sidebar collapsible="icon">
+          <SidebarHeader className="h-12 border-b p-0">
+            <div className="flex h-12 items-center justify-between px-3 group-data-[collapsible=icon]:hidden">
+              <p className="text-sm">Inbox</p>
+              <SidebarTrigger size="icon-sm" variant="ghost" />
+            </div>
+            <div className="hidden h-12 items-center justify-center group-data-[collapsible=icon]:flex">
+              <SidebarTrigger size="icon-sm" variant="ghost" />
+            </div>
+          </SidebarHeader>
+          <SidebarContent>
+            <SidebarGroup>
+              <SidebarGroupLabel>views</SidebarGroupLabel>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    isActive={filter === "today"}
+                    onClick={() => setActiveFilter("today")}
+                    className="group-data-[collapsible=icon]:justify-center"
+                  >
+                    <span className="group-data-[collapsible=icon]:hidden">today</span>
+                    <span className="hidden group-data-[collapsible=icon]:inline">{"\\"}</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    isActive={filter === "upcoming"}
+                    onClick={() => setActiveFilter("upcoming")}
+                    className="group-data-[collapsible=icon]:justify-center"
+                  >
+                    <span className="group-data-[collapsible=icon]:hidden">upcoming</span>
+                    <span className="hidden group-data-[collapsible=icon]:inline">/</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    isActive={filter === "archive"}
+                    onClick={() => setActiveFilter("archive")}
+                    className="group-data-[collapsible=icon]:justify-center"
+                  >
+                    <span className="group-data-[collapsible=icon]:hidden">archive</span>
+                    <span className="hidden group-data-[collapsible=icon]:inline">[</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    render={<Link href="/settings" prefetch={false} />}
+                    className="group-data-[collapsible=icon]:justify-center"
+                  >
+                    <span className="group-data-[collapsible=icon]:hidden">settings</span>
+                    <span className="hidden group-data-[collapsible=icon]:inline">]</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroup>
+          </SidebarContent>
+          <SidebarFooter>
+            <p className="px-2 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
+              {format(new Date(), "EEE, MMM d").toLowerCase()}
+            </p>
+          </SidebarFooter>
+          <SidebarRail />
+        </Sidebar>
 
-        <main className="min-h-0 flex-1 overflow-y-auto py-4">
-          {isLoadingTodos ? (
-            <p className="text-xs text-muted-foreground">loading todos…</p>
-          ) : (
-            <div className="flex flex-col gap-6">
-              <section className="flex flex-col gap-3">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                  open ({groupedTodos.open.length})
-                </p>
-                {groupedTodos.open.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No open todos yet.</p>
-                ) : (
-                  groupedTodos.open.map((todo) => (
-                    <article key={todo.id} className="flex flex-col gap-2 border-b pb-4">
+        <SidebarInset className="min-h-dvh flex flex-col">
+          <header className="sticky top-0 z-20 flex h-12 items-center border-b bg-background px-4 md:px-6">
+            <div className="flex w-full items-center gap-2">
+              <span className="text-muted-foreground">{">"}</span>
+              <Input
+                ref={promptInputRef}
+                value={promptInput}
+                onChange={(event) => setPromptInput(event.target.value)}
+                placeholder="type once, generate todos"
+                autoFocus
+                onFocus={() => placePromptCursorAtEnd()}
+                className="h-8 border-0 bg-transparent px-0 shadow-none ring-0 focus-visible:border-transparent focus-visible:ring-0 dark:bg-transparent"
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    void handleGenerateTodos();
+                  }
+                }}
+                disabled={isGenerating}
+              />
+              <Button size="sm" onClick={() => void handleGenerateTodos()} disabled={isGenerating}>
+                {isGenerating ? "running..." : "run"}
+              </Button>
+              <span className="text-xs text-muted-foreground">{todayProgressLabel}</span>
+            </div>
+          </header>
+
+          <main className="min-h-0 flex-1 overflow-y-auto py-4">
+            {!hasLoadedTodos && isLoadingTodos ? (
+              <p className="px-4 text-xs text-muted-foreground md:px-6">loading todos…</p>
+            ) : filteredTodos.length === 0 ? (
+              <p className="px-4 text-sm text-muted-foreground md:px-6">No todos in this view yet.</p>
+            ) : (
+              <div className="flex flex-col gap-4">
+                {filteredTodos.map((todo) => (
+                  <article
+                    key={todo.id}
+                    className="border-b cursor-pointer"
+                    onClick={() => setEditingTodoId(todo.id)}
+                  >
+                    <div className="flex flex-col gap-2 px-4 pb-4 md:px-6">
                       <div className="flex items-start gap-3">
-                        <Switch
+                        <Checkbox
                           checked={todo.status === "done"}
-                          onCheckedChange={() => void updateTodoStatus(todo)}
+                          onCheckedChange={(checked) => void updateTodoStatus(todo, Boolean(checked))}
+                          onClick={(event) => event.stopPropagation()}
+                          onPointerDown={(event) => event.stopPropagation()}
                           aria-label={`Toggle ${todo.title}`}
                           disabled={pendingTodoId === todo.id}
                         />
                         <div className="flex min-w-0 flex-1 flex-col gap-1">
-                          <p className="text-sm">{todo.title}</p>
+                          <div className="flex items-start justify-between gap-2">
+                            <p
+                              className={cn(
+                                "text-sm",
+                                todo.status === "done" && "line-through opacity-70",
+                              )}
+                            >
+                              {todo.title}
+                            </p>
+                          </div>
                           {todo.notes ? (
-                            <p className="text-xs text-muted-foreground">{todo.notes}</p>
+                            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                              <p className="max-w-full break-words">
+                                {expandedNoteIds[todo.id] ? todo.notes : getPreviewNotes(todo.notes)}
+                              </p>
+                              {todo.notes.length > NOTE_PREVIEW_LENGTH ? (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-5 px-1 text-[11px] text-muted-foreground hover:text-foreground"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    setExpandedNoteIds((current) => ({
+                                      ...current,
+                                      [todo.id]: !current[todo.id],
+                                    }));
+                                  }}
+                                  onPointerDown={(event) => event.stopPropagation()}
+                                >
+                                  {expandedNoteIds[todo.id] ? "less" : "more"}
+                                </Button>
+                              ) : null}
+                            </div>
                           ) : null}
                           <p className="text-xs text-muted-foreground">
-                            due: {displayDueDate(todo.dueDate)}
+                            {displayPriority(todo.priority)} / due: {displayDueDate(todo.dueDate)} /{" "}
+                            {displayRecurrence(todo.recurrence)}
                           </p>
                         </div>
                       </div>
-                      <div className="ml-8 flex flex-col gap-2 sm:flex-row sm:items-center">
-                        <Input
-                          type="date"
-                          className="w-full sm:w-44"
-                          value={formatDateInput(todo.dueDate)}
-                          onChange={(event) => void updateTodoDate(todo, event.target.value)}
-                          disabled={pendingTodoId === todo.id}
-                        />
-                        <ToggleGroup
-                          multiple={false}
-                          value={[todo.recurrence]}
-                          onValueChange={(values) => void updateTodoRecurrence(todo, values)}
-                          variant="outline"
-                          size="sm"
+                      {editingTodoId === todo.id ? (
+                        <div
+                          className="ml-8 flex flex-col gap-2 sm:flex-row sm:items-center"
+                          onClick={(event) => event.stopPropagation()}
+                          onPointerDown={(event) => event.stopPropagation()}
                         >
-                          <ToggleGroupItem value="none">once</ToggleGroupItem>
-                          <ToggleGroupItem value="daily">daily</ToggleGroupItem>
-                          <ToggleGroupItem value="weekly">weekly</ToggleGroupItem>
-                          <ToggleGroupItem value="monthly">monthly</ToggleGroupItem>
-                        </ToggleGroup>
-                      </div>
-                    </article>
-                  ))
-                )}
-              </section>
-
-              <section className="flex flex-col gap-3">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                  done ({groupedTodos.done.length})
-                </p>
-                {groupedTodos.done.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No completed todos yet.</p>
-                ) : (
-                  groupedTodos.done.map((todo) => (
-                    <article key={todo.id} className="flex items-start gap-3 border-b pb-3 opacity-75">
-                      <Switch
-                        checked={todo.status === "done"}
-                        onCheckedChange={() => void updateTodoStatus(todo)}
-                        aria-label={`Toggle ${todo.title}`}
-                        disabled={pendingTodoId === todo.id}
-                      />
-                      <div className="flex min-w-0 flex-1 flex-col gap-1">
-                        <p className="text-sm line-through">{todo.title}</p>
-                        {todo.notes ? (
-                          <p className="text-xs text-muted-foreground">{todo.notes}</p>
-                        ) : null}
-                      </div>
-                    </article>
-                  ))
-                )}
-              </section>
-            </div>
-          )}
-        </main>
-
-        <footer className="border-t pt-3">
-          <div className="flex items-center gap-2">
-            <Input
-              value={promptInput}
-              onChange={(event) => setPromptInput(event.target.value)}
-              placeholder="> write one messy thought, then generate todos"
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  void handleGenerateTodos();
-                }
-              }}
-              disabled={isGenerating}
-            />
-            <Button size="sm" onClick={() => void handleGenerateTodos()} disabled={isGenerating}>
-              {isGenerating ? "running..." : "run"}
-            </Button>
-          </div>
-        </footer>
-      </div>
+                          <Popover>
+                            <PopoverTrigger
+                              render={
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className={cn(
+                                    "w-full justify-start sm:w-44",
+                                    !todo.dueDate && "text-muted-foreground",
+                                  )}
+                                  disabled={pendingTodoId === todo.id}
+                                />
+                              }
+                            >
+                              {displayDateInputValue(todo.dueDate)}
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto gap-0 rounded-md bg-background p-1 shadow-none">
+                              <Calendar
+                                className="rounded-sm border border-border"
+                                mode="single"
+                                selected={todo.dueDate ? new Date(todo.dueDate) : undefined}
+                                onSelect={(date) =>
+                                  void updateTodoDate(todo, date ? format(date, "yyyy-MM-dd") : "")
+                                }
+                              />
+                            </PopoverContent>
+                          </Popover>
+                          <ToggleGroup
+                            multiple={false}
+                            value={[todo.recurrence]}
+                            onValueChange={(values) => void updateTodoRecurrence(todo, values)}
+                            variant="default"
+                            size="sm"
+                          >
+                            <ToggleGroupItem
+                              value="none"
+                              className="border border-input aria-pressed:border-foreground aria-pressed:bg-foreground aria-pressed:text-background data-[state=on]:border-foreground data-[state=on]:bg-foreground data-[state=on]:text-background"
+                            >
+                              once
+                            </ToggleGroupItem>
+                            <ToggleGroupItem
+                              value="daily"
+                              className="border border-input aria-pressed:border-foreground aria-pressed:bg-foreground aria-pressed:text-background data-[state=on]:border-foreground data-[state=on]:bg-foreground data-[state=on]:text-background"
+                            >
+                              daily
+                            </ToggleGroupItem>
+                            <ToggleGroupItem
+                              value="weekly"
+                              className="border border-input aria-pressed:border-foreground aria-pressed:bg-foreground aria-pressed:text-background data-[state=on]:border-foreground data-[state=on]:bg-foreground data-[state=on]:text-background"
+                            >
+                              weekly
+                            </ToggleGroupItem>
+                            <ToggleGroupItem
+                              value="monthly"
+                              className="border border-input aria-pressed:border-foreground aria-pressed:bg-foreground aria-pressed:text-background data-[state=on]:border-foreground data-[state=on]:bg-foreground data-[state=on]:text-background"
+                            >
+                              monthly
+                            </ToggleGroupItem>
+                          </ToggleGroup>
+                        </div>
+                      ) : null}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </main>
+        </SidebarInset>
+      </SidebarProvider>
 
       <Toaster position="bottom-right" />
     </>
   );
 }
-

@@ -4,14 +4,17 @@ import { useEffect, useMemo, useState } from "react";
 
 export type ThemePreference = "system" | "light" | "dark";
 
-const THEME_STORAGE_KEY = "mg-theme";
+const THEME_STORAGE_KEY = "inbox:appearance";
+const LEGACY_THEME_STORAGE_KEY = "mg-theme";
 
 function readStoredTheme(): ThemePreference {
   if (typeof window === "undefined") {
     return "system";
   }
 
-  const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
+  const storedTheme =
+    window.localStorage.getItem(THEME_STORAGE_KEY) ??
+    window.localStorage.getItem(LEGACY_THEME_STORAGE_KEY);
   return storedTheme === "light" || storedTheme === "dark" || storedTheme === "system"
     ? storedTheme
     : "system";
@@ -43,6 +46,12 @@ export function useTheme() {
   const [theme, setThemeState] = useState<ThemePreference>(() => readStoredTheme());
 
   useEffect(() => {
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+    } catch {
+      // Ignore localStorage failures (private mode, blocked storage)
+    }
+
     applyThemeToDocument(theme);
 
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");

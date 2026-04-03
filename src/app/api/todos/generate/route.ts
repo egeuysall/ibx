@@ -6,6 +6,7 @@ import { generateTodosFromThought } from "@/lib/ai";
 import { getRouteSession, unauthorizedJson } from "@/lib/auth-server";
 import { api, convex } from "@/lib/convex-server";
 import { getEgeContext } from "@/lib/ege-context";
+import { planGeneratedTodos } from "@/lib/todo-planning";
 
 function normalizeInputText(value: unknown) {
   if (typeof value !== "string") {
@@ -14,6 +15,11 @@ function normalizeInputText(value: unknown) {
 
   const normalized = value.trim().slice(0, 8_000);
   return normalized.length ? normalized : null;
+}
+
+function getStartOfUtcDay(timestamp: number) {
+  const date = new Date(timestamp);
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
 }
 
 export async function POST(request: NextRequest) {
@@ -63,15 +69,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Thought was not created." }, { status: 500 });
     }
 
-    if (generatedTodos.length > 0) {
+    await convex.mutation(api.todos.enforceDueDatesAndReschedule, {
+      todayStartUtc: getStartOfUtcDay(Date.now()),
+    });
+    const existingTodos = await convex.query(api.todos.listAll, {});
+    const plannedTodos = planGeneratedTodos(generatedTodos, existingTodos);
+
+    if (plannedTodos.length > 0) {
       await convex.mutation(api.todos.createMany, {
         thoughtId: thought._id,
         thoughtExternalId: externalId,
-        items: generatedTodos.map((todo) => ({
+        items: plannedTodos.map((todo) => ({
           title: todo.title,
           notes: todo.notes,
-          dueDate: todo.dueDate ? Date.parse(`${todo.dueDate}T00:00:00.000Z`) : null,
+          dueDate: todo.dueDateTimestamp,
           recurrence: todo.recurrence,
+          priority: todo.priority,
           source: "ai" as const,
         })),
       });
@@ -86,7 +99,7 @@ export async function POST(request: NextRequest) {
 
     await convex.mutation(api.memories.addRunMemory, {
       runExternalId: externalId,
-      content: `input="${rawText.slice(0, 240)}" created=${generatedTodos.length} todos titles=[${generatedTodos
+      content: `input="${rawText.slice(0, 240)}" created=${plannedTodos.length} todos titles=[${plannedTodos
         .map((todo) => todo.title)
         .slice(0, 6)
         .join(" | ")}]`,
@@ -95,7 +108,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       ok: true,
       runId: externalId,
-      created: generatedTodos.length,
+      created: plannedTodos.length,
     });
   } catch (error) {
     await convex.mutation(api.thoughts.updateStatus, {

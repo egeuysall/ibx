@@ -5,6 +5,7 @@ export type SyncStatus = "local-only" | "syncing" | "synced" | "error";
 export type TodoStatus = "open" | "done";
 export type TodoRecurrence = "none" | "daily" | "weekly" | "monthly";
 export type TodoSource = "ai" | "manual";
+export type TodoPriority = 1 | 2 | 3;
 
 export type TodoItem = {
   id: string;
@@ -13,6 +14,7 @@ export type TodoItem = {
   notes: string | null;
   status: TodoStatus;
   dueDate: number | null;
+  priority: TodoPriority;
   recurrence: TodoRecurrence;
   source: TodoSource;
   createdAt: number;

@@ -5,10 +5,14 @@ type AiTodo = {
   notes: string | null;
   dueDate: string | null;
   recurrence: "none" | "daily" | "weekly" | "monthly";
+  priority: 1 | 2 | 3;
 };
+
+export type GeneratedTodo = AiTodo;
 
 const AI_GATEWAY_URL = "https://ai-gateway.vercel.sh/v1/chat/completions";
 const VALID_RECURRENCE = new Set(["none", "daily", "weekly", "monthly"]);
+const MAX_NOTES_LENGTH = 160;
 
 function clampText(text: string, maxLength: number) {
   return text.trim().slice(0, maxLength);
@@ -48,6 +52,7 @@ function normalizeTodos(value: unknown): AiTodo[] {
     const notesSource = Reflect.get(candidate, "notes");
     const dueDateSource = Reflect.get(candidate, "dueDate");
     const recurrenceSource = Reflect.get(candidate, "recurrence");
+    const prioritySource = Reflect.get(candidate, "priority");
 
     if (typeof titleSource !== "string") {
       continue;
@@ -58,16 +63,20 @@ function normalizeTodos(value: unknown): AiTodo[] {
       continue;
     }
 
-    const notes = typeof notesSource === "string" ? clampText(notesSource, 1200) : null;
+    const notes = typeof notesSource === "string" ? clampText(notesSource, MAX_NOTES_LENGTH) : null;
     const dueDate = normalizeDueDate(dueDateSource);
     const recurrence =
       typeof recurrenceSource === "string" && VALID_RECURRENCE.has(recurrenceSource)
         ? (recurrenceSource as AiTodo["recurrence"])
         : "none";
+    const priority =
+      prioritySource === 1 || prioritySource === 2 || prioritySource === 3
+        ? (prioritySource as AiTodo["priority"])
+        : 2;
 
-    items.push({ title, notes: notes || null, dueDate, recurrence });
+    items.push({ title, notes: notes || null, dueDate, recurrence, priority });
 
-    if (items.length >= 20) {
+    if (items.length >= 5) {
       break;
     }
   }
@@ -132,12 +141,17 @@ export async function generateTodosFromThought(rawText: string, options: Generat
           content: `You convert a messy thought into actionable todos for Ege.
 Return strict JSON only: an array of objects.
 Each object must be:
-{"title":"...", "notes": string|null, "dueDate":"YYYY-MM-DD"|null, "recurrence":"none"|"daily"|"weekly"|"monthly"}
+{"title":"...", "notes": string|null, "dueDate":"YYYY-MM-DD"|null, "recurrence":"none"|"daily"|"weekly"|"monthly", "priority":1|2|3}
 
 Rules:
 - Keep titles short and actionable.
+- Keep notes concise (max ${MAX_NOTES_LENGTH} chars) and include concrete context + next action.
+- Prefer notes like: "context: lead=Acme CTO, repo=inbox-web; next: send follow-up draft."
+- Never output long writing instructions or multi-step paragraphs in notes.
 - Use recurrence only when the thought clearly implies repeated cadence.
 - Use dueDate only when a concrete date can be inferred.
+- Set priority: 1=must-do today, 2=important, 3=nice-to-have.
+- Keep at most 5 todos.
 - If no actionable todos exist, return [].
 
 About Ege:

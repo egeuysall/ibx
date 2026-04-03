@@ -3,17 +3,25 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
+import { format } from "date-fns";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarRail,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
 import { Toaster } from "@/components/ui/sonner";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { ThemePreference } from "@/hooks/useTheme";
@@ -34,6 +42,8 @@ export function SettingsView() {
     }
   };
 
+  const activeTheme = theme === "system" ? (resolvedTheme ?? "system") : theme;
+
   const handleClearQueue = () => {
     startClearTransition(async () => {
       await clearLocalThoughts();
@@ -53,61 +63,123 @@ export function SettingsView() {
 
   return (
     <>
-      <div className="mx-auto flex min-h-dvh w-full max-w-3xl flex-col gap-4 px-4 py-6 md:px-6">
-        <header className="flex items-center justify-between border-b pb-4">
-          <p className="text-sm tracking-tight">Settings</p>
-          <Button variant="ghost" size="sm" render={<Link href="/" prefetch={false} />}>
-            &gt; back
-          </Button>
-        </header>
+      <SidebarProvider>
+        <Sidebar collapsible="icon">
+          <SidebarHeader className="h-12 border-b p-0">
+            <div className="flex h-12 items-center justify-between px-3 group-data-[collapsible=icon]:hidden">
+              <p className="text-sm">inbox</p>
+              <SidebarTrigger size="icon-sm" variant="ghost" />
+            </div>
+            <div className="hidden h-12 items-center justify-center group-data-[collapsible=icon]:flex">
+              <SidebarTrigger size="icon-sm" variant="ghost" />
+            </div>
+          </SidebarHeader>
+          <SidebarContent>
+            <SidebarGroup>
+              <SidebarGroupLabel>views</SidebarGroupLabel>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    render={<Link href="/?view=today" prefetch={false} />}
+                    className="group-data-[collapsible=icon]:justify-center"
+                  >
+                    <span className="group-data-[collapsible=icon]:hidden">today</span>
+                    <span className="hidden group-data-[collapsible=icon]:inline">{"\\"}</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    render={<Link href="/?view=upcoming" prefetch={false} />}
+                    className="group-data-[collapsible=icon]:justify-center"
+                  >
+                    <span className="group-data-[collapsible=icon]:hidden">upcoming</span>
+                    <span className="hidden group-data-[collapsible=icon]:inline">/</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    render={<Link href="/?view=archive" prefetch={false} />}
+                    className="group-data-[collapsible=icon]:justify-center"
+                  >
+                    <span className="group-data-[collapsible=icon]:hidden">archive</span>
+                    <span className="hidden group-data-[collapsible=icon]:inline">[</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    isActive
+                    render={<Link href="/settings" prefetch={false} />}
+                    className="group-data-[collapsible=icon]:justify-center"
+                  >
+                    <span className="group-data-[collapsible=icon]:hidden">settings</span>
+                    <span className="hidden group-data-[collapsible=icon]:inline">]</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroup>
+          </SidebarContent>
+          <SidebarFooter>
+            <p className="px-2 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
+              {format(new Date(), "EEE, MMM d").toLowerCase()}
+            </p>
+          </SidebarFooter>
+          <SidebarRail />
+        </Sidebar>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Theme</CardTitle>
-            <CardDescription>Choose how the interface should appear.</CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3">
-            <ToggleGroup
-              multiple={false}
-              value={[theme]}
-              onValueChange={setThemeFromGroup}
-              variant="outline"
-              size="sm"
-            >
-              <ToggleGroupItem value="system">system</ToggleGroupItem>
-              <ToggleGroupItem value="light">light</ToggleGroupItem>
-              <ToggleGroupItem value="dark">dark</ToggleGroupItem>
-            </ToggleGroup>
-            <p className="text-xs text-muted-foreground">resolved: {resolvedTheme}</p>
-          </CardContent>
-        </Card>
+        <SidebarInset className="min-h-dvh flex flex-col">
+          <header className="sticky top-0 z-20 flex h-12 items-center border-b bg-background px-4 md:px-6">
+            <p className="text-sm text-muted-foreground">{"> settings"}</p>
+          </header>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Session</CardTitle>
-            <CardDescription>Manage local queue and active access session.</CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={isClearing || isSigningOut}
-              onClick={handleClearQueue}
-            >
-              {isClearing ? "Clearing..." : "Clear local queue"}
-            </Button>
-            <Separator />
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={isSigningOut}
-              onClick={handleSignOut}
-            >
-              {isSigningOut ? "Signing out..." : "Sign out"}
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
+          <main className="min-h-0 flex-1 overflow-y-auto py-4">
+            <section className="border-b px-4 pb-4 md:px-6">
+              <p className="text-sm">theme</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                choose how the interface should appear.
+              </p>
+              <ToggleGroup
+                multiple={false}
+                value={[activeTheme]}
+                onValueChange={setThemeFromGroup}
+                variant="default"
+                size="sm"
+                className="mt-3"
+              >
+                <ToggleGroupItem value="system">system</ToggleGroupItem>
+                <ToggleGroupItem value="light">light</ToggleGroupItem>
+                <ToggleGroupItem value="dark">dark</ToggleGroupItem>
+              </ToggleGroup>
+            </section>
+
+            <section className="border-b px-4 py-4 md:px-6">
+              <p className="text-sm">session</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                manage local queue and active access session.
+              </p>
+              <div className="mt-3 flex max-w-xl flex-wrap items-center gap-1.5">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-auto"
+                  disabled={isClearing || isSigningOut}
+                  onClick={handleClearQueue}
+                >
+                  {isClearing ? "clearing..." : "clear local queue"}
+                </Button>
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="w-auto border border-input bg-white text-black hover:bg-white/90 dark:bg-white dark:text-black dark:hover:bg-white/90"
+                  disabled={isSigningOut}
+                  onClick={handleSignOut}
+                >
+                  {isSigningOut ? "signing out..." : "sign out"}
+                </Button>
+              </div>
+            </section>
+          </main>
+        </SidebarInset>
+      </SidebarProvider>
 
       <Toaster position="bottom-right" />
     </>

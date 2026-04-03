@@ -28,6 +28,16 @@ export async function GET(
     return NextResponse.json({ error: "Invalid thought id." }, { status: 400 });
   }
 
+  const now = Date.now();
+  const currentDate = new Date(now);
+  const todayStartUtc = Date.UTC(
+    currentDate.getUTCFullYear(),
+    currentDate.getUTCMonth(),
+    currentDate.getUTCDate(),
+  );
+
+  await convex.mutation(api.todos.enforceDueDatesAndReschedule, { todayStartUtc });
+
   const thought = await convex.query(api.thoughts.getByExternalId, { externalId });
   if (!thought) {
     return NextResponse.json({ todos: [] });
@@ -45,6 +55,7 @@ export async function GET(
       notes: todo.notes,
       status: todo.status,
       dueDate: todo.dueDate ?? null,
+      priority: todo.priority ?? 2,
       recurrence: todo.recurrence ?? "none",
       source: todo.source ?? "manual",
       createdAt: todo.createdAt,

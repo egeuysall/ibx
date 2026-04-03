@@ -6,6 +6,7 @@ import { getRouteSession, unauthorizedJson } from "@/lib/auth-server";
 import { getEgeContext } from "@/lib/ege-context";
 import { generateTodosFromThought } from "@/lib/ai";
 import { api, convex } from "@/lib/convex-server";
+import { planGeneratedTodos } from "@/lib/todo-planning";
 
 function getExternalId(params: { externalId: string }) {
   const externalId = params.externalId?.trim();
@@ -14,6 +15,11 @@ function getExternalId(params: { externalId: string }) {
   }
 
   return externalId;
+}
+
+function getStartOfUtcDay(timestamp: number) {
+  const date = new Date(timestamp);
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
 }
 
 export async function POST(
@@ -61,33 +67,22 @@ export async function POST(
       recentRunMemories: recentRunMemories.map((memory) => memory.content),
     });
 
-    const existingTodos = await convex.query(api.todos.byThought, {
-      thoughtId: thought._id,
+    await convex.mutation(api.todos.enforceDueDatesAndReschedule, {
+      todayStartUtc: getStartOfUtcDay(Date.now()),
     });
+    const existingTodos = await convex.query(api.todos.listAll, {});
+    const plannedTodos = planGeneratedTodos(generatedTodos, existingTodos);
 
-    const existingTitles = new Set(
-      existingTodos.map((todo) => todo.title.trim().toLocaleLowerCase()),
-    );
-
-    const uniqueTodos = generatedTodos.filter((todo) => {
-      const normalizedTitle = todo.title.trim().toLocaleLowerCase();
-      if (existingTitles.has(normalizedTitle)) {
-        return false;
-      }
-
-      existingTitles.add(normalizedTitle);
-      return true;
-    });
-
-    if (uniqueTodos.length > 0) {
+    if (plannedTodos.length > 0) {
       await convex.mutation(api.todos.createMany, {
         thoughtId: thought._id,
         thoughtExternalId: externalId,
-        items: uniqueTodos.map((todo) => ({
+        items: plannedTodos.map((todo) => ({
           title: todo.title,
           notes: todo.notes,
-          dueDate: todo.dueDate ? Date.parse(`${todo.dueDate}T00:00:00.000Z`) : null,
+          dueDate: todo.dueDateTimestamp,
           recurrence: todo.recurrence,
+          priority: todo.priority,
           source: "ai" as const,
         })),
       });
@@ -102,13 +97,13 @@ export async function POST(
 
     await convex.mutation(api.memories.addRunMemory, {
       runExternalId: externalId,
-      content: `input="${thought.rawText.slice(0, 240)}" created=${uniqueTodos.length} todos titles=[${uniqueTodos
+      content: `input="${thought.rawText.slice(0, 240)}" created=${plannedTodos.length} todos titles=[${plannedTodos
         .map((todo) => todo.title)
         .slice(0, 6)
         .join(" | ")}]`,
     });
 
-    return NextResponse.json({ ok: true, created: uniqueTodos.length });
+    return NextResponse.json({ ok: true, created: plannedTodos.length });
   } catch (error) {
     await convex.mutation(api.thoughts.updateStatus, {
       externalId,

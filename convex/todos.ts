@@ -8,20 +8,21 @@ const recurrenceValidator = v.union(
   v.literal("weekly"),
   v.literal("monthly"),
 );
+const priorityValidator = v.union(v.literal(1), v.literal(2), v.literal(3));
+const DAY_MS = 24 * 60 * 60 * 1000;
+const MAX_TODOS_TODAY = 5;
 
-function getNextDueDate(currentDueDate: number | null, recurrence: "daily" | "weekly" | "monthly") {
-  const base = currentDueDate ? new Date(currentDueDate) : new Date();
-  const next = new Date(base);
+function getStartOfUtcDay(timestamp: number) {
+  const date = new Date(timestamp);
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+}
 
-  if (recurrence === "daily") {
-    next.setDate(next.getDate() + 1);
-  } else if (recurrence === "weekly") {
-    next.setDate(next.getDate() + 7);
-  } else {
-    next.setMonth(next.getMonth() + 1);
+function isDueTodayUtc(timestamp: number | null | undefined, todayStartUtc: number) {
+  if (typeof timestamp !== "number") {
+    return false;
   }
 
-  return next.getTime();
+  return timestamp >= todayStartUtc && timestamp < todayStartUtc + DAY_MS;
 }
 
 export const byThought = query({
@@ -44,6 +45,71 @@ export const listAll = query({
   },
 });
 
+export const enforceDueDatesAndReschedule = mutation({
+  args: {
+    todayStartUtc: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const todos = await ctx.db.query("todos").withIndex("by_createdAt").order("desc").take(500);
+    let updated = 0;
+    const normalizedOpenTodos: Array<{
+      _id: (typeof todos)[number]["_id"];
+      dueDate: number;
+      priority: 1 | 2 | 3;
+      createdAt: number;
+    }> = [];
+
+    for (const todo of todos) {
+      let nextDueDate = typeof todo.dueDate === "number" ? todo.dueDate : args.todayStartUtc;
+      const nextPriority = todo.priority === 1 || todo.priority === 3 ? todo.priority : 2;
+
+      if (typeof todo.dueDate !== "number") {
+        await ctx.db.patch(todo._id, { dueDate: nextDueDate, priority: nextPriority });
+        updated += 1;
+      } else if (todo.priority !== 1 && todo.priority !== 2 && todo.priority !== 3) {
+        await ctx.db.patch(todo._id, { priority: nextPriority });
+        updated += 1;
+      }
+
+      const isOverdueOpen = todo.status === "open" && nextDueDate < args.todayStartUtc;
+
+      if (isOverdueOpen) {
+        nextDueDate = args.todayStartUtc;
+        await ctx.db.patch(todo._id, { dueDate: nextDueDate });
+        updated += 1;
+      }
+
+      if (todo.status === "open") {
+        normalizedOpenTodos.push({
+          _id: todo._id,
+          dueDate: nextDueDate,
+          priority: nextPriority,
+          createdAt: todo.createdAt,
+        });
+      }
+    }
+
+    const openDueToday = normalizedOpenTodos
+      .filter((todo) => isDueTodayUtc(todo.dueDate, args.todayStartUtc))
+      .sort((left, right) => {
+        if (left.priority !== right.priority) {
+          return left.priority - right.priority;
+        }
+
+        return left.createdAt - right.createdAt;
+      });
+
+    const overflowTodos = openDueToday.slice(MAX_TODOS_TODAY);
+    for (const [index, todo] of overflowTodos.entries()) {
+      const nextDueDate = args.todayStartUtc + (index + 1) * DAY_MS;
+      await ctx.db.patch(todo._id, { dueDate: nextDueDate });
+      updated += 1;
+    }
+
+    return { updated };
+  },
+});
+
 export const createMany = mutation({
   args: {
     thoughtId: v.id("thoughts"),
@@ -54,12 +120,14 @@ export const createMany = mutation({
         notes: v.union(v.string(), v.null()),
         dueDate: v.union(v.number(), v.null()),
         recurrence: recurrenceValidator,
+        priority: priorityValidator,
         source: v.union(v.literal("ai"), v.literal("manual")),
       }),
     ),
   },
   handler: async (ctx, args) => {
     const now = Date.now();
+    const todayStartUtc = getStartOfUtcDay(now);
     const insertedIds = [];
 
     for (const item of args.items) {
@@ -69,8 +137,9 @@ export const createMany = mutation({
         title: item.title,
         notes: item.notes,
         status: "open",
-        dueDate: item.dueDate,
+        dueDate: item.dueDate ?? todayStartUtc,
         recurrence: item.recurrence,
+        priority: item.priority,
         source: item.source,
         createdAt: now,
       });
@@ -89,17 +158,20 @@ export const createOne = mutation({
     notes: v.union(v.string(), v.null()),
     dueDate: v.union(v.number(), v.null()),
     recurrence: recurrenceValidator,
+    priority: v.optional(priorityValidator),
     source: v.union(v.literal("ai"), v.literal("manual")),
   },
   handler: async (ctx, args) => {
+    const todayStartUtc = getStartOfUtcDay(Date.now());
     return await ctx.db.insert("todos", {
       thoughtId: args.thoughtId,
       thoughtExternalId: args.thoughtExternalId,
       title: args.title,
       notes: args.notes,
       status: "open",
-      dueDate: args.dueDate,
+      dueDate: args.dueDate ?? todayStartUtc,
       recurrence: args.recurrence,
+      priority: args.priority ?? 2,
       source: args.source,
       createdAt: Date.now(),
     });
@@ -122,32 +194,6 @@ export const updateStatus = mutation({
     }
 
     await ctx.db.patch(args.todoId, { status: args.status });
-
-    if (args.status === "done" && existingTodo.recurrence !== "none") {
-      const recurrence =
-        existingTodo.recurrence === "daily" ||
-        existingTodo.recurrence === "weekly" ||
-        existingTodo.recurrence === "monthly"
-          ? existingTodo.recurrence
-          : null;
-
-      if (!recurrence) {
-        return args.todoId;
-      }
-
-      await ctx.db.insert("todos", {
-        thoughtId: existingTodo.thoughtId,
-        thoughtExternalId: existingTodo.thoughtExternalId ?? undefined,
-        title: existingTodo.title,
-        notes: existingTodo.notes,
-        status: "open",
-        dueDate: getNextDueDate(existingTodo.dueDate ?? null, recurrence),
-        recurrence,
-        source: existingTodo.source ?? "manual",
-        createdAt: Date.now(),
-      });
-    }
-
     return args.todoId;
   },
 });
@@ -164,8 +210,10 @@ export const updateSchedule = mutation({
       recurrence?: "none" | "daily" | "weekly" | "monthly";
     } = {};
 
+    const todayStartUtc = getStartOfUtcDay(Date.now());
+
     if (args.dueDate !== undefined) {
-      patch.dueDate = args.dueDate;
+      patch.dueDate = args.dueDate ?? todayStartUtc;
     }
 
     if (args.recurrence !== undefined) {

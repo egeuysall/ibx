@@ -3,8 +3,23 @@ import { getServerSession } from "@/lib/auth-server";
 
 export const dynamic = "force-dynamic";
 
-export default async function Home() {
-  const session = await getServerSession();
+function normalizeFilter(value: string | string[] | undefined) {
+  const candidate = Array.isArray(value) ? value[0] : value;
+  if (candidate === "upcoming" || candidate === "archive") {
+    return candidate;
+  }
 
-  return <AppShell initialAuthenticated={Boolean(session)} />;
+  return "today";
+}
+
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ view?: string | string[] }>;
+}) {
+  const session = await getServerSession();
+  const resolvedSearchParams = await searchParams;
+  const initialFilter = normalizeFilter(resolvedSearchParams.view);
+
+  return <AppShell initialAuthenticated={Boolean(session)} initialFilter={initialFilter} />;
 }
