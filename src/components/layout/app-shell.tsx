@@ -32,7 +32,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useTheme } from "@/hooks/useTheme";
 import { apiClient, ApiError } from "@/lib/apiClient";
 import { cn } from "@/lib/utils";
-import type { TodoItem, TodoRecurrence } from "@/lib/types";
+import type { TodoItem, TodoPriority, TodoRecurrence } from "@/lib/types";
 
 type AppShellProps = {
   initialAuthenticated: boolean;
@@ -41,6 +41,7 @@ type AppShellProps = {
 
 const PROMPT_INPUT_STORAGE_KEY = "inbox:prompt-input";
 const FILTER_STORAGE_KEY = "inbox:active-view";
+const PROMPT_AUTOFOCUS_STORAGE_KEY = "inbox:prompt-autofocus";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const NOTE_PREVIEW_LENGTH = 160;
 
@@ -66,6 +67,14 @@ function readStoredFilter() {
   } catch {
     return "today" as TodoFilter;
   }
+}
+
+function readStoredPromptAutofocus() {
+  if (typeof window === "undefined") {
+    return true;
+  }
+
+  return window.localStorage.getItem(PROMPT_AUTOFOCUS_STORAGE_KEY) !== "0";
 }
 
 function displayDueDate(timestamp: number | null) {
@@ -151,6 +160,11 @@ function sortTodos(todos: TodoItem[]) {
 }
 
 type TodoFilter = "today" | "upcoming" | "archive";
+type TodoSection = {
+  key: string;
+  label: string | null;
+  todos: TodoItem[];
+};
 
 function normalizeFilter(value: string | null | undefined): TodoFilter {
   if (value === "upcoming" || value === "archive") {
@@ -168,6 +182,7 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
   const [isAuthenticated, setIsAuthenticated] = useState(initialAuthenticated);
   const [filter, setFilter] = useState<TodoFilter>(() => readStoredFilter());
   const [promptInput, setPromptInput] = useState(() => readStoredPromptInput());
+  const [promptAutofocus] = useState(() => readStoredPromptAutofocus());
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [hasLoadedTodos, setHasLoadedTodos] = useState(false);
   const [isLoadingTodos, setIsLoadingTodos] = useState(false);
@@ -244,6 +259,10 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
   }, []);
 
   useEffect(() => {
+    if (!promptAutofocus) {
+      return;
+    }
+
     const animationFrame = window.requestAnimationFrame(() => {
       const input = promptInputRef.current;
       if (!input || hasPlacedInitialCursor.current) {
@@ -257,7 +276,7 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
     });
 
     return () => window.cancelAnimationFrame(animationFrame);
-  }, [placePromptCursorAtEnd]);
+  }, [placePromptCursorAtEnd, promptAutofocus]);
 
   useEffect(() => {
     const viewParam = searchParams.get("view");
@@ -390,6 +409,25 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
     }
   };
 
+  const updateTodoPriority = async (todo: TodoItem, values: string[]) => {
+    const nextPriority = values[0];
+    if (nextPriority !== "1" && nextPriority !== "2" && nextPriority !== "3") {
+      return;
+    }
+
+    setPendingTodoId(todo.id);
+    try {
+      await apiClient.updateTodo(todo.id, {
+        priority: Number(nextPriority) as TodoPriority,
+      });
+      await refreshTodos();
+    } catch (error) {
+      toast.error(parseErrorMessage(error));
+    } finally {
+      setPendingTodoId(null);
+    }
+  };
+
   const groupedTodos = useMemo(() => {
     const todayStartUtc = getStartOfUtcDay(Date.now());
     const openTodos = todos.filter((todo) => todo.status === "open");
@@ -413,18 +451,47 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
     return groupedTodos.archive;
   }, [filter, groupedTodos]);
 
-  const todayProgressLabel = useMemo(() => {
-    const todayStartUtc = getStartOfUtcDay(Date.now());
-    const openToday = todos.filter(
-      (todo) => todo.status === "open" && isDueTodayUtc(todo.dueDate, todayStartUtc),
-    ).length;
-    const doneToday = todos.filter(
-      (todo) => todo.status === "done" && isDueTodayUtc(todo.dueDate, todayStartUtc),
-    ).length;
-    const total = openToday + doneToday;
+  const todoSections = useMemo<TodoSection[]>(() => {
+    if (filter === "today") {
+      return [{ key: "today", label: null, todos: filteredTodos }];
+    }
 
-    return total > 0 ? `today ${doneToday}/${total}` : "today 0/0";
-  }, [todos]);
+    const sectionsByDate = new Map<string, { dateKey: number | null; todos: TodoItem[] }>();
+
+    for (const todo of filteredTodos) {
+      const dateKey = typeof todo.dueDate === "number" ? getStartOfUtcDay(todo.dueDate) : null;
+      const mapKey = dateKey === null ? "no-date" : String(dateKey);
+      const existingSection = sectionsByDate.get(mapKey);
+      if (existingSection) {
+        existingSection.todos.push(todo);
+      } else {
+        sectionsByDate.set(mapKey, { dateKey, todos: [todo] });
+      }
+    }
+
+    return [...sectionsByDate.entries()]
+      .sort((left, right) => {
+        const leftDate = left[1].dateKey;
+        const rightDate = right[1].dateKey;
+
+        if (leftDate === null && rightDate === null) {
+          return 0;
+        }
+        if (leftDate === null) {
+          return 1;
+        }
+        if (rightDate === null) {
+          return -1;
+        }
+
+        return filter === "upcoming" ? leftDate - rightDate : rightDate - leftDate;
+      })
+      .map(([key, section]) => ({
+        key,
+        label: section.dateKey === null ? "no date" : format(new Date(section.dateKey), "MM/dd"),
+        todos: section.todos,
+      }));
+  }, [filter, filteredTodos]);
 
   if (!isAuthenticated) {
     return (
@@ -441,7 +508,7 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
         <Sidebar collapsible="icon">
           <SidebarHeader className="h-12 border-b p-0">
             <div className="flex h-12 items-center justify-between px-3 group-data-[collapsible=icon]:hidden">
-              <p className="text-sm">Inbox</p>
+              <p className="text-sm">inbox</p>
               <SidebarTrigger size="icon-sm" variant="ghost" />
             </div>
             <div className="hidden h-12 items-center justify-center group-data-[collapsible=icon]:flex">
@@ -511,7 +578,7 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
                 value={promptInput}
                 onChange={(event) => setPromptInput(event.target.value)}
                 placeholder="type once, generate todos"
-                autoFocus
+                autoFocus={promptAutofocus}
                 onFocus={() => placePromptCursorAtEnd()}
                 className="h-8 border-0 bg-transparent px-0 shadow-none ring-0 focus-visible:border-transparent focus-visible:ring-0 dark:bg-transparent"
                 onKeyDown={(event) => {
@@ -525,7 +592,6 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
               <Button size="sm" onClick={() => void handleGenerateTodos()} disabled={isGenerating}>
                 {isGenerating ? "running..." : "run"}
               </Button>
-              <span className="text-xs text-muted-foreground">{todayProgressLabel}</span>
             </div>
           </header>
 
@@ -536,132 +602,168 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
               <p className="px-4 text-sm text-muted-foreground md:px-6">No todos in this view yet.</p>
             ) : (
               <div className="flex flex-col gap-4">
-                {filteredTodos.map((todo) => (
-                  <article
-                    key={todo.id}
-                    className="border-b cursor-pointer"
-                    onClick={() => setEditingTodoId(todo.id)}
+                {todoSections.map((section) => (
+                  <section
+                    key={section.key}
+                    className={cn("flex flex-col gap-0", section.label ? "pt-2" : "")}
                   >
-                    <div className="flex flex-col gap-2 px-4 pb-4 md:px-6">
-                      <div className="flex items-start gap-3">
-                        <Checkbox
-                          checked={todo.status === "done"}
-                          onCheckedChange={(checked) => void updateTodoStatus(todo, Boolean(checked))}
-                          onClick={(event) => event.stopPropagation()}
-                          onPointerDown={(event) => event.stopPropagation()}
-                          aria-label={`Toggle ${todo.title}`}
-                          disabled={pendingTodoId === todo.id}
-                        />
-                        <div className="flex min-w-0 flex-1 flex-col gap-1">
-                          <div className="flex items-start justify-between gap-2">
-                            <p
-                              className={cn(
-                                "text-sm",
-                                todo.status === "done" && "line-through opacity-70",
-                              )}
-                            >
-                              {todo.title}
-                            </p>
-                          </div>
-                          {todo.notes ? (
-                            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                              <p className="max-w-full break-words">
-                                {expandedNoteIds[todo.id] ? todo.notes : getPreviewNotes(todo.notes)}
-                              </p>
-                              {todo.notes.length > NOTE_PREVIEW_LENGTH ? (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-5 px-1 text-[11px] text-muted-foreground hover:text-foreground"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    setExpandedNoteIds((current) => ({
-                                      ...current,
-                                      [todo.id]: !current[todo.id],
-                                    }));
-                                  }}
-                                  onPointerDown={(event) => event.stopPropagation()}
+                    {section.label ? (
+                      <p className="px-4 pb-2 text-xs text-muted-foreground md:px-6">{section.label}</p>
+                    ) : null}
+                    {section.todos.map((todo) => (
+                      <article
+                        key={todo.id}
+                        className="border-b cursor-pointer"
+                        onClick={() => setEditingTodoId(todo.id)}
+                      >
+                        <div className="flex flex-col gap-2 px-4 py-3 md:px-6">
+                          <div className="flex items-start gap-3">
+                            <Checkbox
+                              checked={todo.status === "done"}
+                              onCheckedChange={(checked) => void updateTodoStatus(todo, Boolean(checked))}
+                              onClick={(event) => event.stopPropagation()}
+                              onPointerDown={(event) => event.stopPropagation()}
+                              aria-label={`Toggle ${todo.title}`}
+                              disabled={pendingTodoId === todo.id}
+                            />
+                            <div className="flex min-w-0 flex-1 flex-col gap-1">
+                              <div className="flex items-start justify-between gap-2">
+                                <p
+                                  className={cn(
+                                    "text-sm",
+                                    todo.status === "done" && "line-through opacity-70",
+                                  )}
                                 >
-                                  {expandedNoteIds[todo.id] ? "less" : "more"}
-                                </Button>
+                                  {todo.title}
+                                </p>
+                              </div>
+                              {todo.notes ? (
+                                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                  <p className="max-w-full break-words">
+                                    {expandedNoteIds[todo.id] ? todo.notes : getPreviewNotes(todo.notes)}
+                                  </p>
+                                  {todo.notes.length > NOTE_PREVIEW_LENGTH ? (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-5 px-1 text-[11px] text-muted-foreground hover:text-foreground"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        setExpandedNoteIds((current) => ({
+                                          ...current,
+                                          [todo.id]: !current[todo.id],
+                                        }));
+                                      }}
+                                      onPointerDown={(event) => event.stopPropagation()}
+                                    >
+                                      {expandedNoteIds[todo.id] ? "less" : "more"}
+                                    </Button>
+                                  ) : null}
+                                </div>
                               ) : null}
+                              <p className="text-xs text-muted-foreground">
+                                {displayPriority(todo.priority)} / due: {displayDueDate(todo.dueDate)} /{" "}
+                                {displayRecurrence(todo.recurrence)}
+                              </p>
+                            </div>
+                          </div>
+                          {editingTodoId === todo.id ? (
+                            <div
+                              className="ml-8 flex flex-col gap-2 sm:flex-row sm:items-center"
+                              onClick={(event) => event.stopPropagation()}
+                              onPointerDown={(event) => event.stopPropagation()}
+                            >
+                              <Popover>
+                                <PopoverTrigger
+                                  render={
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className={cn(
+                                        "w-full justify-start sm:w-44",
+                                        !todo.dueDate && "text-muted-foreground",
+                                      )}
+                                      disabled={pendingTodoId === todo.id}
+                                    />
+                                  }
+                                >
+                                  {displayDateInputValue(todo.dueDate)}
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto gap-0 rounded-md bg-background p-1 shadow-none">
+                                  <Calendar
+                                    className="rounded-sm border border-border"
+                                    mode="single"
+                                    selected={todo.dueDate ? new Date(todo.dueDate) : undefined}
+                                    onSelect={(date) =>
+                                      void updateTodoDate(todo, date ? format(date, "yyyy-MM-dd") : "")
+                                    }
+                                  />
+                                </PopoverContent>
+                              </Popover>
+                              <ToggleGroup
+                                multiple={false}
+                                value={[String(todo.priority)]}
+                                onValueChange={(values) => void updateTodoPriority(todo, values)}
+                                variant="default"
+                                size="sm"
+                              >
+                                <ToggleGroupItem
+                                  value="1"
+                                  className="border border-input aria-pressed:border-foreground aria-pressed:bg-foreground aria-pressed:text-background data-[state=on]:border-foreground data-[state=on]:bg-foreground data-[state=on]:text-background"
+                                >
+                                  p1
+                                </ToggleGroupItem>
+                                <ToggleGroupItem
+                                  value="2"
+                                  className="border border-input aria-pressed:border-foreground aria-pressed:bg-foreground aria-pressed:text-background data-[state=on]:border-foreground data-[state=on]:bg-foreground data-[state=on]:text-background"
+                                >
+                                  p2
+                                </ToggleGroupItem>
+                                <ToggleGroupItem
+                                  value="3"
+                                  className="border border-input aria-pressed:border-foreground aria-pressed:bg-foreground aria-pressed:text-background data-[state=on]:border-foreground data-[state=on]:bg-foreground data-[state=on]:text-background"
+                                >
+                                  p3
+                                </ToggleGroupItem>
+                              </ToggleGroup>
+                              <ToggleGroup
+                                multiple={false}
+                                value={[todo.recurrence]}
+                                onValueChange={(values) => void updateTodoRecurrence(todo, values)}
+                                variant="default"
+                                size="sm"
+                              >
+                                <ToggleGroupItem
+                                  value="none"
+                                  className="border border-input aria-pressed:border-foreground aria-pressed:bg-foreground aria-pressed:text-background data-[state=on]:border-foreground data-[state=on]:bg-foreground data-[state=on]:text-background"
+                                >
+                                  once
+                                </ToggleGroupItem>
+                                <ToggleGroupItem
+                                  value="daily"
+                                  className="border border-input aria-pressed:border-foreground aria-pressed:bg-foreground aria-pressed:text-background data-[state=on]:border-foreground data-[state=on]:bg-foreground data-[state=on]:text-background"
+                                >
+                                  daily
+                                </ToggleGroupItem>
+                                <ToggleGroupItem
+                                  value="weekly"
+                                  className="border border-input aria-pressed:border-foreground aria-pressed:bg-foreground aria-pressed:text-background data-[state=on]:border-foreground data-[state=on]:bg-foreground data-[state=on]:text-background"
+                                >
+                                  weekly
+                                </ToggleGroupItem>
+                                <ToggleGroupItem
+                                  value="monthly"
+                                  className="border border-input aria-pressed:border-foreground aria-pressed:bg-foreground aria-pressed:text-background data-[state=on]:border-foreground data-[state=on]:bg-foreground data-[state=on]:text-background"
+                                >
+                                  monthly
+                                </ToggleGroupItem>
+                              </ToggleGroup>
                             </div>
                           ) : null}
-                          <p className="text-xs text-muted-foreground">
-                            {displayPriority(todo.priority)} / due: {displayDueDate(todo.dueDate)} /{" "}
-                            {displayRecurrence(todo.recurrence)}
-                          </p>
                         </div>
-                      </div>
-                      {editingTodoId === todo.id ? (
-                        <div
-                          className="ml-8 flex flex-col gap-2 sm:flex-row sm:items-center"
-                          onClick={(event) => event.stopPropagation()}
-                          onPointerDown={(event) => event.stopPropagation()}
-                        >
-                          <Popover>
-                            <PopoverTrigger
-                              render={
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className={cn(
-                                    "w-full justify-start sm:w-44",
-                                    !todo.dueDate && "text-muted-foreground",
-                                  )}
-                                  disabled={pendingTodoId === todo.id}
-                                />
-                              }
-                            >
-                              {displayDateInputValue(todo.dueDate)}
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto gap-0 rounded-md bg-background p-1 shadow-none">
-                              <Calendar
-                                className="rounded-sm border border-border"
-                                mode="single"
-                                selected={todo.dueDate ? new Date(todo.dueDate) : undefined}
-                                onSelect={(date) =>
-                                  void updateTodoDate(todo, date ? format(date, "yyyy-MM-dd") : "")
-                                }
-                              />
-                            </PopoverContent>
-                          </Popover>
-                          <ToggleGroup
-                            multiple={false}
-                            value={[todo.recurrence]}
-                            onValueChange={(values) => void updateTodoRecurrence(todo, values)}
-                            variant="default"
-                            size="sm"
-                          >
-                            <ToggleGroupItem
-                              value="none"
-                              className="border border-input aria-pressed:border-foreground aria-pressed:bg-foreground aria-pressed:text-background data-[state=on]:border-foreground data-[state=on]:bg-foreground data-[state=on]:text-background"
-                            >
-                              once
-                            </ToggleGroupItem>
-                            <ToggleGroupItem
-                              value="daily"
-                              className="border border-input aria-pressed:border-foreground aria-pressed:bg-foreground aria-pressed:text-background data-[state=on]:border-foreground data-[state=on]:bg-foreground data-[state=on]:text-background"
-                            >
-                              daily
-                            </ToggleGroupItem>
-                            <ToggleGroupItem
-                              value="weekly"
-                              className="border border-input aria-pressed:border-foreground aria-pressed:bg-foreground aria-pressed:text-background data-[state=on]:border-foreground data-[state=on]:bg-foreground data-[state=on]:text-background"
-                            >
-                              weekly
-                            </ToggleGroupItem>
-                            <ToggleGroupItem
-                              value="monthly"
-                              className="border border-input aria-pressed:border-foreground aria-pressed:bg-foreground aria-pressed:text-background data-[state=on]:border-foreground data-[state=on]:bg-foreground data-[state=on]:text-background"
-                            >
-                              monthly
-                            </ToggleGroupItem>
-                          </ToggleGroup>
-                        </div>
-                      ) : null}
-                    </div>
-                  </article>
+                      </article>
+                    ))}
+                  </section>
                 ))}
               </div>
             )}

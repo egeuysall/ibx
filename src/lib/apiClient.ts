@@ -2,6 +2,7 @@ import type {
   SyncThoughtInput,
   ThoughtRecord,
   TodoItem,
+  TodoPriority,
   TodoRecurrence,
   TodoStatus,
 } from "@/lib/types";
@@ -110,6 +111,7 @@ export const apiClient = {
       status?: TodoStatus;
       dueDate?: string | null;
       recurrence?: TodoRecurrence;
+      priority?: TodoPriority;
     },
   ) {
     return requestJson<{ ok: true }>(`/api/todos/${todoId}`, {

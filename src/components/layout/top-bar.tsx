@@ -14,7 +14,7 @@ export function TopBar({ isOnline, syncLabel }: TopBarProps) {
   return (
     <header className="flex items-center justify-between border-b px-4 py-3 md:px-6">
       <div className="flex items-center gap-2">
-        <p className="text-sm tracking-tight">Inbox</p>
+        <p className="text-sm tracking-tight">inbox</p>
         <span className="text-muted-foreground">{"///"}</span>
         <p className="text-sm text-muted-foreground">Todos</p>
       </div>
@@ -27,7 +27,11 @@ export function TopBar({ isOnline, syncLabel }: TopBarProps) {
           {syncLabel}
         </Badge>
 
-        <Button variant="ghost" size="sm" render={<Link href="/settings" prefetch={false} />}>
+        <Button
+          variant="ghost"
+          size="sm"
+          render={<Link href="/settings" prefetch={false} />}
+        >
           settings
         </Button>
       </div>

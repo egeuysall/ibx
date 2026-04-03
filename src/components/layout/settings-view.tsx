@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -29,11 +29,37 @@ import { useTheme } from "@/hooks/useTheme";
 import { apiClient } from "@/lib/apiClient";
 import { clearLocalThoughts } from "@/lib/indexedDb";
 
+const FILTER_STORAGE_KEY = "inbox:active-view";
+const PROMPT_AUTOFOCUS_STORAGE_KEY = "inbox:prompt-autofocus";
+const PICKER_ITEM_CLASS =
+  "border border-input aria-pressed:border-foreground aria-pressed:bg-foreground aria-pressed:text-background data-[state=on]:border-foreground data-[state=on]:bg-foreground data-[state=on]:text-background";
+
+type DefaultView = "today" | "upcoming" | "archive";
+
+function readStoredDefaultView(): DefaultView {
+  if (typeof window === "undefined") {
+    return "today";
+  }
+
+  const stored = window.localStorage.getItem(FILTER_STORAGE_KEY);
+  return stored === "upcoming" || stored === "archive" ? stored : "today";
+}
+
+function readStoredPromptAutofocus() {
+  if (typeof window === "undefined") {
+    return true;
+  }
+
+  return window.localStorage.getItem(PROMPT_AUTOFOCUS_STORAGE_KEY) !== "0";
+}
+
 export function SettingsView() {
   const router = useRouter();
-  const { theme, resolvedTheme, setTheme } = useTheme();
+  const { theme, setTheme } = useTheme();
   const [isClearing, startClearTransition] = useTransition();
   const [isSigningOut, startSignOutTransition] = useTransition();
+  const [defaultView, setDefaultView] = useState<DefaultView>(() => readStoredDefaultView());
+  const [promptAutofocus, setPromptAutofocus] = useState(() => readStoredPromptAutofocus());
 
   const setThemeFromGroup = (values: string[]) => {
     const nextTheme = values[0];
@@ -42,7 +68,28 @@ export function SettingsView() {
     }
   };
 
-  const activeTheme = theme === "system" ? (resolvedTheme ?? "system") : theme;
+  const setDefaultViewFromGroup = (values: string[]) => {
+    const nextView = values[0];
+    if (nextView !== "today" && nextView !== "upcoming" && nextView !== "archive") {
+      return;
+    }
+
+    setDefaultView(nextView);
+    window.localStorage.setItem(FILTER_STORAGE_KEY, nextView);
+    toast.message(`startup view set to ${nextView}`);
+  };
+
+  const setPromptAutofocusFromGroup = (values: string[]) => {
+    const nextValue = values[0];
+    if (nextValue !== "on" && nextValue !== "off") {
+      return;
+    }
+
+    const nextAutofocus = nextValue === "on";
+    setPromptAutofocus(nextAutofocus);
+    window.localStorage.setItem(PROMPT_AUTOFOCUS_STORAGE_KEY, nextAutofocus ? "1" : "0");
+    toast.message(`prompt autofocus ${nextAutofocus ? "enabled" : "disabled"}`);
+  };
 
   const handleClearQueue = () => {
     startClearTransition(async () => {
@@ -139,16 +186,70 @@ export function SettingsView() {
               </p>
               <ToggleGroup
                 multiple={false}
-                value={[activeTheme]}
+                value={[theme]}
                 onValueChange={setThemeFromGroup}
                 variant="default"
                 size="sm"
                 className="mt-3"
               >
-                <ToggleGroupItem value="system">system</ToggleGroupItem>
-                <ToggleGroupItem value="light">light</ToggleGroupItem>
-                <ToggleGroupItem value="dark">dark</ToggleGroupItem>
+                <ToggleGroupItem value="system" className={PICKER_ITEM_CLASS}>
+                  system
+                </ToggleGroupItem>
+                <ToggleGroupItem value="light" className={PICKER_ITEM_CLASS}>
+                  light
+                </ToggleGroupItem>
+                <ToggleGroupItem value="dark" className={PICKER_ITEM_CLASS}>
+                  dark
+                </ToggleGroupItem>
               </ToggleGroup>
+            </section>
+
+            <section className="border-b px-4 py-4 md:px-6">
+              <p className="text-sm">behavior</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                tune startup and input interaction defaults.
+              </p>
+
+              <div className="mt-3 flex flex-col gap-3">
+                <div className="flex flex-col gap-1">
+                  <p className="text-xs text-muted-foreground">startup view</p>
+                  <ToggleGroup
+                    multiple={false}
+                    value={[defaultView]}
+                    onValueChange={setDefaultViewFromGroup}
+                    variant="default"
+                    size="sm"
+                  >
+                    <ToggleGroupItem value="today" className={PICKER_ITEM_CLASS}>
+                      today
+                    </ToggleGroupItem>
+                    <ToggleGroupItem value="upcoming" className={PICKER_ITEM_CLASS}>
+                      upcoming
+                    </ToggleGroupItem>
+                    <ToggleGroupItem value="archive" className={PICKER_ITEM_CLASS}>
+                      archive
+                    </ToggleGroupItem>
+                  </ToggleGroup>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <p className="text-xs text-muted-foreground">prompt autofocus</p>
+                  <ToggleGroup
+                    multiple={false}
+                    value={[promptAutofocus ? "on" : "off"]}
+                    onValueChange={setPromptAutofocusFromGroup}
+                    variant="default"
+                    size="sm"
+                  >
+                    <ToggleGroupItem value="on" className={PICKER_ITEM_CLASS}>
+                      on
+                    </ToggleGroupItem>
+                    <ToggleGroupItem value="off" className={PICKER_ITEM_CLASS}>
+                      off
+                    </ToggleGroupItem>
+                  </ToggleGroup>
+                </div>
+              </div>
             </section>
 
             <section className="border-b px-4 py-4 md:px-6">

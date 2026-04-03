@@ -24,14 +24,16 @@ export async function PATCH(
     status?: unknown;
     dueDate?: unknown;
     recurrence?: unknown;
+    priority?: unknown;
   } | null;
 
   const status = body?.status;
   const dueDate = body?.dueDate;
   const recurrence = body?.recurrence;
+  const priority = body?.priority;
 
   const hasStatus = status === "open" || status === "done";
-  const hasSchedule = dueDate !== undefined || recurrence !== undefined;
+  const hasSchedule = dueDate !== undefined || recurrence !== undefined || priority !== undefined;
 
   if (!hasStatus && !hasSchedule) {
     return NextResponse.json({ error: "Nothing to update." }, { status: 400 });
@@ -58,6 +60,15 @@ export async function PATCH(
       return NextResponse.json({ error: "Invalid recurrence value." }, { status: 400 });
     }
 
+    const normalizedPriority =
+      priority === 1 || priority === 2 || priority === 3 || priority === undefined
+        ? priority
+        : null;
+
+    if (normalizedPriority === null) {
+      return NextResponse.json({ error: "Invalid priority value." }, { status: 400 });
+    }
+
     const normalizedDueDate =
       dueDate === null || dueDate === undefined
         ? null
@@ -74,6 +85,9 @@ export async function PATCH(
       ...(dueDate !== undefined ? { dueDate: normalizedDueDate } : {}),
       ...(recurrence !== undefined
         ? { recurrence: normalizedRecurrence as "none" | "daily" | "weekly" | "monthly" }
+        : {}),
+      ...(priority !== undefined
+        ? { priority: normalizedPriority as 1 | 2 | 3 }
         : {}),
     });
   }

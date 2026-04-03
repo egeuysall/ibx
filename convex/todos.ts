@@ -203,11 +203,13 @@ export const updateSchedule = mutation({
     todoId: v.id("todos"),
     dueDate: v.optional(v.union(v.number(), v.null())),
     recurrence: v.optional(recurrenceValidator),
+    priority: v.optional(priorityValidator),
   },
   handler: async (ctx, args) => {
     const patch: {
       dueDate?: number | null;
       recurrence?: "none" | "daily" | "weekly" | "monthly";
+      priority?: 1 | 2 | 3;
     } = {};
 
     const todayStartUtc = getStartOfUtcDay(Date.now());
@@ -218,6 +220,10 @@ export const updateSchedule = mutation({
 
     if (args.recurrence !== undefined) {
       patch.recurrence = args.recurrence;
+    }
+
+    if (args.priority !== undefined) {
+      patch.priority = args.priority;
     }
 
     await ctx.db.patch(args.todoId, patch);
