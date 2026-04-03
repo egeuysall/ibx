@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { getRouteSession, unauthorizedJson } from "@/lib/auth-server";
+import { getRouteSession, unauthorizedJson, validateCsrfForSessionAuth } from "@/lib/auth-server";
 import { createApiKey } from "@/lib/api-keys";
 import { api, convex } from "@/lib/convex-server";
 
@@ -36,6 +36,10 @@ export async function POST(request: NextRequest) {
   const session = await getRouteSession(request);
   if (!session) {
     return unauthorizedJson();
+  }
+  const csrfError = validateCsrfForSessionAuth(request, { type: "session", session });
+  if (csrfError) {
+    return csrfError;
   }
 
   const body = (await request.json().catch(() => null)) as { name?: unknown } | null;

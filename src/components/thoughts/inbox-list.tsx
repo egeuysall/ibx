@@ -4,7 +4,12 @@ import { formatDistanceToNow } from "date-fns";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import type { LocalThought } from "@/lib/types";
@@ -45,7 +50,9 @@ function getStatusLabel(thought: LocalThought) {
   return "Synced";
 }
 
-function getStatusVariant(thought: LocalThought): "default" | "secondary" | "outline" | "destructive" {
+function getStatusVariant(
+  thought: LocalThought,
+): "default" | "secondary" | "outline" | "destructive" {
   if (thought.status === "failed" || thought.syncStatus === "error") {
     return "destructive";
   }
@@ -71,7 +78,7 @@ export function InboxList({
   return (
     <section className="flex min-h-0 flex-1 flex-col border-r">
       <header className="flex items-center justify-between px-4 py-3 md:px-6">
-        <p className="text-sm">Inbox</p>
+        <p className="text-sm">ibx</p>
         <p className="text-xs text-muted-foreground">{thoughts.length}</p>
       </header>
       <Separator />
@@ -81,7 +88,9 @@ export function InboxList({
           <Empty>
             <EmptyHeader>
               <EmptyTitle>No captured thoughts yet</EmptyTitle>
-              <EmptyDescription>Use the composer to add your first thought.</EmptyDescription>
+              <EmptyDescription>
+                Use the composer to add your first thought.
+              </EmptyDescription>
             </EmptyHeader>
           </Empty>
         </div>
@@ -91,7 +100,10 @@ export function InboxList({
             const isSelected = thought.externalId === selectedThoughtId;
 
             return (
-              <div key={thought.externalId} className="flex flex-col border-b px-4 py-3 md:px-6">
+              <div
+                key={thought.externalId}
+                className="flex flex-col border-b px-4 py-3 md:px-6"
+              >
                 <button
                   type="button"
                   onClick={() => onSelect(thought.externalId)}
@@ -102,13 +114,19 @@ export function InboxList({
                       : "border-l-border/60 text-foreground/90 hover:border-l-muted-foreground",
                   )}
                 >
-                  <p className="line-clamp-2 text-sm leading-relaxed">{thought.rawText}</p>
+                  <p className="line-clamp-2 text-sm leading-relaxed">
+                    {thought.rawText}
+                  </p>
 
                   <div className="flex w-full items-center justify-between gap-2">
                     <p className="text-xs text-muted-foreground">
-                      {formatDistanceToNow(thought.createdAt, { addSuffix: true })}
+                      {formatDistanceToNow(thought.createdAt, {
+                        addSuffix: true,
+                      })}
                     </p>
-                    <Badge variant={getStatusVariant(thought)}>{getStatusLabel(thought)}</Badge>
+                    <Badge variant={getStatusVariant(thought)}>
+                      {getStatusLabel(thought)}
+                    </Badge>
                   </div>
                 </button>
 
@@ -116,10 +134,16 @@ export function InboxList({
                   <Button
                     variant="outline"
                     size="xs"
-                    disabled={!isOnline || thought.syncStatus !== "synced" || thought.status === "processing"}
+                    disabled={
+                      !isOnline ||
+                      thought.syncStatus !== "synced" ||
+                      thought.status === "processing"
+                    }
                     onClick={() => onRunAi(thought.externalId)}
                   >
-                    {thought.status === "failed" ? "Retry AI" : "Generate todos"}
+                    {thought.status === "failed"
+                      ? "Retry AI"
+                      : "Generate todos"}
                   </Button>
                 </div>
               </div>

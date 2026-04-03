@@ -61,3 +61,20 @@ export const revoke = mutation({
   },
 });
 
+export const getActiveByHash = query({
+  args: {
+    keyHash: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const key = await ctx.db
+      .query("apiKeys")
+      .withIndex("by_keyHash", (q) => q.eq("keyHash", args.keyHash))
+      .unique();
+
+    if (!key || key.revokedAt !== null) {
+      return null;
+    }
+
+    return key;
+  },
+});

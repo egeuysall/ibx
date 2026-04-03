@@ -1,0 +1,12 @@
+{
+  "name": "@ibx/shortcut",
+  "private": true,
+  "version": "0.1.0",
+  "type": "commonjs",
+  "scripts": {
+    "build": "node generate-shortcut.cjs"
+  },
+  "dependencies": {
+    "@joshfarrant/shortcuts-js": "^0.6.0"
+  }
+}

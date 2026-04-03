@@ -1,16 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { getRouteSession } from "@/lib/auth-server";
+import { getRouteAuth } from "@/lib/auth-server";
 
 export async function GET(request: NextRequest) {
-  const session = await getRouteSession(request);
-
-  if (!session) {
+  const auth = await getRouteAuth(request);
+  if (!auth) {
     return NextResponse.json({ authenticated: false, expiresAt: null });
+  }
+
+  if (auth.type === "apiKey") {
+    return NextResponse.json({
+      authenticated: true,
+      authType: "apiKey",
+      expiresAt: null,
+    });
   }
 
   return NextResponse.json({
     authenticated: true,
-    expiresAt: session.expiresAt,
+    authType: "session",
+    expiresAt: auth.session.expiresAt,
   });
 }

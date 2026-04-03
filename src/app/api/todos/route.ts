@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { getRouteSession, unauthorizedJson } from "@/lib/auth-server";
+import { getRouteAuth, unauthorizedJson } from "@/lib/auth-server";
 import { api, convex } from "@/lib/convex-server";
 
 function getStartOfUtcDay(timestamp: number) {
@@ -9,8 +9,8 @@ function getStartOfUtcDay(timestamp: number) {
 }
 
 export async function GET(request: NextRequest) {
-  const session = await getRouteSession(request);
-  if (!session) {
+  const auth = await getRouteAuth(request);
+  if (!auth) {
     return unauthorizedJson();
   }
 

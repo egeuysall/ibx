@@ -2,7 +2,8 @@ import "server-only";
 
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 
-export const SESSION_COOKIE_NAME = "mg_session";
+export const SESSION_COOKIE_NAME = "ibx_session";
+export const LEGACY_SESSION_COOKIE_NAME = "mg_session";
 export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 90;
 
 function secureCookiesEnabled() {

@@ -1,36 +1,242 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ibx
 
-## Getting Started
+`ibx` is a private, offline-first task execution app for quickly turning raw thoughts into prioritized todos.
 
-First, run the development server:
+- Web app: Next.js 16 + React 19 + shadcn/ui
+- Backend/data: Convex
+- AI: Vercel AI Gateway
+- Auth: password-gated session + API keys (`iak_...`) for CLI/Bearer access
+- Extras: installable PWA, generated Apple Shortcut, TypeScript CLI
+
+Deployed URL: [https://ibx.egeuysal.com](https://ibx.egeuysal.com)
+
+## What This Project Does
+
+1. You type one thought in the top input (`> type once, generate todos`).
+2. The input is saved to local IndexedDB queue immediately.
+3. If online and authenticated, queued prompts are flushed to `/api/todos/generate`.
+4. AI returns at most 5 actionable todos with date/priority/recurrence.
+5. Todos are persisted in Convex and shown in `today`, `upcoming`, and `archive`.
+
+If offline, prompts stay queued and are sent when connectivity returns.
+
+## Moving Parts
+
+### Frontend (Next.js app router)
+
+- Main UI shell: [src/components/layout/app-shell.tsx](/Users/egeuysal/Developer/inbox/src/components/layout/app-shell.tsx)
+- Settings: [src/components/layout/settings-view.tsx](/Users/egeuysal/Developer/inbox/src/components/layout/settings-view.tsx)
+- Pages:
+  - Home: [src/app/page.tsx](/Users/egeuysal/Developer/inbox/src/app/page.tsx)
+  - Settings page: [src/app/settings/page.tsx](/Users/egeuysal/Developer/inbox/src/app/settings/page.tsx)
+- PWA shell registration:
+  - [src/components/layout/sw-register.tsx](/Users/egeuysal/Developer/inbox/src/components/layout/sw-register.tsx)
+  - [public/sw.js](/Users/egeuysal/Developer/inbox/public/sw.js)
+- Manifest: [src/app/manifest.ts](/Users/egeuysal/Developer/inbox/src/app/manifest.ts)
+
+### Local storage and offline queue
+
+- IndexedDB adapter: [src/lib/indexedDb.ts](/Users/egeuysal/Developer/inbox/src/lib/indexedDb.ts)
+- Stores:
+  - `localThoughts`
+  - `queuedPrompts`
+- Queue behavior is integrated in:
+  - [src/components/layout/app-shell.tsx](/Users/egeuysal/Developer/inbox/src/components/layout/app-shell.tsx)
+
+### API and auth
+
+- Session/password + Bearer key auth resolver: [src/lib/auth-server.ts](/Users/egeuysal/Developer/inbox/src/lib/auth-server.ts)
+- Session internals (hashing + secure cookie options): [src/lib/session.ts](/Users/egeuysal/Developer/inbox/src/lib/session.ts)
+- API key generation + hashing: [src/lib/api-keys.ts](/Users/egeuysal/Developer/inbox/src/lib/api-keys.ts)
+- API routes: `src/app/api/**`
+
+### AI pipeline and personalization
+
+- AI call + strict todo normalization: [src/lib/ai.ts](/Users/egeuysal/Developer/inbox/src/lib/ai.ts)
+- Context hydration from external profile data:
+  - [src/lib/ege-context.ts](/Users/egeuysal/Developer/inbox/src/lib/ege-context.ts)
+  - Pulls `agents.json`, plus latest 7 diary summaries and latest 7 blog titles.
+- Planning and capping generated todos: [src/lib/todo-planning.ts](/Users/egeuysal/Developer/inbox/src/lib/todo-planning.ts)
+
+### Convex backend
+
+- Schema: [convex/schema.ts](/Users/egeuysal/Developer/inbox/convex/schema.ts)
+- Domain modules:
+  - Thoughts: [convex/thoughts.ts](/Users/egeuysal/Developer/inbox/convex/thoughts.ts)
+  - Todos: [convex/todos.ts](/Users/egeuysal/Developer/inbox/convex/todos.ts)
+  - Sessions: [convex/sessions.ts](/Users/egeuysal/Developer/inbox/convex/sessions.ts)
+  - API keys: [convex/apiKeys.ts](/Users/egeuysal/Developer/inbox/convex/apiKeys.ts)
+  - Memories: [convex/memories.ts](/Users/egeuysal/Developer/inbox/convex/memories.ts)
+
+### CLI + installer + Shortcut
+
+- CLI source: [cli/src/index.ts](/Users/egeuysal/Developer/inbox/cli/src/index.ts)
+- CLI docs: [cli/README.md](/Users/egeuysal/Developer/inbox/cli/README.md)
+- Bundle script for downloadable binary-like JS file: [scripts/build-ibx-bundle.mjs](/Users/egeuysal/Developer/inbox/scripts/build-ibx-bundle.mjs)
+- Installer script served publicly: [public/install.sh](/Users/egeuysal/Developer/inbox/public/install.sh)
+- Shortcut generator (`@joshfarrant/shortcuts-js`):
+  - [shortcut/generate-shortcut.cjs](/Users/egeuysal/Developer/inbox/shortcut/generate-shortcut.cjs)
+  - Output: [public/shortcuts/ibx-capture.shortcut](/Users/egeuysal/Developer/inbox/public/shortcuts/ibx-capture.shortcut)
+
+## Data Model (Convex)
+
+- `sessions`: hashed session tokens and expiry/last-seen
+- `apiKeys`: hashed API keys (`keyHash`), key metadata, revoked timestamp
+- `thoughts`: raw thought captures with sync/AI status
+- `todos`: generated/manual todos with schedule + recurrence + priority
+- `memories`: profile memory + past run summaries used for AI context
+
+## Environment Variables
+
+Copy [.env.example](/Users/egeuysal/Developer/inbox/.env.example) to `.env.local`.
+
+Required keys:
+
+- `CONVEX_DEPLOYMENT`
+- `NEXT_PUBLIC_CONVEX_URL`
+- `NEXT_PUBLIC_CONVEX_SITE_URL`
+- `AI_GATEWAY_API_KEY`
+- `AI_AGENT_MODEL` (default: `openai/gpt-5.4-nano`)
+- `APP_ACCESS_PASSWORD`
+- `NEXT_PUBLIC_SITE_URL` (default deployment URL)
+
+Optional:
+
+- `SESSION_COOKIE_SECURE=false` for local HTTP testing only
+
+## Local Development
+
+Prerequisites:
+
+- Node.js 20+
+- pnpm 9+
+- Convex project/deployment
+
+Install and run:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
+cp .env.example .env.local
+pnpm dlx convex dev
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000), enter `APP_ACCESS_PASSWORD`, and use the app.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## API Surface
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Auth/session:
 
-## Learn More
+- `POST /api/login`
+- `POST /api/logout`
+- `GET /api/session` (supports cookie auth or Bearer API key)
 
-To learn more about Next.js, take a look at the following resources:
+Thoughts:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- `GET /api/thoughts`
+- `POST /api/thoughts/sync`
+- `GET /api/thoughts/:externalId/todos`
+- `POST /api/thoughts/:externalId/todos`
+- `POST /api/thoughts/:externalId/generate`
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Todos:
 
-## Deploy on Vercel
+- `GET /api/todos`
+- `POST /api/todos/generate`
+- `PATCH /api/todos/:todoId`
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+API keys:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `GET /api/api-keys` (active only)
+- `POST /api/api-keys` (returns raw key once)
+- `DELETE /api/api-keys/:keyId` (revokes key)
+
+Bearer usage:
+
+```http
+Authorization: Bearer iak_...
+```
+
+## CLI (`ibx`)
+
+The CLI is TypeScript-based and uses `flags`.
+
+Install (recommended, no npm publish needed):
+
+```bash
+curl -fsSL https://ibx.egeuysal.com/install.sh | bash
+```
+
+Auth and basic flow:
+
+```bash
+ibx auth login --api-key iak_...
+ibx add "finish landing page and email two leads"
+ibx todos list --view today
+```
+
+Available commands:
+
+- `ibx auth login [--api-key iak_...] [--url https://ibx.egeuysal.com]`
+- `ibx auth status`
+- `ibx auth logout`
+- `ibx add [--input "..."]`
+- `ibx todos list [--view today|upcoming|archive|all] [--json]`
+- `ibx todos done --id <todoId>`
+- `ibx todos open --id <todoId>`
+- `ibx todos set --id <todoId> [--due YYYY-MM-DD] [--priority 1|2|3] [--recurrence none|daily|weekly|monthly]`
+
+Build CLI artifacts:
+
+```bash
+pnpm cli:build
+pnpm cli:bundle
+```
+
+## Apple Shortcut
+
+Build shortcut file:
+
+```bash
+pnpm shortcut:build
+```
+
+Import one of:
+
+- local: [shortcut/dist/ibx-capture.shortcut](/Users/egeuysal/Developer/inbox/shortcut/dist/ibx-capture.shortcut)
+- hosted: [https://ibx.egeuysal.com/shortcuts/ibx-capture.shortcut](https://ibx.egeuysal.com/shortcuts/ibx-capture.shortcut)
+
+Shortcut behavior:
+
+- asks for text input
+- opens `https://ibx.egeuysal.com/?shortcut=...&source=shortcut`
+- app queues prompt locally if offline and auto-flushes later when online
+
+## Security Notes
+
+- App password is never stored client-side.
+- Session cookie is `HttpOnly`, `SameSite=Lax`, and `Secure` in production.
+- Session tokens are hashed before DB persistence.
+- API keys are generated with strong randomness and stored only as SHA-256 hashes.
+- Revoked API keys are excluded from active key listing and rejected for auth.
+
+## Common Scripts
+
+From repo root:
+
+- `pnpm dev` → start Next.js dev server
+- `pnpm build` → production build
+- `pnpm start` → run production build
+- `pnpm lint` → ESLint
+- `pnpm cli:build` → build CLI TS output
+- `pnpm cli:bundle` → build downloadable `public/ibx`
+- `pnpm shortcut:build` → generate/copy `.shortcut` file
+
+## Notes
+
+- UI is intentionally minimal and terminal-inspired (pure black/white, Geist Mono).
+- Todo generation is intentionally constrained:
+  - max 5 new todos per AI run
+  - duplicate filtering
+  - recurrence/priority normalization
+  - due date auto-rescheduling safeguards

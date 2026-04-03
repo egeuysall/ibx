@@ -29,8 +29,15 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { useOfflineStatus } from "@/hooks/useOfflineStatus";
 import { useTheme } from "@/hooks/useTheme";
 import { apiClient, ApiError } from "@/lib/apiClient";
+import {
+  addQueuedPrompt,
+  listQueuedPrompts,
+  patchQueuedPrompt,
+  removeQueuedPrompt,
+} from "@/lib/indexedDb";
 import { cn } from "@/lib/utils";
 import type { TodoItem, TodoPriority, TodoRecurrence } from "@/lib/types";
 
@@ -39,11 +46,32 @@ type AppShellProps = {
   initialFilter?: TodoFilter;
 };
 
-const PROMPT_INPUT_STORAGE_KEY = "inbox:prompt-input";
-const FILTER_STORAGE_KEY = "inbox:active-view";
-const PROMPT_AUTOFOCUS_STORAGE_KEY = "inbox:prompt-autofocus";
-const DAY_MS = 24 * 60 * 60 * 1000;
+const PROMPT_INPUT_STORAGE_KEY = "ibx:prompt-input";
+const FILTER_STORAGE_KEY = "ibx:active-view";
+const PROMPT_AUTOFOCUS_STORAGE_KEY = "ibx:prompt-autofocus";
+const SHORTCUT_CAPTURE_KEY_PREFIX = "ibx:shortcut-capture:";
 const NOTE_PREVIEW_LENGTH = 160;
+const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+const UTC_LONG_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+  timeZone: "UTC",
+});
+const UTC_SHORT_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  month: "2-digit",
+  day: "2-digit",
+  timeZone: "UTC",
+});
+const LOCAL_STATUS_TIME_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  weekday: "short",
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+  hour12: true,
+  timeZoneName: "short",
+});
 
 function readStoredPromptInput() {
   if (typeof window === "undefined") {
@@ -77,33 +105,81 @@ function readStoredPromptAutofocus() {
   return window.localStorage.getItem(PROMPT_AUTOFOCUS_STORAGE_KEY) !== "0";
 }
 
-function displayDueDate(timestamp: number | null) {
-  if (!timestamp) {
+function getLocalDateKey(timestamp: number) {
+  const date = new Date(timestamp);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getTodoDateKey(timestamp: number | null) {
+  if (typeof timestamp !== "number") {
+    return null;
+  }
+
+  const date = new Date(timestamp);
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function isTodoOnDateKey(timestamp: number | null, dateKey: string) {
+  return getTodoDateKey(timestamp) === dateKey;
+}
+
+function dateKeyToTimestamp(dateKey: string) {
+  const timestamp = Date.parse(`${dateKey}T00:00:00.000Z`);
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function dateKeyToLocalDate(dateKey: string) {
+  const [yearText, monthText, dayText] = dateKey.split("-");
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+    return null;
+  }
+
+  return new Date(year, month - 1, day);
+}
+
+function formatDateKey(dateKey: string, formatter: Intl.DateTimeFormat) {
+  if (!ISO_DATE_REGEX.test(dateKey)) {
     return "no date";
   }
 
-  return format(new Date(timestamp), "MMM d, yyyy");
+  const timestamp = dateKeyToTimestamp(dateKey);
+  if (timestamp === null) {
+    return "no date";
+  }
+
+  return formatter.format(new Date(timestamp));
+}
+
+function displayDueDate(timestamp: number | null) {
+  const dateKey = getTodoDateKey(timestamp);
+  if (!dateKey) {
+    return "no date";
+  }
+
+  return formatDateKey(dateKey, UTC_LONG_DATE_FORMATTER);
 }
 
 function displayDateInputValue(timestamp: number | null) {
-  if (!timestamp) {
+  const dateKey = getTodoDateKey(timestamp);
+  if (!dateKey) {
     return "mm/dd/yyyy";
   }
 
-  return format(new Date(timestamp), "MM/dd/yyyy");
+  return formatDateKey(dateKey, UTC_SHORT_DATE_FORMATTER);
 }
 
-function getStartOfUtcDay(timestamp: number) {
-  const date = new Date(timestamp);
-  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
-}
-
-function isDueTodayUtc(timestamp: number | null, todayStartUtc: number) {
-  if (!timestamp) {
-    return false;
-  }
-
-  return timestamp >= todayStartUtc && timestamp < todayStartUtc + DAY_MS;
+function getLocalStatusLabel(timestamp: number) {
+  return LOCAL_STATUS_TIME_FORMATTER.format(new Date(timestamp)).toLowerCase();
 }
 
 function parseErrorMessage(error: unknown) {
@@ -178,6 +254,7 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   useTheme();
+  const isOnline = useOfflineStatus();
 
   const [isAuthenticated, setIsAuthenticated] = useState(initialAuthenticated);
   const [filter, setFilter] = useState<TodoFilter>(() => readStoredFilter());
@@ -187,11 +264,15 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
   const [hasLoadedTodos, setHasLoadedTodos] = useState(false);
   const [isLoadingTodos, setIsLoadingTodos] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isProcessingQueue, setIsProcessingQueue] = useState(false);
+  const [queuedPromptCount, setQueuedPromptCount] = useState(0);
   const [pendingTodoId, setPendingTodoId] = useState<string | null>(null);
   const [editingTodoId, setEditingTodoId] = useState<string | null>(null);
   const [expandedNoteIds, setExpandedNoteIds] = useState<Record<string, boolean>>({});
+  const [currentTimestamp, setCurrentTimestamp] = useState(() => Date.now());
   const promptInputRef = useRef<HTMLInputElement | null>(null);
   const hasPlacedInitialCursor = useRef(false);
+  const isQueueFlushRunning = useRef(false);
 
   useEffect(() => {
     try {
@@ -231,9 +312,110 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
     }
   }, [isAuthenticated]);
 
+  const refreshQueuedPromptCount = useCallback(async () => {
+    try {
+      const queue = await listQueuedPrompts();
+      setQueuedPromptCount(queue.length);
+    } catch {
+      // Ignore queue read failures to keep UI responsive.
+    }
+  }, []);
+
+  const queuePrompt = useCallback(async (text: string, source: "app" | "shortcut") => {
+    const cleanInput = text.trim().slice(0, 8_000);
+    if (!cleanInput) {
+      return null;
+    }
+
+    const queued = await addQueuedPrompt({
+      text: cleanInput,
+      source,
+    });
+    setQueuedPromptCount((previous) => previous + 1);
+    return queued.id;
+  }, []);
+
+  const flushQueuedPrompts = useCallback(async () => {
+    if (!isAuthenticated || !isOnline || isQueueFlushRunning.current) {
+      return;
+    }
+
+    isQueueFlushRunning.current = true;
+    setIsProcessingQueue(true);
+
+    try {
+      const queue = await listQueuedPrompts();
+      setQueuedPromptCount(queue.length);
+
+      if (queue.length === 0) {
+        return;
+      }
+
+      let createdTodos = 0;
+      let failedItems = 0;
+
+      for (const item of queue) {
+        const nextAttempts = item.attempts + 1;
+        await patchQueuedPrompt(item.id, {
+          status: "processing",
+          attempts: nextAttempts,
+          lastError: null,
+        });
+
+        try {
+          const result = await apiClient.generateTodosFromInput(item.text);
+          createdTodos += result.created;
+          await removeQueuedPrompt(item.id);
+        } catch (error) {
+          failedItems += 1;
+          await patchQueuedPrompt(item.id, {
+            status: "failed",
+            attempts: nextAttempts,
+            lastError: parseErrorMessage(error),
+          });
+        }
+      }
+
+      await refreshQueuedPromptCount();
+
+      if (createdTodos > 0) {
+        toast.message(`generated ${createdTodos} queued todos`);
+      }
+
+      if (failedItems > 0) {
+        toast.error(`${failedItems} queued item${failedItems === 1 ? "" : "s"} failed`);
+      }
+
+      await refreshTodos();
+    } finally {
+      isQueueFlushRunning.current = false;
+      setIsProcessingQueue(false);
+    }
+  }, [isAuthenticated, isOnline, refreshQueuedPromptCount, refreshTodos]);
+
   useEffect(() => {
     void refreshTodos(true);
   }, [refreshTodos]);
+
+  useEffect(() => {
+    void refreshQueuedPromptCount();
+  }, [refreshQueuedPromptCount]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !isOnline) {
+      return;
+    }
+
+    void flushQueuedPrompts();
+  }, [flushQueuedPrompts, isAuthenticated, isOnline]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setCurrentTimestamp(Date.now());
+    }, 30_000);
+
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -242,10 +424,11 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
 
     const timer = window.setInterval(() => {
       void refreshTodos();
+      void flushQueuedPrompts();
     }, 20_000);
 
     return () => window.clearInterval(timer);
-  }, [isAuthenticated, refreshTodos]);
+  }, [flushQueuedPrompts, isAuthenticated, refreshTodos]);
 
   const placePromptCursorAtEnd = useCallback(() => {
     const input = promptInputRef.current;
@@ -298,6 +481,60 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
     }
   }, [router, searchParams]);
 
+  useEffect(() => {
+    if (!isAuthenticated) {
+      return;
+    }
+
+    const shortcutText = searchParams.get("shortcut");
+    if (!shortcutText) {
+      return;
+    }
+
+    const captureId = searchParams.get("captureId");
+    const dedupeKey = captureId ? `${SHORTCUT_CAPTURE_KEY_PREFIX}${captureId}` : null;
+
+    const clearShortcutParams = () => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete("shortcut");
+      params.delete("source");
+      params.delete("captureId");
+      params.delete("ts");
+      if (!params.get("view")) {
+        params.set("view", filter);
+      }
+      router.replace(`/?${params.toString()}`, { scroll: false });
+    };
+
+    if (dedupeKey && typeof window !== "undefined" && window.sessionStorage.getItem(dedupeKey)) {
+      clearShortcutParams();
+      return;
+    }
+
+    if (dedupeKey && typeof window !== "undefined") {
+      window.sessionStorage.setItem(dedupeKey, "1");
+    }
+
+    const source = searchParams.get("source") === "shortcut" ? "shortcut" : "app";
+
+    void (async () => {
+      const queuedId = await queuePrompt(shortcutText, source);
+      if (!queuedId) {
+        clearShortcutParams();
+        return;
+      }
+
+      if (isOnline) {
+        toast.message("shortcut received. generating todos…");
+        await flushQueuedPrompts();
+      } else {
+        toast.message("shortcut received offline. queued for next connection.");
+      }
+
+      clearShortcutParams();
+    })();
+  }, [filter, flushQueuedPrompts, isAuthenticated, isOnline, queuePrompt, router, searchParams]);
+
   const setActiveFilter = useCallback(
     (nextFilter: TodoFilter) => {
       setFilter(nextFilter);
@@ -322,10 +559,20 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
 
     setIsGenerating(true);
     try {
-      const result = await apiClient.generateTodosFromInput(cleanInput);
+      const queuedId = await queuePrompt(cleanInput, "app");
+      if (!queuedId) {
+        return;
+      }
+
       setPromptInput("");
-      toast.message(`generated ${result.created} todos`);
-      await refreshTodos();
+
+      if (!isOnline) {
+        toast.message("saved offline. ai will run when connection is back.");
+        await refreshQueuedPromptCount();
+        return;
+      }
+
+      await flushQueuedPrompts();
     } catch (error) {
       toast.error(parseErrorMessage(error));
     } finally {
@@ -429,12 +676,12 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
   };
 
   const groupedTodos = useMemo(() => {
-    const todayStartUtc = getStartOfUtcDay(Date.now());
+    const todayDateKey = getLocalDateKey(Date.now());
     const openTodos = todos.filter((todo) => todo.status === "open");
 
     return {
-      today: openTodos.filter((todo) => isDueTodayUtc(todo.dueDate, todayStartUtc)),
-      upcoming: openTodos.filter((todo) => !isDueTodayUtc(todo.dueDate, todayStartUtc)),
+      today: openTodos.filter((todo) => isTodoOnDateKey(todo.dueDate, todayDateKey)),
+      upcoming: openTodos.filter((todo) => !isTodoOnDateKey(todo.dueDate, todayDateKey)),
       archive: todos.filter((todo) => todo.status === "done"),
     };
   }, [todos]);
@@ -456,10 +703,10 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
       return [{ key: "today", label: null, todos: filteredTodos }];
     }
 
-    const sectionsByDate = new Map<string, { dateKey: number | null; todos: TodoItem[] }>();
+    const sectionsByDate = new Map<string, { dateKey: string | null; todos: TodoItem[] }>();
 
     for (const todo of filteredTodos) {
-      const dateKey = typeof todo.dueDate === "number" ? getStartOfUtcDay(todo.dueDate) : null;
+      const dateKey = getTodoDateKey(todo.dueDate);
       const mapKey = dateKey === null ? "no-date" : String(dateKey);
       const existingSection = sectionsByDate.get(mapKey);
       if (existingSection) {
@@ -484,11 +731,20 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
           return -1;
         }
 
-        return filter === "upcoming" ? leftDate - rightDate : rightDate - leftDate;
+        if (leftDate === rightDate) {
+          return 0;
+        }
+
+        return filter === "upcoming"
+          ? leftDate.localeCompare(rightDate)
+          : rightDate.localeCompare(leftDate);
       })
       .map(([key, section]) => ({
         key,
-        label: section.dateKey === null ? "no date" : format(new Date(section.dateKey), "MM/dd"),
+        label:
+          section.dateKey === null
+            ? "no date"
+            : formatDateKey(section.dateKey, UTC_SHORT_DATE_FORMATTER),
         todos: section.todos,
       }));
   }, [filter, filteredTodos]);
@@ -508,7 +764,7 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
         <Sidebar collapsible="icon">
           <SidebarHeader className="h-12 border-b p-0">
             <div className="flex h-12 items-center justify-between px-3 group-data-[collapsible=icon]:hidden">
-              <p className="text-sm">inbox</p>
+              <p className="text-sm">ibx</p>
               <SidebarTrigger size="icon-sm" variant="ghost" />
             </div>
             <div className="hidden h-12 items-center justify-center group-data-[collapsible=icon]:flex">
@@ -563,7 +819,7 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
           </SidebarContent>
           <SidebarFooter>
             <p className="px-2 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
-              {format(new Date(), "EEE, MMM d").toLowerCase()}
+              {getLocalStatusLabel(currentTimestamp)}
             </p>
           </SidebarFooter>
           <SidebarRail />
@@ -587,10 +843,15 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
                     void handleGenerateTodos();
                   }
                 }}
-                disabled={isGenerating}
+                disabled={isGenerating || isProcessingQueue}
               />
-              <Button size="sm" onClick={() => void handleGenerateTodos()} disabled={isGenerating}>
-                {isGenerating ? "running..." : "run"}
+              <Button
+                size="sm"
+                onClick={() => void handleGenerateTodos()}
+                disabled={isGenerating || isProcessingQueue}
+                title={queuedPromptCount > 0 ? `${queuedPromptCount} queued` : undefined}
+              >
+                {isGenerating || isProcessingQueue ? "running..." : "run"}
               </Button>
             </div>
           </header>
@@ -693,7 +954,11 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
                                   <Calendar
                                     className="rounded-sm border border-border"
                                     mode="single"
-                                    selected={todo.dueDate ? new Date(todo.dueDate) : undefined}
+                                    selected={
+                                      todo.dueDate
+                                        ? (dateKeyToLocalDate(getTodoDateKey(todo.dueDate) ?? "") ?? undefined)
+                                        : undefined
+                                    }
                                     onSelect={(date) =>
                                       void updateTodoDate(todo, date ? format(date, "yyyy-MM-dd") : "")
                                     }

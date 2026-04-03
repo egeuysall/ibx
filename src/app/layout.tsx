@@ -12,8 +12,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MG – My Goat",
-  description: "Private thought inbox and todo generator.",
+  title: "ibx",
+  description: "Private thought ibx and todo generator.",
 };
 
 export const viewport: Viewport = {

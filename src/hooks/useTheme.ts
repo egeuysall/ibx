@@ -4,17 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 
 export type ThemePreference = "system" | "light" | "dark";
 
-const THEME_STORAGE_KEY = "inbox:appearance";
-const LEGACY_THEME_STORAGE_KEY = "mg-theme";
+const THEME_STORAGE_KEY = "ibx:appearance";
 
 function readStoredTheme(): ThemePreference {
   if (typeof window === "undefined") {
     return "system";
   }
 
-  const storedTheme =
-    window.localStorage.getItem(THEME_STORAGE_KEY) ??
-    window.localStorage.getItem(LEGACY_THEME_STORAGE_KEY);
+  const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
   return storedTheme === "light" || storedTheme === "dark" || storedTheme === "system"
     ? storedTheme
     : "system";

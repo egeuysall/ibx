@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { getRouteSession, unauthorizedJson } from "@/lib/auth-server";
+import { getRouteAuth, unauthorizedJson, validateCsrfForSessionAuth } from "@/lib/auth-server";
 import { api, convex } from "@/lib/convex-server";
 import type { ThoughtStatus } from "@/lib/types";
 
@@ -65,9 +65,13 @@ function sanitizeThought(value: unknown): SyncThoughtBody | null {
 }
 
 export async function POST(request: NextRequest) {
-  const session = await getRouteSession(request);
-  if (!session) {
+  const auth = await getRouteAuth(request);
+  if (!auth) {
     return unauthorizedJson();
+  }
+  const csrfError = validateCsrfForSessionAuth(request, auth);
+  if (csrfError) {
+    return csrfError;
   }
 
   const payload = (await request.json().catch(() => null)) as { thoughts?: unknown } | null;

@@ -2,9 +2,9 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Inbox",
-    short_name: "Inbox",
-    description: "Private thought inbox and todo generator.",
+    name: "ibx",
+    short_name: "ibx",
+    description: "Private thought ibx and todo generator.",
     start_url: "/",
     display: "standalone",
     background_color: "#070707",

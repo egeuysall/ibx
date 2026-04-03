@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 
 import { generateTodosFromThought } from "@/lib/ai";
-import { getRouteSession, unauthorizedJson } from "@/lib/auth-server";
+import { getRouteAuth, unauthorizedJson, validateCsrfForSessionAuth } from "@/lib/auth-server";
 import { api, convex } from "@/lib/convex-server";
 import { getEgeContext } from "@/lib/ege-context";
 import { planGeneratedTodos } from "@/lib/todo-planning";
@@ -23,9 +23,13 @@ function getStartOfUtcDay(timestamp: number) {
 }
 
 export async function POST(request: NextRequest) {
-  const session = await getRouteSession(request);
-  if (!session) {
+  const auth = await getRouteAuth(request);
+  if (!auth) {
     return unauthorizedJson();
+  }
+  const csrfError = validateCsrfForSessionAuth(request, auth);
+  if (csrfError) {
+    return csrfError;
   }
 
   const body = (await request.json().catch(() => null)) as { text?: unknown } | null;

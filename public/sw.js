@@ -1,4 +1,4 @@
-const CACHE_VERSION = "mg-shell-v2";
+const CACHE_VERSION = "ibx-shell-v3";
 const SHELL_FILES = ["/", "/manifest.webmanifest", "/favicon.ico"];
 
 self.addEventListener("install", (event) => {

@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
-import { format } from "date-fns";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -29,10 +28,19 @@ import { useTheme } from "@/hooks/useTheme";
 import { apiClient } from "@/lib/apiClient";
 import { clearLocalThoughts } from "@/lib/indexedDb";
 
-const FILTER_STORAGE_KEY = "inbox:active-view";
-const PROMPT_AUTOFOCUS_STORAGE_KEY = "inbox:prompt-autofocus";
+const FILTER_STORAGE_KEY = "ibx:active-view";
+const PROMPT_AUTOFOCUS_STORAGE_KEY = "ibx:prompt-autofocus";
 const PICKER_ITEM_CLASS =
   "border border-input aria-pressed:border-foreground aria-pressed:bg-foreground aria-pressed:text-background data-[state=on]:border-foreground data-[state=on]:bg-foreground data-[state=on]:text-background";
+const LOCAL_STATUS_TIME_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  weekday: "short",
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+  hour12: true,
+  timeZoneName: "short",
+});
 
 type DefaultView = "today" | "upcoming" | "archive";
 type ApiKeySummary = {
@@ -60,6 +68,10 @@ function readStoredPromptAutofocus() {
   return window.localStorage.getItem(PROMPT_AUTOFOCUS_STORAGE_KEY) !== "0";
 }
 
+function getLocalStatusLabel(timestamp: number) {
+  return LOCAL_STATUS_TIME_FORMATTER.format(new Date(timestamp)).toLowerCase();
+}
+
 export function SettingsView() {
   const router = useRouter();
   const { theme, setTheme } = useTheme();
@@ -73,6 +85,7 @@ export function SettingsView() {
   const [isLoadingKeys, setIsLoadingKeys] = useState(true);
   const [isCreatingKey, startCreateKeyTransition] = useTransition();
   const [revokingKeyId, setRevokingKeyId] = useState<string | null>(null);
+  const [currentTimestamp, setCurrentTimestamp] = useState(() => Date.now());
 
   const setThemeFromGroup = (values: string[]) => {
     const nextTheme = values[0];
@@ -138,6 +151,14 @@ export function SettingsView() {
     void refreshApiKeys();
   }, []);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setCurrentTimestamp(Date.now());
+    }, 30_000);
+
+    return () => window.clearInterval(timer);
+  }, []);
+
   const handleCreateApiKey = () => {
     startCreateKeyTransition(async () => {
       try {
@@ -186,7 +207,7 @@ export function SettingsView() {
         <Sidebar collapsible="icon">
           <SidebarHeader className="h-12 border-b p-0">
             <div className="flex h-12 items-center justify-between px-3 group-data-[collapsible=icon]:hidden">
-              <p className="text-sm">inbox</p>
+              <p className="text-sm">ibx</p>
               <SidebarTrigger size="icon-sm" variant="ghost" />
             </div>
             <div className="hidden h-12 items-center justify-center group-data-[collapsible=icon]:flex">
@@ -239,7 +260,7 @@ export function SettingsView() {
           </SidebarContent>
           <SidebarFooter>
             <p className="px-2 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
-              {format(new Date(), "EEE, MMM d").toLowerCase()}
+              {getLocalStatusLabel(currentTimestamp)}
             </p>
           </SidebarFooter>
           <SidebarRail />

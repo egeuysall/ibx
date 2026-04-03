@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { getRouteSession, unauthorizedJson } from "@/lib/auth-server";
+import { getRouteAuth, unauthorizedJson, validateCsrfForSessionAuth } from "@/lib/auth-server";
 import { api, convex } from "@/lib/convex-server";
 import type { TodoStatus } from "@/lib/types";
 
@@ -8,9 +8,13 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ todoId: string }> },
 ) {
-  const session = await getRouteSession(request);
-  if (!session) {
+  const auth = await getRouteAuth(request);
+  if (!auth) {
     return unauthorizedJson();
+  }
+  const csrfError = validateCsrfForSessionAuth(request, auth);
+  if (csrfError) {
+    return csrfError;
   }
 
   const resolvedParams = await params;

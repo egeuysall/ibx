@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { getRouteSession, unauthorizedJson } from "@/lib/auth-server";
+import { getRouteAuth, unauthorizedJson, validateCsrfForSessionAuth } from "@/lib/auth-server";
 import { api, convex } from "@/lib/convex-server";
 
 function getExternalId(params: { externalId: string }) {
@@ -16,9 +16,13 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ externalId: string }> },
 ) {
-  const session = await getRouteSession(request);
-  if (!session) {
+  const auth = await getRouteAuth(request);
+  if (!auth) {
     return unauthorizedJson();
+  }
+  const csrfError = validateCsrfForSessionAuth(request, auth);
+  if (csrfError) {
+    return csrfError;
   }
 
   const resolvedParams = await params;
@@ -67,9 +71,13 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ externalId: string }> },
 ) {
-  const session = await getRouteSession(request);
-  if (!session) {
+  const auth = await getRouteAuth(request);
+  if (!auth) {
     return unauthorizedJson();
+  }
+  const csrfError = validateCsrfForSessionAuth(request, auth);
+  if (csrfError) {
+    return csrfError;
   }
 
   const resolvedParams = await params;

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { getRouteSession, unauthorizedJson } from "@/lib/auth-server";
+import { getRouteSession, unauthorizedJson, validateCsrfForSessionAuth } from "@/lib/auth-server";
 import { api, convex } from "@/lib/convex-server";
 
 function getKeyId(params: { keyId: string }) {
@@ -20,6 +20,10 @@ export async function DELETE(
   if (!session) {
     return unauthorizedJson();
   }
+  const csrfError = validateCsrfForSessionAuth(request, { type: "session", session });
+  if (csrfError) {
+    return csrfError;
+  }
 
   const resolvedParams = await params;
   const keyId = getKeyId(resolvedParams);
@@ -33,4 +37,3 @@ export async function DELETE(
 
   return NextResponse.json({ ok: true });
 }
-

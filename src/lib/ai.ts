@@ -146,7 +146,7 @@ Each object must be:
 Rules:
 - Keep titles short and actionable.
 - Keep notes concise (max ${MAX_NOTES_LENGTH} chars) and include concrete context + next action.
-- Prefer notes like: "context: lead=Acme CTO, repo=inbox-web; next: send follow-up draft."
+- Prefer notes like: "context: lead=Acme CTO, repo=ibx-web; next: send follow-up draft."
 - Never output long writing instructions or multi-step paragraphs in notes.
 - Use recurrence only when the thought clearly implies repeated cadence.
 - Use dueDate only when a concrete date can be inferred.
