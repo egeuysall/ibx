@@ -15,12 +15,14 @@ pnpm --dir shortcut build
 Output files:
 
 - `shortcut/dist/ibx-capture.shortcut`
-- `public/shortcuts/ibx-capture.shortcut`
+- `public/shortcuts/ibx-capture-unsigned.shortcut`
 
 ## Install on iPhone
 
 1. Open this URL on iPhone Safari:
    - `https://ibx.egeuysal.com/shortcuts/ibx-capture.shortcut`
+   - This redirects to `SIGNED_SHORTCUT_URL` when configured (`https://www.icloud.com/shortcuts/...`).
+   - If no signed URL is configured, it falls back to the unsigned hosted file.
 2. Import into the Shortcuts app.
 3. Run `ibx capture`, type your thought, submit.
 

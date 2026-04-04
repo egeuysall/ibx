@@ -45,12 +45,16 @@ const shortcut = buildShortcut(actions, {
 const outputDir = path.join(__dirname, 'dist');
 const outputPath = path.join(outputDir, 'ibx-capture.shortcut');
 const publicDir = path.join(__dirname, '..', 'public', 'shortcuts');
-const publicPath = path.join(publicDir, 'ibx-capture.shortcut');
+const publicPath = path.join(publicDir, 'ibx-capture-unsigned.shortcut');
+const legacyPublicPath = path.join(publicDir, 'ibx-capture.shortcut');
 
 fs.mkdirSync(outputDir, { recursive: true });
 fs.mkdirSync(publicDir, { recursive: true });
 fs.writeFileSync(outputPath, shortcut);
 fs.writeFileSync(publicPath, shortcut);
+if (fs.existsSync(legacyPublicPath)) {
+  fs.rmSync(legacyPublicPath);
+}
 
 console.log(`generated ${outputPath}`);
 console.log(`copied ${publicPath}`);
