@@ -13,6 +13,7 @@ export type GeneratedTodo = AiTodo;
 const AI_GATEWAY_URL = "https://ai-gateway.vercel.sh/v1/chat/completions";
 const VALID_RECURRENCE = new Set(["none", "daily", "weekly", "monthly"]);
 const MAX_NOTES_LENGTH = 160;
+const MAX_GENERATED_TODOS = 30;
 
 function clampText(text: string, maxLength: number) {
   return text.trim().slice(0, maxLength);
@@ -76,7 +77,7 @@ function normalizeTodos(value: unknown): AiTodo[] {
 
     items.push({ title, notes: notes || null, dueDate, recurrence, priority });
 
-    if (items.length >= 5) {
+    if (items.length >= MAX_GENERATED_TODOS) {
       break;
     }
   }
@@ -155,7 +156,7 @@ Rules:
 - Only use a different dueDate when the prompt explicitly states another time/date (e.g. tomorrow, this weekend, next week, on Friday, specific date).
 - If the prompt uses relative timing, convert it to a concrete YYYY-MM-DD date.
 - Set priority: 1=must-do today, 2=important, 3=nice-to-have.
-- Keep at most 30 todos.
+- Keep at most ${MAX_GENERATED_TODOS} todos.
 - If no actionable todos exist, return [].
 
 About Ege:
