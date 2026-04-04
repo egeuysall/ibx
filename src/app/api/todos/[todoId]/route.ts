@@ -119,9 +119,8 @@ export async function DELETE(
     return NextResponse.json({ error: "Invalid todo id." }, { status: 400 });
   }
 
-  const todoApi = api as unknown as { todos: { deleteOne: unknown } };
-  await convex.mutation(todoApi.todos.deleteOne as never, {
-    todoId: todoId as never,
+  await convex.mutation(api.todos.deleteOneByStringId, {
+    todoId,
   });
 
   return NextResponse.json({ ok: true });

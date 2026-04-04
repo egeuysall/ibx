@@ -262,6 +262,26 @@ export const deleteOne = mutation({
   },
 });
 
+export const deleteOneByStringId = mutation({
+  args: {
+    todoId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const normalizedTodoId = ctx.db.normalizeId("todos", args.todoId);
+    if (!normalizedTodoId) {
+      return null;
+    }
+
+    const existingTodo = await ctx.db.get(normalizedTodoId);
+    if (!existingTodo) {
+      return null;
+    }
+
+    await ctx.db.delete(normalizedTodoId);
+    return normalizedTodoId;
+  },
+});
+
 export const updateSchedule = mutation({
   args: {
     todoId: v.id("todos"),
