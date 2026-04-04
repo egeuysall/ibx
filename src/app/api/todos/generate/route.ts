@@ -9,6 +9,7 @@ import { getEgeContext } from "@/lib/ege-context";
 import { planGeneratedTodos } from "@/lib/todo-planning";
 
 const DATE_KEY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+const API_KEY_LIKE_REGEX = /^iak_[A-Za-z0-9_-]{16,}$/;
 
 function normalizeInputText(value: unknown) {
   if (typeof value !== "string") {
@@ -17,6 +18,10 @@ function normalizeInputText(value: unknown) {
 
   const normalized = value.trim().slice(0, 8_000);
   return normalized.length ? normalized : null;
+}
+
+function looksLikeApiKeyPayload(text: string) {
+  return API_KEY_LIKE_REGEX.test(text.trim());
 }
 
 function getStartOfUtcDay(timestamp: number) {
@@ -61,6 +66,16 @@ export async function POST(request: NextRequest) {
 
   if (!rawText) {
     return NextResponse.json({ error: "Input is required." }, { status: 400 });
+  }
+
+  if (looksLikeApiKeyPayload(rawText)) {
+    return NextResponse.json(
+      {
+        error:
+          "Received an API key in text payload. Your sync shortcut is using the wrong variable. Reinstall the latest ibx-sync-queue shortcut.",
+      },
+      { status: 400 },
+    );
   }
 
   const externalId = randomUUID();

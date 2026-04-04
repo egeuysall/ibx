@@ -159,6 +159,12 @@ const syncActions = [
     ifTrue: [exitShortcut()],
   }),
   conditional({
+    // Guard against accidental "no input" runs where previous output can be the API key.
+    input: '=',
+    value: withVariables`${apiKeyInput}`,
+    ifTrue: [exitShortcut()],
+  }),
+  conditional({
     input: 'Contains',
     value: 'text:',
     ifTrue: [
@@ -171,17 +177,17 @@ const syncActions = [
         extractedQueueText,
       ),
       getTextFromInput({}, extractedQueueTextValue),
+      conditional({
+        input: '=',
+        value: '',
+        ifTrue: [exitShortcut()],
+      }),
       URL({
         url: 'https://ibx.egeuysal.com/api/todos/generate',
       }),
       buildApiSubmitAction(extractedQueueTextValue),
     ],
-    ifFalse: [
-      URL({
-        url: 'https://ibx.egeuysal.com/api/todos/generate',
-      }),
-      buildApiSubmitAction(queueNoteInput),
-    ],
+    ifFalse: [exitShortcut()],
   }),
 ];
 
