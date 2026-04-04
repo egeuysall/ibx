@@ -11,13 +11,15 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const ICON_VERSION = "20260404";
+
 export const metadata: Metadata = {
   title: "ibx",
   description: "Private thought ibx and todo generator.",
   icons: {
-    icon: "/icon?size=512&v=20260403",
-    apple: "/apple-icon?v=20260403",
-    shortcut: "/favicon.ico?v=20260403",
+    icon: `/icon?size=512&v=${ICON_VERSION}`,
+    apple: `/apple-icon?v=${ICON_VERSION}`,
+    shortcut: `/favicon.ico?v=${ICON_VERSION}`,
   },
 };
 

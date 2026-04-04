@@ -924,7 +924,7 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
         return;
       }
 
-      if (!event.metaKey && !event.ctrlKey && !event.shiftKey && event.altKey) {
+      if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey) {
         if (event.code === "Digit1" || event.key === "1") {
           event.preventDefault();
           setActiveFilter("today");

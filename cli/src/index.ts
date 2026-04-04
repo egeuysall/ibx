@@ -40,7 +40,8 @@ type ParsedArgs = {
 const CONFIG_FILE = join(homedir(), ".ibx", "config.json");
 const API_KEY_PREFIX = "iak_";
 const VERSION = "0.2.0";
-const DEFAULT_BASE_URL = process.env.IBX_BASE_URL?.trim() || "https://ibx.egeuysal.com";
+const DEFAULT_BASE_URL =
+  process.env.IBX_BASE_URL?.trim() || "https://ibx.egeuysal.com";
 
 const useColor = Boolean(process.stdout.isTTY) && !process.env.NO_COLOR;
 
@@ -192,7 +193,11 @@ async function loadConfig(): Promise<CliConfig | null> {
 
 async function saveConfig(config: CliConfig) {
   await mkdir(dirname(CONFIG_FILE), { recursive: true });
-  await writeFile(CONFIG_FILE, `${safeJsonStringify(config, null, 2)}\n`, "utf8");
+  await writeFile(
+    CONFIG_FILE,
+    `${safeJsonStringify(config, null, 2)}\n`,
+    "utf8",
+  );
 }
 
 async function clearConfig() {
@@ -202,7 +207,9 @@ async function clearConfig() {
 async function requireConfig() {
   const config = await loadConfig();
   if (!config) {
-    throw new Error('Not authenticated. Run "ibx auth login --api-key iak_..." first.');
+    throw new Error(
+      'Not authenticated. Run "ibx auth login --api-key iak_..." first.',
+    );
   }
 
   return config;
@@ -224,10 +231,13 @@ async function requestJson<T>(
     },
   });
 
-  const payload = (await response.json().catch(() => ({}))) as { error?: string } & T;
+  const payload = (await response.json().catch(() => ({}))) as {
+    error?: string;
+  } & T;
 
   if (!response.ok) {
-    const message = payload.error || `Request failed with status ${response.status}`;
+    const message =
+      payload.error || `Request failed with status ${response.status}`;
     throw new Error(message);
   }
 
@@ -251,7 +261,9 @@ async function verifyAuth(baseUrl: string, apiKey: string) {
   };
 
   if (!response.ok) {
-    throw new Error(payload.error || `Auth verification failed (${response.status}).`);
+    throw new Error(
+      payload.error || `Auth verification failed (${response.status}).`,
+    );
   }
 
   if (!payload.authenticated) {
@@ -314,7 +326,10 @@ function filterTodosByView(items: TodoItem[], view: ViewMode) {
   if (view === "upcoming") {
     return sortTodos(
       items.filter(
-        (todo) => todo.status === "open" && todo.dueDate !== null && todo.dueDate >= todayStartUtc,
+        (todo) =>
+          todo.status === "open" &&
+          todo.dueDate !== null &&
+          todo.dueDate >= todayStartUtc,
       ),
     );
   }
@@ -323,9 +338,7 @@ function filterTodosByView(items: TodoItem[], view: ViewMode) {
 }
 
 function statusBadge(status: TodoStatus) {
-  return status === "done"
-    ? color.green("[x]")
-    : color.dim("[ ]");
+  return status === "done" ? color.green("[x]") : color.dim("[ ]");
 }
 
 function priorityBadge(priority: TodoPriority) {
@@ -358,10 +371,13 @@ function printTodoList(items: TodoItem[], view: ViewMode) {
 
     print(`${statusBadge(todo.status)} ${color.bold(todo.title)}`);
     print(`  ${color.gray("id:")} ${todo.id}`);
-    print(`  ${color.gray("meta:")} ${formatDate(todo.dueDate)} / ${priorityBadge(todo.priority)} / ${todo.recurrence}`);
+    print(
+      `  ${color.gray("meta:")} ${formatDate(todo.dueDate)} / ${priorityBadge(todo.priority)} / ${todo.recurrence}`,
+    );
 
     if (todo.notes) {
-      const preview = todo.notes.length > 180 ? `${todo.notes.slice(0, 180)}...` : todo.notes;
+      const preview =
+        todo.notes.length > 180 ? `${todo.notes.slice(0, 180)}...` : todo.notes;
       print(`  ${color.gray("notes:")} ${preview}`);
     }
 
@@ -378,7 +394,12 @@ function parsePriority(value: string | null): TodoPriority | null {
 }
 
 function parseRecurrence(value: string | null): TodoRecurrence | null {
-  if (value === "none" || value === "daily" || value === "weekly" || value === "monthly") {
+  if (
+    value === "none" ||
+    value === "daily" ||
+    value === "weekly" ||
+    value === "monthly"
+  ) {
     return value;
   }
 
@@ -386,7 +407,12 @@ function parseRecurrence(value: string | null): TodoRecurrence | null {
 }
 
 function parseView(value: string | null): ViewMode {
-  if (value === "today" || value === "upcoming" || value === "archive" || value === "all") {
+  if (
+    value === "today" ||
+    value === "upcoming" ||
+    value === "archive" ||
+    value === "all"
+  ) {
     return value;
   }
 
@@ -436,7 +462,7 @@ async function resolveAiInput(parsed: ParsedArgs) {
   }
 
   if (process.stdin.isTTY) {
-    return promptForInput(`${color.cyan(">") } what should ibx turn into todos? `);
+    return promptForInput(`${color.cyan(">")} what's in your mind? `);
   }
 
   return null;
@@ -447,19 +473,25 @@ function printHelp() {
   print(color.gray("terminal workflow for ibx"));
   print("");
   print(color.bold("quick start"));
-  print(`  ibx auth login --api-key iak_... ${color.gray("(defaults to https://ibx.egeuysal.com)")}`);
+  print(
+    `  ibx auth login --api-key iak_... ${color.gray("(defaults to https://ibx.egeuysal.com)")}`,
+  );
   print('  ibx add "finish landing page + send 2 follow-ups"');
   print("");
   print(color.bold("commands"));
-  print("  ibx auth login [--api-key iak_...] [--url https://ibx.egeuysal.com]");
+  print(
+    "  ibx auth login [--api-key iak_...] [--url https://ibx.egeuysal.com]",
+  );
   print("  ibx auth status");
   print("  ibx auth logout");
-  print("  ibx add [--input \"...\"]");
+  print('  ibx add [--input "..."]');
   print("  ibx todos list [--view today|upcoming|archive|all] [--json]");
   print("  ibx todos done --id <todoId|prefix>");
   print("  ibx todos open --id <todoId|prefix>");
   print("  ibx todos delete --id <todoId|prefix>");
-  print("  ibx todos set --id <todoId|prefix> [--due YYYY-MM-DD] [--priority 1|2|3] [--recurrence none|daily|weekly|monthly]");
+  print(
+    "  ibx todos set --id <todoId|prefix> [--due YYYY-MM-DD] [--priority 1|2|3] [--recurrence none|daily|weekly|monthly]",
+  );
 }
 
 async function runAuthCommand(parsed: ParsedArgs) {
@@ -467,11 +499,16 @@ async function runAuthCommand(parsed: ParsedArgs) {
   const outputJson = hasFlag(parsed, "json");
 
   if (subcommand === "login") {
-    const apiKey = getStringOption(parsed, "api-key") ?? process.env.IBX_API_KEY?.trim() ?? null;
+    const apiKey =
+      getStringOption(parsed, "api-key") ??
+      process.env.IBX_API_KEY?.trim() ??
+      null;
     const baseUrlInput = getStringOption(parsed, "url") ?? DEFAULT_BASE_URL;
 
     if (!apiKey || !apiKey.startsWith(API_KEY_PREFIX)) {
-      throw new Error("Provide a valid API key with --api-key (must start with iak_).\nexample: ibx auth login --api-key iak_... ");
+      throw new Error(
+        "Provide a valid API key with --api-key (must start with iak_).\nexample: ibx auth login --api-key iak_... ",
+      );
     }
 
     const baseUrl = normalizeBaseUrl(baseUrlInput);
@@ -486,7 +523,11 @@ async function runAuthCommand(parsed: ParsedArgs) {
     await saveConfig(config);
 
     if (outputJson) {
-      printJson({ ok: true, baseUrl, authType: verification.authType ?? "apiKey" });
+      printJson({
+        ok: true,
+        baseUrl,
+        authType: verification.authType ?? "apiKey",
+      });
       return;
     }
 
@@ -534,7 +575,9 @@ async function runAuthCommand(parsed: ParsedArgs) {
 
       printOk(`authenticated (${verification.authType ?? "apiKey"})`);
       print(`${color.gray("server:")} ${config.baseUrl}`);
-      print(`${color.gray("key:")} ${API_KEY_PREFIX}...${config.apiKey.slice(-4)}`);
+      print(
+        `${color.gray("key:")} ${API_KEY_PREFIX}...${config.apiKey.slice(-4)}`,
+      );
       return;
     } catch (error) {
       if (outputJson) {
@@ -559,19 +602,21 @@ async function runAddCommand(parsed: ParsedArgs) {
   const input = await resolveAiInput(parsed);
 
   if (!input) {
-    throw new Error("No input provided.\nexample: ibx add \"finish landing page and email two leads\"");
+    throw new Error(
+      'No input provided.\nexample: ibx add "finish landing page and email two leads"',
+    );
   }
 
   printInfo("sending thought to ai...");
 
-  const response = await requestJson<{ ok: true; runId: string; created: number }>(
-    config,
-    "/api/todos/generate",
-    {
-      method: "POST",
-      body: JSON.stringify({ text: input }),
-    },
-  );
+  const response = await requestJson<{
+    ok: true;
+    runId: string;
+    created: number;
+  }>(config, "/api/todos/generate", {
+    method: "POST",
+    body: JSON.stringify({ text: input }),
+  });
 
   if (outputJson) {
     printJson(response);
@@ -579,28 +624,41 @@ async function runAddCommand(parsed: ParsedArgs) {
   }
 
   printOk(`run ${response.runId}`);
-  printOk(`created ${response.created} todo${response.created === 1 ? "" : "s"}`);
+  printOk(
+    `created ${response.created} todo${response.created === 1 ? "" : "s"}`,
+  );
   if (response.created === 0) {
-    printWarn("ai did not create new todos (likely duplicate or low-signal input)");
+    printWarn(
+      "ai did not create new todos (likely duplicate or low-signal input)",
+    );
   }
 }
 
-async function resolveTodoId(config: Pick<CliConfig, "baseUrl" | "apiKey">, idOrPrefix: string) {
+async function resolveTodoId(
+  config: Pick<CliConfig, "baseUrl" | "apiKey">,
+  idOrPrefix: string,
+) {
   const candidate = idOrPrefix.trim();
   if (candidate.length < 4) {
     throw new Error("Todo id must be full id or at least 4 characters.");
   }
 
-  const response = await requestJson<{ todos: TodoItem[] }>(config, "/api/todos", {
-    method: "GET",
-  });
+  const response = await requestJson<{ todos: TodoItem[] }>(
+    config,
+    "/api/todos",
+    {
+      method: "GET",
+    },
+  );
 
   const exactMatch = response.todos.find((todo) => todo.id === candidate);
   if (exactMatch) {
     return exactMatch.id;
   }
 
-  const prefixMatches = response.todos.filter((todo) => todo.id.startsWith(candidate));
+  const prefixMatches = response.todos.filter((todo) =>
+    todo.id.startsWith(candidate),
+  );
   if (prefixMatches.length === 1) {
     return prefixMatches[0].id;
   }
@@ -621,9 +679,13 @@ async function runTodosCommand(parsed: ParsedArgs) {
 
   if (subcommand === "list") {
     const view = parseView(getStringOption(parsed, "view"));
-    const response = await requestJson<{ todos: TodoItem[] }>(config, "/api/todos", {
-      method: "GET",
-    });
+    const response = await requestJson<{ todos: TodoItem[] }>(
+      config,
+      "/api/todos",
+      {
+        method: "GET",
+      },
+    );
 
     const filtered = filterTodosByView(response.todos, view);
 
@@ -643,7 +705,8 @@ async function runTodosCommand(parsed: ParsedArgs) {
   }
 
   if (subcommand === "done" || subcommand === "open") {
-    const todoIdInput = getStringOption(parsed, "id") ?? parsed.positionals[2] ?? null;
+    const todoIdInput =
+      getStringOption(parsed, "id") ?? parsed.positionals[2] ?? null;
     if (!todoIdInput) {
       throw new Error("Provide todo id with --id.");
     }
@@ -664,7 +727,8 @@ async function runTodosCommand(parsed: ParsedArgs) {
   }
 
   if (subcommand === "delete" || subcommand === "remove") {
-    const todoIdInput = getStringOption(parsed, "id") ?? parsed.positionals[2] ?? null;
+    const todoIdInput =
+      getStringOption(parsed, "id") ?? parsed.positionals[2] ?? null;
     if (!todoIdInput) {
       throw new Error("Provide todo id with --id.");
     }
@@ -684,7 +748,8 @@ async function runTodosCommand(parsed: ParsedArgs) {
   }
 
   if (subcommand === "set") {
-    const todoIdInput = getStringOption(parsed, "id") ?? parsed.positionals[2] ?? null;
+    const todoIdInput =
+      getStringOption(parsed, "id") ?? parsed.positionals[2] ?? null;
     if (!todoIdInput) {
       throw new Error("Provide todo id with --id.");
     }
@@ -697,7 +762,9 @@ async function runTodosCommand(parsed: ParsedArgs) {
 
     const recurrence = parseRecurrence(getStringOption(parsed, "recurrence"));
     if (getStringOption(parsed, "recurrence") && !recurrence) {
-      throw new Error("--recurrence must be one of: none, daily, weekly, monthly.");
+      throw new Error(
+        "--recurrence must be one of: none, daily, weekly, monthly.",
+      );
     }
 
     const priority = parsePriority(getStringOption(parsed, "priority"));
@@ -724,7 +791,9 @@ async function runTodosCommand(parsed: ParsedArgs) {
     }
 
     if (Object.keys(payload).length === 0) {
-      throw new Error("Nothing to update. Set at least one of --due, --recurrence, --priority.");
+      throw new Error(
+        "Nothing to update. Set at least one of --due, --recurrence, --priority.",
+      );
     }
 
     await requestJson<{ ok: true }>(config, `/api/todos/${todoId}`, {

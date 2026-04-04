@@ -18,9 +18,9 @@ export default function Icon() {
           alignItems: "center",
           justifyContent: "center",
           background: "transparent",
-          color: "#000000",
+          color: "#ffffff",
           fontFamily: '"Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace',
-          fontSize: 220,
+          fontSize: 280,
           fontWeight: 700,
           lineHeight: 1,
         }}
