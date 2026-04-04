@@ -14,7 +14,7 @@ const {
   formatDate,
   getContentsOfURL,
   getNetworkDetails,
-  openApp,
+  openURLs,
   showResult,
   text,
 } = require('@joshfarrant/shortcuts-js/actions');
@@ -132,11 +132,11 @@ const actions = [
     input: '=',
     value: '',
     ifTrue: [
-      showResult({
-        text:
-          'offline mode: open app action must target your ibx home-screen app. edit it once if needed.',
+      text({
+        text: withVariables`https://ibx.egeuysal.com/?shortcut=${encodedInput}&source=shortcut&captureId=${captureId}&ts=${captureId}`,
       }),
-      openApp({ appId: '' }),
+      openURLs(),
+      showResult({ text: 'offline: opened ibx link for local capture queue' }),
     ],
     ifFalse: [
       URL({

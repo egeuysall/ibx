@@ -3,10 +3,9 @@
 This directory generates an Apple Shortcut that captures one text input and:
 
 - posts directly to `POST https://ibx.egeuysal.com/api/todos/generate` with `Authorization: Bearer iak_...`
-- if network is unavailable, uses **Open App** (set this action to your installed ibx home-screen app once)
+- if network is unavailable, opens `https://ibx.egeuysal.com/?shortcut=...` in Safari so the installed PWA can queue it locally
 
 Important:
-- After importing the shortcut, edit the **Open App** action and select your ibx home-screen app once.
 - Open ibx once while online after installing/updating so assets stay warm for offline usage.
 
 ## Build shortcut file
@@ -30,4 +29,4 @@ Output files:
 The shortcut contains a text action named `API Key (Edit Once)` with `iak_replace_me`.
 Edit that action one time after install and set your real `iak_...` key.
 After that, it sends directly to API when online without asking every run.
-If your PWA is already installed, iOS can open the same app URL and queue locally when offline.
+If your PWA is already installed and warmed, opening that URL offline queues locally and syncs when internet returns.

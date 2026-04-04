@@ -14,12 +14,17 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "ibx",
   description: "Private thought ibx and todo generator.",
+  icons: {
+    icon: "/icon?size=512&v=20260403",
+    apple: "/apple-icon?v=20260403",
+    shortcut: "/favicon.ico?v=20260403",
+  },
 };
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#fbfbfb" },
-    { media: "(prefers-color-scheme: dark)", color: "#070707" },
+    { media: "(prefers-color-scheme: light)", color: "#f8f8f8" },
+    { media: "(prefers-color-scheme: dark)", color: "#f8f8f8" },
   ],
 };
 
