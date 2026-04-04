@@ -700,10 +700,6 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
   }, [hasHydratedPreferences, router, searchParams]);
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      return;
-    }
-
     const shortcutText = searchParams.get("shortcut");
     if (!shortcutText) {
       return;
@@ -749,11 +745,13 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
         return;
       }
 
-      if (isOnline) {
+      if (isOnline && isAuthenticated) {
         toast.message("shortcut received. generating todos…");
         await flushQueuedPrompts();
-      } else {
+      } else if (!isOnline) {
         toast.message("shortcut received offline. queued for next connection.");
+      } else {
+        toast.message("shortcut received. sign in to process queued items.");
       }
 
       clearShortcutParams();
