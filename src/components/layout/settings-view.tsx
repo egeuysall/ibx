@@ -32,6 +32,8 @@ const FILTER_STORAGE_KEY = "ibx:active-view";
 const PROMPT_AUTOFOCUS_STORAGE_KEY = "ibx:prompt-autofocus";
 const PICKER_ITEM_CLASS =
   "border border-input aria-pressed:border-foreground aria-pressed:bg-foreground aria-pressed:text-background data-[state=on]:border-foreground data-[state=on]:bg-foreground data-[state=on]:text-background";
+const CLI_INSTALL_COMMAND = "curl -fsSL https://ibx.egeuysal.com/install.sh | bash";
+const SHORTCUT_INSTALL_URL = "https://ibx.egeuysal.com/shortcuts/ibx-capture.shortcut";
 const LOCAL_STATUS_TIME_FORMATTER = new Intl.DateTimeFormat("en-US", {
   weekday: "short",
   month: "short",
@@ -220,6 +222,15 @@ export function SettingsView() {
       toast.message("API key copied");
     } catch {
       toast.error("Could not copy API key");
+    }
+  };
+
+  const copyToClipboard = async (value: string, successMessage: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.message(successMessage);
+    } catch {
+      toast.error("Could not copy to clipboard");
     }
   };
 
@@ -443,6 +454,47 @@ export function SettingsView() {
                     </div>
                   ))
                 )}
+              </div>
+            </section>
+
+            <section className="border-b px-4 py-4 md:px-6">
+              <p className="text-sm">install</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                quick access to cli and apple shortcut install links.
+              </p>
+
+              <div className="mt-3 flex max-w-xl flex-col gap-3">
+                <div className="rounded-md border border-input p-2">
+                  <p className="text-xs text-muted-foreground">cli install command</p>
+                  <code className="mt-1 block break-all text-xs">{CLI_INSTALL_COMMAND}</code>
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-auto"
+                      onClick={() =>
+                        void copyToClipboard(CLI_INSTALL_COMMAND, "CLI install command copied")
+                      }
+                    >
+                      copy command
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="rounded-md border border-input p-2">
+                  <p className="text-xs text-muted-foreground">apple shortcut install link</p>
+                  <code className="mt-1 block break-all text-xs">{SHORTCUT_INSTALL_URL}</code>
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-auto"
+                      onClick={() => window.open(SHORTCUT_INSTALL_URL, "_blank", "noopener,noreferrer")}
+                    >
+                      open link
+                    </Button>
+                  </div>
+                </div>
               </div>
             </section>
 

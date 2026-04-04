@@ -10,7 +10,6 @@ import { LoginScreen } from "@/components/auth/login-screen";
 import { Toaster } from "@/components/ui/sonner";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import {
   Popover,
@@ -56,7 +55,10 @@ const PROMPT_AUTOFOCUS_STORAGE_KEY = "ibx:prompt-autofocus";
 const SHORTCUT_CAPTURE_KEY_PREFIX = "ibx:shortcut-capture:";
 const NOTE_PREVIEW_LENGTH = 160;
 const DAY_MS = 24 * 60 * 60 * 1000;
-const TODAY_FALLBACK_COUNT = 5;
+const HOLD_PROGRESS_DELAY_MS = 160;
+const HOLD_PROGRESS_SWEEP_MS = 300;
+const HOLD_TO_TOGGLE_MS = HOLD_PROGRESS_DELAY_MS + HOLD_PROGRESS_SWEEP_MS;
+const HOLD_MOVE_CANCEL_PX = 24;
 const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const UTC_LONG_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -237,6 +239,18 @@ function getPreviewNotes(notes: string) {
   return `${notes.slice(0, NOTE_PREVIEW_LENGTH)}…`;
 }
 
+function isInteractiveTarget(target: EventTarget | null) {
+  if (!(target instanceof Element)) {
+    return false;
+  }
+
+  return Boolean(
+    target.closest(
+      "button, input, select, textarea, a, [role='button'], [data-hold-ignore='true']",
+    ),
+  );
+}
+
 function sortTodos(todos: TodoItem[]) {
   return [...todos].sort((a, b) => {
     if (a.status !== b.status) {
@@ -361,6 +375,8 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
   const [queuedPromptCount, setQueuedPromptCount] = useState(0);
   const [pendingTodoId, setPendingTodoId] = useState<string | null>(null);
   const [editingTodoId, setEditingTodoId] = useState<string | null>(null);
+  const [holdingTodoId, setHoldingTodoId] = useState<string | null>(null);
+  const [holdProgress, setHoldProgress] = useState(0);
   const [expandedNoteIds, setExpandedNoteIds] = useState<
     Record<string, boolean>
   >({});
@@ -368,6 +384,37 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
   const promptInputRef = useRef<HTMLInputElement | null>(null);
   const hasAppliedInitialAutofocus = useRef(false);
   const isQueueFlushRunning = useRef(false);
+  const holdTimerRef = useRef<number | null>(null);
+  const holdAnimationFrameRef = useRef<number | null>(null);
+  const holdStartedAtRef = useRef<number | null>(null);
+  const holdStartRef = useRef<{ x: number; y: number } | null>(null);
+  const heldTodoIdRef = useRef<string | null>(null);
+  const suppressNextClickRef = useRef(false);
+
+  const clearHoldTimer = useCallback(() => {
+    if (holdTimerRef.current !== null) {
+      window.clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+  }, []);
+
+  const clearHoldAnimation = useCallback(() => {
+    if (holdAnimationFrameRef.current !== null) {
+      window.cancelAnimationFrame(holdAnimationFrameRef.current);
+      holdAnimationFrameRef.current = null;
+    }
+
+    holdStartedAtRef.current = null;
+    setHoldingTodoId(null);
+    setHoldProgress(0);
+  }, []);
+
+  const cancelHoldInteraction = useCallback(() => {
+    clearHoldTimer();
+    clearHoldAnimation();
+    holdStartRef.current = null;
+    heldTodoIdRef.current = null;
+  }, [clearHoldAnimation, clearHoldTimer]);
 
   useEffect(() => {
     setFilter(readStoredFilter());
@@ -375,6 +422,13 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
     setPromptAutofocus(readStoredPromptAutofocus());
     setHasHydratedPreferences(true);
   }, []);
+
+  useEffect(
+    () => () => {
+      cancelHoldInteraction();
+    },
+    [cancelHoldInteraction],
+  );
 
   useEffect(() => {
     if (!hasHydratedPreferences) {
@@ -713,6 +767,53 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
     [router, searchParams],
   );
 
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const isTypingTarget =
+        !!target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable);
+
+      if (
+        (event.metaKey || event.ctrlKey) &&
+        event.shiftKey &&
+        event.key.toLowerCase() === "k"
+      ) {
+        event.preventDefault();
+        focusPromptInputAtEnd(true);
+        return;
+      }
+
+      if (isTypingTarget) {
+        return;
+      }
+
+      if (!event.metaKey && !event.ctrlKey && !event.shiftKey && event.altKey) {
+        if (event.key === "1") {
+          event.preventDefault();
+          setActiveFilter("today");
+          return;
+        }
+
+        if (event.key === "2") {
+          event.preventDefault();
+          setActiveFilter("upcoming");
+          return;
+        }
+
+        if (event.key === "3") {
+          event.preventDefault();
+          setActiveFilter("archive");
+        }
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [focusPromptInputAtEnd, setActiveFilter]);
+
   const handleAuthenticated = () => {
     setIsAuthenticated(true);
     router.refresh();
@@ -849,12 +950,10 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
     const dueToday = openTodos.filter((todo) =>
       isTodoOnDateKey(todo.dueDate, todayDateKey),
     );
-    const fallbackToday =
-      dueToday.length > 0 ? dueToday : openTodos.slice(0, TODAY_FALLBACK_COUNT);
-    const todayIds = new Set(fallbackToday.map((todo) => todo.id));
+    const todayIds = new Set(dueToday.map((todo) => todo.id));
 
     return {
-      today: fallbackToday,
+      today: dueToday,
       upcoming: openTodos.filter((todo) => !todayIds.has(todo.id)),
       archive: todos.filter((todo) => todo.status === "done"),
     };
@@ -1086,38 +1185,129 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
                         {section.label}
                       </p>
                     ) : null}
-                    {section.todos.map((todo) => (
+                    {section.todos.map((todo, index) => (
                       <article
                         key={todo.id}
-                        className="border-b cursor-pointer"
-                        onClick={() =>
+                        className={cn(
+                          "relative cursor-pointer overflow-hidden border-b select-none",
+                          index === 0 && "border-t",
+                          todo.status === "done" &&
+                            "bg-neutral-100 dark:bg-neutral-900/90 dark:border-neutral-800",
+                        )}
+                        onClick={() => {
+                          if (suppressNextClickRef.current) {
+                            suppressNextClickRef.current = false;
+                            return;
+                          }
+
                           setEditingTodoId((currentTodoId) =>
                             currentTodoId === todo.id ? null : todo.id,
-                          )
-                        }
-                      >
-                        <div className="flex flex-col gap-2 px-4 py-3 md:px-6">
-                          <div className="flex items-start gap-3">
-                            <button
-                              type="button"
-                              className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-input transition-colors hover:border-foreground disabled:opacity-50"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                void updateTodoStatus(
-                                  todo,
-                                  todo.status !== "done",
+                          );
+                        }}
+                        onPointerDown={(event) => {
+                          if (
+                            pendingTodoId === todo.id ||
+                            isInteractiveTarget(event.target) ||
+                            (event.pointerType === "mouse" &&
+                              event.button !== 0)
+                          ) {
+                            return;
+                          }
+
+                          cancelHoldInteraction();
+                          heldTodoIdRef.current = todo.id;
+                          holdStartRef.current = {
+                            x: event.clientX,
+                            y: event.clientY,
+                          };
+                          event.currentTarget.setPointerCapture?.(
+                            event.pointerId,
+                          );
+                          setHoldingTodoId(todo.id);
+                          holdStartedAtRef.current = performance.now();
+                          const animateHoldProgress = () => {
+                            if (
+                              holdStartedAtRef.current === null ||
+                              heldTodoIdRef.current !== todo.id
+                            ) {
+                              return;
+                            }
+
+                            const elapsed =
+                              performance.now() - holdStartedAtRef.current;
+                            const progress =
+                              elapsed <= HOLD_PROGRESS_DELAY_MS
+                                ? 0
+                                : Math.min(
+                                    1,
+                                    (elapsed - HOLD_PROGRESS_DELAY_MS) /
+                                      HOLD_PROGRESS_SWEEP_MS,
+                                  );
+                            setHoldProgress(progress);
+
+                            if (progress < 1) {
+                              holdAnimationFrameRef.current =
+                                window.requestAnimationFrame(
+                                  animateHoldProgress,
                                 );
-                              }}
-                              onPointerDown={(event) => event.stopPropagation()}
-                              aria-label={`Mark ${todo.title} as ${todo.status === "done" ? "open" : "done"}`}
-                              disabled={pendingTodoId === todo.id}
-                            >
-                              <Checkbox
-                                checked={todo.status === "done"}
-                                className="pointer-events-none h-4 w-4"
-                                aria-hidden
-                              />
-                            </button>
+                            }
+                          };
+                          holdAnimationFrameRef.current =
+                            window.requestAnimationFrame(animateHoldProgress);
+                          holdTimerRef.current = window.setTimeout(() => {
+                            suppressNextClickRef.current = true;
+                            void updateTodoStatus(todo, todo.status !== "done");
+                            clearHoldAnimation();
+                            holdStartRef.current = null;
+                            heldTodoIdRef.current = null;
+                          }, HOLD_TO_TOGGLE_MS);
+                        }}
+                        onPointerMove={(event) => {
+                          if (
+                            heldTodoIdRef.current !== todo.id ||
+                            !holdStartRef.current
+                          ) {
+                            return;
+                          }
+
+                          const movedX = Math.abs(
+                            event.clientX - holdStartRef.current.x,
+                          );
+                          const movedY = Math.abs(
+                            event.clientY - holdStartRef.current.y,
+                          );
+                          if (
+                            movedX > HOLD_MOVE_CANCEL_PX ||
+                            movedY > HOLD_MOVE_CANCEL_PX
+                          ) {
+                            cancelHoldInteraction();
+                          }
+                        }}
+                        onPointerUp={(event) => {
+                          event.currentTarget.releasePointerCapture?.(
+                            event.pointerId,
+                          );
+                          cancelHoldInteraction();
+                        }}
+                        onPointerCancel={(event) => {
+                          event.currentTarget.releasePointerCapture?.(
+                            event.pointerId,
+                          );
+                          cancelHoldInteraction();
+                        }}
+                      >
+                        <div
+                          className="pointer-events-none absolute inset-y-0 left-0 z-0 overflow-hidden"
+                          style={{
+                            width: `${holdProgress * 100}%`,
+                            opacity: holdingTodoId === todo.id ? 1 : 0,
+                          }}
+                        >
+                          <div className="h-full w-full bg-black/18 dark:bg-white/16" />
+                          <div className="absolute inset-y-0 right-0 w-px bg-foreground/45 dark:bg-foreground/60" />
+                        </div>
+                        <div className="relative z-10 flex flex-col gap-2 px-4 py-3 md:px-6">
+                          <div className="flex items-start gap-3">
                             <div className="flex min-w-0 flex-1 flex-col gap-1">
                               <div className="flex items-start justify-between gap-2">
                                 <p
@@ -1169,7 +1359,7 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
                           </div>
                           {editingTodoId === todo.id ? (
                             <div
-                              className="ml-8 flex flex-col gap-2 sm:flex-row sm:items-center"
+                              className="ml-0 flex flex-col gap-2 sm:flex-row sm:items-center"
                               onClick={(event) => event.stopPropagation()}
                               onPointerDown={(event) => event.stopPropagation()}
                             >
