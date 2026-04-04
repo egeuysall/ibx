@@ -35,6 +35,8 @@ const PICKER_ITEM_CLASS =
 const CLI_INSTALL_COMMAND = "curl -fsSL https://ibx.egeuysal.com/install.sh | bash";
 const SHORTCUT_INSTALL_URL =
   "https://ibx.egeuysal.com/shortcuts/ibx-capture.shortcut?v=20260403-notes-queue";
+const SHORTCUT_SYNC_INSTALL_URL =
+  "https://ibx.egeuysal.com/shortcuts/ibx-sync-queue.shortcut?v=20260403-notes-queue";
 const LOCAL_STATUS_TIME_FORMATTER = new Intl.DateTimeFormat("en-US", {
   weekday: "short",
   month: "short",
@@ -492,6 +494,23 @@ export function SettingsView() {
                       size="sm"
                       className="w-auto"
                       onClick={() => window.open(SHORTCUT_INSTALL_URL, "_blank", "noopener,noreferrer")}
+                    >
+                      open link
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="rounded-md border border-input p-2">
+                  <p className="text-xs text-muted-foreground">apple sync shortcut install link</p>
+                  <code className="mt-1 block break-all text-xs">{SHORTCUT_SYNC_INSTALL_URL}</code>
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-auto"
+                      onClick={() =>
+                        window.open(SHORTCUT_SYNC_INSTALL_URL, "_blank", "noopener,noreferrer")
+                      }
                     >
                       open link
                     </Button>

@@ -6,7 +6,6 @@ const path = require('node:path');
 const { actionOutput, buildShortcut, withVariables } = require('@joshfarrant/shortcuts-js');
 const {
   URL,
-  URLEncode,
   ask,
   conditional,
   createNote,
@@ -15,12 +14,13 @@ const {
   formatDate,
   getContentsOfURL,
   getNetworkDetails,
+  getTextFromInput,
   text,
 } = require('@joshfarrant/shortcuts-js/actions');
 
 const thoughtInput = actionOutput('Thought Input');
+const queueNoteInput = actionOutput('Queue Note Input');
 const apiKeyInput = actionOutput('API Key (Edit Once)');
-const encodedInput = actionOutput('Encoded Input');
 const currentDate = actionOutput('Current Date');
 const captureId = actionOutput('Capture ID');
 const wifiName = actionOutput('Wi-Fi Name');
@@ -28,7 +28,7 @@ const cellularName = actionOutput('Carrier Name');
 const networkState = actionOutput('Network State');
 const API_KEY_PLACEHOLDER = 'iak_replace_me';
 
-function buildApiSubmitAction() {
+function buildApiSubmitAction(textInput) {
   const action = getContentsOfURL({
     method: 'POST',
     requestBodyType: 'JSON',
@@ -53,11 +53,32 @@ function buildApiSubmitAction() {
   }
 
   authorizationHeader.WFValue = withVariables`Bearer ${apiKeyInput}`;
-  textField.WFValue = withVariables`${thoughtInput}`;
+  textField.WFValue = withVariables`${textInput}`;
   return action;
 }
 
-const actions = [
+function sharedApiKeyActions() {
+  return [
+    text(
+      {
+        text: API_KEY_PLACEHOLDER,
+      },
+      apiKeyInput,
+    ),
+    conditional({
+      input: '=',
+      value: API_KEY_PLACEHOLDER,
+      ifTrue: [exitShortcut()],
+    }),
+    conditional({
+      input: 'Contains',
+      value: 'iak_',
+      ifFalse: [exitShortcut()],
+    }),
+  ];
+}
+
+const captureActions = [
   ask(
     {
       inputType: 'Text',
@@ -65,12 +86,6 @@ const actions = [
       defaultAnswer: '',
     },
     thoughtInput,
-  ),
-  URLEncode(
-    {
-      encodeMode: 'Encode',
-    },
-    encodedInput,
   ),
   date(
     {
@@ -85,22 +100,7 @@ const actions = [
     },
     captureId,
   ),
-  text(
-    {
-      text: API_KEY_PLACEHOLDER,
-    },
-    apiKeyInput,
-  ),
-  conditional({
-    input: '=',
-    value: API_KEY_PLACEHOLDER,
-    ifTrue: [exitShortcut()],
-  }),
-  conditional({
-    input: 'Contains',
-    value: 'iak_',
-    ifFalse: [exitShortcut()],
-  }),
+  ...sharedApiKeyActions(),
   getNetworkDetails(
     {
       network: 'Wi-Fi',
@@ -134,12 +134,34 @@ const actions = [
       URL({
         url: 'https://ibx.egeuysal.com/api/todos/generate',
       }),
-      buildApiSubmitAction(),
+      buildApiSubmitAction(thoughtInput),
     ],
   }),
 ];
 
-const shortcut = buildShortcut(actions, {
+const captureShortcut = buildShortcut(captureActions, {
+  icon: {
+    color: 20,
+    glyph: 59511,
+  },
+  showInWidget: true,
+});
+
+const syncActions = [
+  ...sharedApiKeyActions(),
+  getTextFromInput({}, queueNoteInput),
+  conditional({
+    input: '=',
+    value: '',
+    ifTrue: [exitShortcut()],
+  }),
+  URL({
+    url: 'https://ibx.egeuysal.com/api/todos/generate',
+  }),
+  buildApiSubmitAction(queueNoteInput),
+];
+
+const syncShortcut = buildShortcut(syncActions, {
   icon: {
     color: 20,
     glyph: 59511,
@@ -148,19 +170,27 @@ const shortcut = buildShortcut(actions, {
 });
 
 const outputDir = path.join(__dirname, 'dist');
-const outputPath = path.join(outputDir, 'ibx-capture.shortcut');
+const captureOutputPath = path.join(outputDir, 'ibx-capture.shortcut');
+const syncOutputPath = path.join(outputDir, 'ibx-sync-queue.shortcut');
 const publicDir = path.join(__dirname, '..', 'public', 'shortcuts');
-const publicPath = path.join(publicDir, 'ibx-capture.shortcut');
+const capturePublicPath = path.join(publicDir, 'ibx-capture.shortcut');
+const syncPublicPath = path.join(publicDir, 'ibx-sync-queue.shortcut');
 const unsignedPublicPath = path.join(publicDir, 'ibx-capture-unsigned.shortcut');
 
 fs.mkdirSync(outputDir, { recursive: true });
 fs.mkdirSync(publicDir, { recursive: true });
-fs.writeFileSync(outputPath, shortcut);
+fs.writeFileSync(captureOutputPath, captureShortcut);
+fs.writeFileSync(syncOutputPath, syncShortcut);
 
 try {
   execFileSync(
     'shortcuts',
-    ['sign', '--mode', 'anyone', '--input', outputPath, '--output', publicPath],
+    ['sign', '--mode', 'anyone', '--input', captureOutputPath, '--output', capturePublicPath],
+    { stdio: 'pipe' },
+  );
+  execFileSync(
+    'shortcuts',
+    ['sign', '--mode', 'anyone', '--input', syncOutputPath, '--output', syncPublicPath],
     { stdio: 'pipe' },
   );
 } catch (error) {
@@ -177,5 +207,7 @@ if (fs.existsSync(unsignedPublicPath)) {
   fs.rmSync(unsignedPublicPath);
 }
 
-console.log(`generated unsigned ${outputPath}`);
-console.log(`generated signed ${publicPath}`);
+console.log(`generated unsigned ${captureOutputPath}`);
+console.log(`generated signed ${capturePublicPath}`);
+console.log(`generated unsigned ${syncOutputPath}`);
+console.log(`generated signed ${syncPublicPath}`);

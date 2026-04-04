@@ -18,6 +18,8 @@ Output files:
 
 - `shortcut/dist/ibx-capture.shortcut`
 - `public/shortcuts/ibx-capture.shortcut` (signed with `shortcuts sign --mode anyone`)
+- `shortcut/dist/ibx-sync-queue.shortcut`
+- `public/shortcuts/ibx-sync-queue.shortcut` (signed with `shortcuts sign --mode anyone`)
 
 ## Install on iPhone
 
@@ -25,6 +27,8 @@ Output files:
    - `https://ibx.egeuysal.com/shortcuts/ibx-capture.shortcut`
 2. Import into the Shortcuts app.
 3. Run `ibx capture`, type your thought, submit.
+4. Also import sync shortcut:
+   - `https://ibx.egeuysal.com/shortcuts/ibx-sync-queue.shortcut`
 
 The shortcut contains a text action named `API Key (Edit Once)` with `iak_replace_me`.
 Edit that action one time after install and set your real `iak_...` key.
@@ -46,6 +50,6 @@ to Notes. This avoids unreliable PWA URL handoff on iOS.
 Then use a separate personal automation/shortcut to:
 
 1. Find notes containing `IBX_QUEUE`
-2. Extract the `text:` line
-3. `POST https://ibx.egeuysal.com/api/todos/generate` with `Authorization: Bearer iak_...`
-4. Delete/archive processed notes
+2. Repeat with each note result
+3. Run `ibx-sync-queue` with Repeat Item as input
+4. If successful, delete/archive processed note
