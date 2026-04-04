@@ -10,6 +10,9 @@ import { planGeneratedTodos } from "@/lib/todo-planning";
 
 const DATE_KEY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const API_KEY_LIKE_REGEX = /^iak_[A-Za-z0-9_-]{16,}$/;
+const SHORTCUT_QUEUE_MARKER_REGEX = /^\s*IBX_QUEUE\b/im;
+const SHORTCUT_CAPTURE_ID_REGEX = /^captureId:\s*([^\n\r]+)\s*$/im;
+const SHORTCUT_TEXT_REGEX = /^text:\s*([\s\S]+)$/im;
 
 function normalizeInputText(value: unknown) {
   if (typeof value !== "string") {
@@ -22,6 +25,34 @@ function normalizeInputText(value: unknown) {
 
 function looksLikeApiKeyPayload(text: string) {
   return API_KEY_LIKE_REGEX.test(text.trim());
+}
+
+function toShortcutExternalId(captureId: string) {
+  const normalized = captureId.trim().replace(/[^A-Za-z0-9_-]/g, "").slice(0, 48);
+  if (!normalized) {
+    return null;
+  }
+
+  return `shortcut-${normalized}`;
+}
+
+function parseShortcutQueuePayload(input: string) {
+  if (!SHORTCUT_QUEUE_MARKER_REGEX.test(input)) {
+    return null;
+  }
+
+  const captureId = SHORTCUT_CAPTURE_ID_REGEX.exec(input)?.[1]?.trim() ?? null;
+  const extractedText = SHORTCUT_TEXT_REGEX.exec(input)?.[1] ?? input;
+  const normalizedText = normalizeInputText(extractedText);
+
+  if (!normalizedText) {
+    return null;
+  }
+
+  return {
+    captureId,
+    text: normalizedText,
+  };
 }
 
 function getStartOfUtcDay(timestamp: number) {
@@ -60,15 +91,21 @@ export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => null)) as
     | { text?: unknown; today?: unknown }
     | null;
-  const rawText = normalizeInputText(body?.text);
+  const submittedText = normalizeInputText(body?.text);
   const todayStartUtc = parseTodayStartUtc(body?.today);
   const todayDateKey = toDateKey(todayStartUtc);
 
-  if (!rawText) {
+  if (!submittedText) {
     return NextResponse.json({ error: "Input is required." }, { status: 400 });
   }
 
-  if (looksLikeApiKeyPayload(rawText)) {
+  const parsedShortcutQueue = parseShortcutQueuePayload(submittedText);
+  const inputText = parsedShortcutQueue?.text ?? submittedText;
+  const shortcutExternalId = parsedShortcutQueue?.captureId
+    ? toShortcutExternalId(parsedShortcutQueue.captureId)
+    : null;
+
+  if (looksLikeApiKeyPayload(inputText)) {
     return NextResponse.json(
       {
         error:
@@ -78,13 +115,28 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const externalId = randomUUID();
+  const externalId = shortcutExternalId ?? randomUUID();
+  if (shortcutExternalId) {
+    const existingThought = await convex.query(api.thoughts.getByExternalId, {
+      externalId: shortcutExternalId,
+    });
+
+    if (existingThought && (existingThought.status === "done" || existingThought.status === "processing")) {
+      return NextResponse.json({
+        ok: true,
+        runId: shortcutExternalId,
+        created: 0,
+        deduped: true,
+      });
+    }
+  }
+
   const aiRunId = randomUUID();
   const createdAt = Date.now();
 
   await convex.mutation(api.thoughts.upsert, {
     externalId,
-    rawText,
+    rawText: inputText,
     createdAt,
     status: "processing",
     synced: true,
@@ -102,7 +154,7 @@ export async function POST(request: NextRequest) {
       content: profileContext,
     });
 
-    const generatedTodos = await generateTodosFromThought(rawText, {
+    const generatedTodos = await generateTodosFromThought(inputText, {
       profileContext,
       recentRunMemories: recentRunMemories.map((memory) => memory.content),
       todayDateKey,
@@ -143,7 +195,7 @@ export async function POST(request: NextRequest) {
 
     await convex.mutation(api.memories.addRunMemory, {
       runExternalId: externalId,
-      content: `input="${rawText.slice(0, 240)}" created=${plannedTodos.length} todos titles=[${plannedTodos
+      content: `input="${inputText.slice(0, 240)}" created=${plannedTodos.length} todos titles=[${plannedTodos
         .map((todo) => todo.title)
         .slice(0, 6)
         .join(" | ")}]`,
@@ -165,7 +217,7 @@ export async function POST(request: NextRequest) {
     const message = error instanceof Error ? error.message : "AI generation failed.";
     await convex.mutation(api.memories.addRunMemory, {
       runExternalId: externalId,
-      content: `input="${rawText.slice(0, 240)}" failed="${message.slice(0, 220)}"`,
+      content: `input="${inputText.slice(0, 240)}" failed="${message.slice(0, 220)}"`,
     });
 
     return NextResponse.json({ error: message }, { status: 500 });
