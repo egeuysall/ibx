@@ -9,7 +9,9 @@ const {
   URLEncode,
   ask,
   conditional,
+  date,
   exitShortcut,
+  formatDate,
   getContentsOfURL,
   getNetworkDetails,
   showResult,
@@ -19,6 +21,8 @@ const {
 const thoughtInput = actionOutput('Thought Input');
 const apiKeyInput = actionOutput('API Key (Edit Once)');
 const encodedInput = actionOutput('Encoded Input');
+const currentDate = actionOutput('Current Date');
+const captureId = actionOutput('Capture ID');
 const wifiName = actionOutput('Wi-Fi Name');
 const cellularName = actionOutput('Carrier Name');
 const networkState = actionOutput('Network State');
@@ -77,6 +81,19 @@ const actions = [
     },
     encodedInput,
   ),
+  date(
+    {
+      use: 'Current Date',
+    },
+    currentDate,
+  ),
+  formatDate(
+    {
+      dateFormat: 'Custom',
+      formatString: 'yyyyMMddHHmmss',
+    },
+    captureId,
+  ),
   text(
     {
       text: API_KEY_PLACEHOLDER,
@@ -124,7 +141,7 @@ const actions = [
     value: '',
     ifTrue: [
       text({
-        text: withVariables`https://ibx.egeuysal.com/?shortcut=${encodedInput}&source=shortcut`,
+        text: withVariables`https://ibx.egeuysal.com/?shortcut=${encodedInput}&source=shortcut&captureId=${captureId}&ts=${captureId}`,
       }),
       showWebView(),
       showResult({ text: 'offline: opened ibx web view (works after app assets are cached)' }),
