@@ -1,9 +1,11 @@
-import type { LocalThought } from "@/lib/types";
+import type { LocalThought, TodoItem } from "@/lib/types";
 
 const DB_NAME = "ibx-db";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const THOUGHTS_STORE = "localThoughts";
 const PROMPTS_STORE = "queuedPrompts";
+const TODOS_CACHE_STORE = "cachedTodos";
+const TODOS_CACHE_KEY = "latest";
 
 export type QueuedPrompt = {
   id: string;
@@ -16,6 +18,12 @@ export type QueuedPrompt = {
 };
 
 let cachedDbPromise: Promise<IDBDatabase> | null = null;
+
+type CachedTodosRecord = {
+  id: string;
+  todos: TodoItem[];
+  updatedAt: number;
+};
 
 function openDatabase() {
   if (cachedDbPromise) {
@@ -42,6 +50,12 @@ function openDatabase() {
         promptStore.createIndex("by_createdAt", "createdAt", { unique: false });
         promptStore.createIndex("by_status", "status", { unique: false });
       }
+
+      if (!db.objectStoreNames.contains(TODOS_CACHE_STORE)) {
+        db.createObjectStore(TODOS_CACHE_STORE, {
+          keyPath: "id",
+        });
+      }
     };
 
     request.onsuccess = () => resolve(request.result);
@@ -52,7 +66,10 @@ function openDatabase() {
 }
 
 async function withStore<T>(
-  storeName: typeof THOUGHTS_STORE | typeof PROMPTS_STORE,
+  storeName:
+    | typeof THOUGHTS_STORE
+    | typeof PROMPTS_STORE
+    | typeof TODOS_CACHE_STORE,
   mode: IDBTransactionMode,
   handler: (store: IDBObjectStore, resolve: (value: T) => void, reject: (error: unknown) => void) => void,
 ) {
@@ -178,6 +195,39 @@ export async function patchQueuedPrompt(
 export async function removeQueuedPrompt(id: string) {
   return withStore<void>(PROMPTS_STORE, "readwrite", (store, resolve, reject) => {
     const request = store.delete(id);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function getCachedTodos() {
+  return withStore<TodoItem[]>(TODOS_CACHE_STORE, "readonly", (store, resolve, reject) => {
+    const request = store.get(TODOS_CACHE_KEY);
+    request.onsuccess = () => {
+      const row = request.result as CachedTodosRecord | undefined;
+      resolve(Array.isArray(row?.todos) ? row.todos : []);
+    };
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function setCachedTodos(todos: TodoItem[]) {
+  const payload: CachedTodosRecord = {
+    id: TODOS_CACHE_KEY,
+    todos,
+    updatedAt: Date.now(),
+  };
+
+  return withStore<void>(TODOS_CACHE_STORE, "readwrite", (store, resolve, reject) => {
+    const request = store.put(payload);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function clearCachedTodos() {
+  return withStore<void>(TODOS_CACHE_STORE, "readwrite", (store, resolve, reject) => {
+    const request = store.delete(TODOS_CACHE_KEY);
     request.onsuccess = () => resolve();
     request.onerror = () => reject(request.error);
   });

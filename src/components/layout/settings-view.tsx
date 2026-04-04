@@ -26,7 +26,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { ThemePreference } from "@/hooks/useTheme";
 import { useTheme } from "@/hooks/useTheme";
 import { apiClient } from "@/lib/apiClient";
-import { clearLocalThoughts } from "@/lib/indexedDb";
+import { clearCachedTodos, clearLocalThoughts } from "@/lib/indexedDb";
 
 const FILTER_STORAGE_KEY = "ibx:active-view";
 const PROMPT_AUTOFOCUS_STORAGE_KEY = "ibx:prompt-autofocus";
@@ -147,6 +147,7 @@ export function SettingsView() {
     startSignOutTransition(async () => {
       await apiClient.logout();
       await clearLocalThoughts();
+      await clearCachedTodos();
       toast.message("Signed out");
       router.replace("/");
       router.refresh();

@@ -47,9 +47,11 @@ import { useTheme } from "@/hooks/useTheme";
 import { apiClient, ApiError } from "@/lib/apiClient";
 import {
   addQueuedPrompt,
+  getCachedTodos,
   listQueuedPrompts,
   patchQueuedPrompt,
   removeQueuedPrompt,
+  setCachedTodos,
 } from "@/lib/indexedDb";
 import { cn } from "@/lib/utils";
 import type { TodoItem, TodoPriority, TodoRecurrence } from "@/lib/types";
@@ -471,6 +473,10 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
         return;
       }
 
+      if (!isOnline) {
+        return;
+      }
+
       if (showLoading) {
         setIsLoadingTodos(true);
       }
@@ -487,7 +493,7 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
         }
       }
     },
-    [isAuthenticated],
+    [isAuthenticated, isOnline],
   );
 
   const refreshQueuedPromptCount = useCallback(async () => {
@@ -579,6 +585,34 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
   useEffect(() => {
     void refreshTodos(true);
   }, [refreshTodos]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      return;
+    }
+
+    void (async () => {
+      try {
+        const cachedTodos = await getCachedTodos();
+        if (cachedTodos.length === 0) {
+          return;
+        }
+
+        setTodos(sortTodos(cachedTodos));
+        setHasLoadedTodos(true);
+      } catch {
+        // Ignore local cache read failures to keep app usable.
+      }
+    })();
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !hasLoadedTodos) {
+      return;
+    }
+
+    void setCachedTodos(todos).catch(() => undefined);
+  }, [hasLoadedTodos, isAuthenticated, todos]);
 
   useEffect(() => {
     void refreshQueuedPromptCount();
@@ -838,6 +872,7 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
     setIsAuthenticated(true);
     router.refresh();
     toast.message("access granted");
+    void refreshTodos();
   };
 
   const handleGenerateTodos = async () => {
