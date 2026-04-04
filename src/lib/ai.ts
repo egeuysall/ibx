@@ -112,6 +112,7 @@ function tryParseContent(content: string) {
 type GenerationOptions = {
   profileContext: string;
   recentRunMemories: string[];
+  todayDateKey: string;
 };
 
 export async function generateTodosFromThought(rawText: string, options: GenerationOptions) {
@@ -149,7 +150,10 @@ Rules:
 - Prefer notes like: "context: lead=Acme CTO, repo=ibx-web; next: send follow-up draft."
 - Never output long writing instructions or multi-step paragraphs in notes.
 - Use recurrence only when the thought clearly implies repeated cadence.
-- Use dueDate only when a concrete date can be inferred.
+- Today's UTC date is ${options.todayDateKey}.
+- Default dueDate to ${options.todayDateKey}.
+- Only use a different dueDate when the prompt explicitly states another time/date (e.g. tomorrow, this weekend, next week, on Friday, specific date).
+- If the prompt uses relative timing, convert it to a concrete YYYY-MM-DD date.
 - Set priority: 1=must-do today, 2=important, 3=nice-to-have.
 - Keep at most 5 todos.
 - If no actionable todos exist, return [].

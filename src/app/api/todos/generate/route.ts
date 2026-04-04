@@ -24,6 +24,10 @@ function getStartOfUtcDay(timestamp: number) {
   return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
 }
 
+function toDateKey(utcStart: number) {
+  return new Date(utcStart).toISOString().slice(0, 10);
+}
+
 function parseTodayStartUtc(today: unknown) {
   if (typeof today === "string") {
     const normalized = today.trim();
@@ -53,6 +57,7 @@ export async function POST(request: NextRequest) {
     | null;
   const rawText = normalizeInputText(body?.text);
   const todayStartUtc = parseTodayStartUtc(body?.today);
+  const todayDateKey = toDateKey(todayStartUtc);
 
   if (!rawText) {
     return NextResponse.json({ error: "Input is required." }, { status: 400 });
@@ -85,6 +90,7 @@ export async function POST(request: NextRequest) {
     const generatedTodos = await generateTodosFromThought(rawText, {
       profileContext,
       recentRunMemories: recentRunMemories.map((memory) => memory.content),
+      todayDateKey,
     });
 
     const thought = await convex.query(api.thoughts.getByExternalId, { externalId });

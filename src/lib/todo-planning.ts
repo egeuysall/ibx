@@ -1,6 +1,5 @@
 import type { GeneratedTodo } from "@/lib/ai";
 
-const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_TODOS_TODAY = 5;
 
 type ExistingTodo = {
@@ -35,14 +34,6 @@ function normalizeTitleKey(title: string) {
     .trim();
 }
 
-function isDueTodayUtc(timestamp: number | null | undefined, todayStartUtc: number) {
-  if (typeof timestamp !== "number") {
-    return false;
-  }
-
-  return timestamp >= todayStartUtc && timestamp < todayStartUtc + DAY_MS;
-}
-
 export function planGeneratedTodos(
   generatedTodos: GeneratedTodo[],
   existingTodos: ExistingTodo[],
@@ -56,10 +47,6 @@ export function planGeneratedTodos(
       .map((todo) => normalizeTitleKey(todo.title))
       .filter(Boolean),
   );
-
-  const existingOpenTodayCount = existingTodos.filter(
-    (todo) => todo.status === "open" && isDueTodayUtc(todo.dueDate, todayStartUtc),
-  ).length;
 
   const seenGeneratedTitleKeys = new Set<string>();
   const unique = generatedTodos
@@ -90,35 +77,18 @@ export function planGeneratedTodos(
 
   const capped = ordered.slice(0, MAX_TODOS_TODAY);
 
-  let todaySlotsRemaining = Math.max(0, MAX_TODOS_TODAY - existingOpenTodayCount);
-  let upcomingOffsetDays = 1;
-
   return capped.map((todo) => {
     const parsedDueDate = parseDueDateToTimestamp(todo.dueDate);
-    const dueDateNeedsPlanning =
-      parsedDueDate === null || parsedDueDate <= todayStartUtc;
-
-    if (!dueDateNeedsPlanning) {
+    if (parsedDueDate !== null && parsedDueDate > todayStartUtc) {
       return {
         ...todo,
         dueDateTimestamp: parsedDueDate,
       };
     }
 
-    if (todaySlotsRemaining > 0) {
-      todaySlotsRemaining -= 1;
-      return {
-        ...todo,
-        dueDateTimestamp: todayStartUtc,
-      };
-    }
-
-    const dueDateTimestamp = todayStartUtc + upcomingOffsetDays * DAY_MS;
-    upcomingOffsetDays += 1;
-
     return {
       ...todo,
-      dueDateTimestamp,
+      dueDateTimestamp: todayStartUtc,
     };
   });
 }
