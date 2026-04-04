@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/build-ibx-bundle.mjs && next build",
     "start": "next start",
     "lint": "eslint",
     "ibx": "node cli/dist/index.js",
