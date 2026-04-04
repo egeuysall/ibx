@@ -76,8 +76,7 @@ If offline, prompts stay queued and are sent when connectivity returns.
 - Installer script served publicly: [public/install.sh](/Users/egeuysal/Developer/inbox/public/install.sh)
 - Shortcut generator (`@joshfarrant/shortcuts-js`):
   - [shortcut/generate-shortcut.cjs](/Users/egeuysal/Developer/inbox/shortcut/generate-shortcut.cjs)
-  - Unsigned output: [public/shortcuts/ibx-capture-unsigned.shortcut](/Users/egeuysal/Developer/inbox/public/shortcuts/ibx-capture-unsigned.shortcut)
-  - Install route: `/shortcuts/ibx-capture.shortcut` (redirects to signed iCloud URL when configured)
+  - Signed output: [public/shortcuts/ibx-capture.shortcut](/Users/egeuysal/Developer/inbox/public/shortcuts/ibx-capture.shortcut)
 
 ## Data Model (Convex)
 
@@ -104,7 +103,6 @@ Required keys:
 Optional:
 
 - `SESSION_COOKIE_SECURE=false` for local HTTP testing only
-- `SIGNED_SHORTCUT_URL=https://www.icloud.com/shortcuts/...` to use Apple-signed shortcut install flow
 
 ## Local Development
 
@@ -218,8 +216,7 @@ pnpm shortcut:build
 Import one of:
 
 - local: [shortcut/dist/ibx-capture.shortcut](/Users/egeuysal/Developer/inbox/shortcut/dist/ibx-capture.shortcut)
-- hosted install route: [https://ibx.egeuysal.com/shortcuts/ibx-capture.shortcut](https://ibx.egeuysal.com/shortcuts/ibx-capture.shortcut)
-- hosted unsigned fallback: [https://ibx.egeuysal.com/shortcuts/ibx-capture-unsigned.shortcut](https://ibx.egeuysal.com/shortcuts/ibx-capture-unsigned.shortcut)
+- hosted signed file: [https://ibx.egeuysal.com/shortcuts/ibx-capture.shortcut](https://ibx.egeuysal.com/shortcuts/ibx-capture.shortcut)
 
 Shortcut behavior:
 

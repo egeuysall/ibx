@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
+const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -45,16 +46,32 @@ const shortcut = buildShortcut(actions, {
 const outputDir = path.join(__dirname, 'dist');
 const outputPath = path.join(outputDir, 'ibx-capture.shortcut');
 const publicDir = path.join(__dirname, '..', 'public', 'shortcuts');
-const publicPath = path.join(publicDir, 'ibx-capture-unsigned.shortcut');
-const legacyPublicPath = path.join(publicDir, 'ibx-capture.shortcut');
+const publicPath = path.join(publicDir, 'ibx-capture.shortcut');
+const unsignedPublicPath = path.join(publicDir, 'ibx-capture-unsigned.shortcut');
 
 fs.mkdirSync(outputDir, { recursive: true });
 fs.mkdirSync(publicDir, { recursive: true });
 fs.writeFileSync(outputPath, shortcut);
-fs.writeFileSync(publicPath, shortcut);
-if (fs.existsSync(legacyPublicPath)) {
-  fs.rmSync(legacyPublicPath);
+
+try {
+  execFileSync(
+    'shortcuts',
+    ['sign', '--mode', 'anyone', '--input', outputPath, '--output', publicPath],
+    { stdio: 'pipe' },
+  );
+} catch (error) {
+  const reason =
+    error && typeof error === 'object' && 'stderr' in error && error.stderr
+      ? String(error.stderr).trim()
+      : String(error);
+  console.error('failed to sign shortcut with `shortcuts sign --mode anyone`');
+  console.error(reason);
+  process.exit(1);
 }
 
-console.log(`generated ${outputPath}`);
-console.log(`copied ${publicPath}`);
+if (fs.existsSync(unsignedPublicPath)) {
+  fs.rmSync(unsignedPublicPath);
+}
+
+console.log(`generated unsigned ${outputPath}`);
+console.log(`generated signed ${publicPath}`);
