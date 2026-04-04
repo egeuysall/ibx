@@ -8,28 +8,13 @@ const {
   URL,
   ask,
   conditional,
-  createNote,
-  date,
   exitShortcut,
-  formatDate,
   getContentsOfURL,
-  getNetworkDetails,
-  getTextFromInput,
-  matchText,
   text,
 } = require('@joshfarrant/shortcuts-js/actions');
 
 const thoughtInput = actionOutput('Thought Input');
-const queueNoteInput = actionOutput('Queue Note Input');
-const extractedQueueText = actionOutput('Extracted Queue Text');
-const extractedQueueTextValue = actionOutput('Extracted Queue Text Value');
-const queuePayloadText = actionOutput('Queue Payload Text');
 const apiKeyInput = actionOutput('API Key (Edit Once)');
-const currentDate = actionOutput('Current Date');
-const captureId = actionOutput('Capture ID');
-const wifiName = actionOutput('Wi-Fi Name');
-const cellularName = actionOutput('Carrier Name');
-const networkState = actionOutput('Network State');
 const API_KEY_PLACEHOLDER = 'iak_replace_me';
 
 function buildApiSubmitAction(textInput) {
@@ -91,56 +76,16 @@ const captureActions = [
     },
     thoughtInput,
   ),
-  date(
-    {
-      use: 'Current Date',
-    },
-    currentDate,
-  ),
-  formatDate(
-    {
-      dateFormat: 'Custom',
-      formatString: 'yyyyMMddHHmmss',
-    },
-    captureId,
-  ),
-  ...sharedApiKeyActions(),
-  getNetworkDetails(
-    {
-      network: 'Wi-Fi',
-      attribute: 'Network Name',
-    },
-    wifiName,
-  ),
-  getNetworkDetails(
-    {
-      network: 'Cellular',
-      attribute: 'Carrier Name',
-    },
-    cellularName,
-  ),
-  text(
-    {
-      text: withVariables`${wifiName}${cellularName}`,
-    },
-    networkState,
-  ),
   conditional({
     input: '=',
     value: '',
-    ifTrue: [
-      text({
-        text: withVariables`IBX_QUEUE\ncaptureId: ${captureId}\ncreatedAt: ${captureId}\ntext: ${thoughtInput}`,
-      }),
-      createNote(),
-    ],
-    ifFalse: [
-      URL({
-        url: 'https://ibx.egeuysal.com/api/todos/generate',
-      }),
-      buildApiSubmitAction(thoughtInput),
-    ],
+    ifTrue: [exitShortcut()],
   }),
+  ...sharedApiKeyActions(),
+  URL({
+    url: 'https://ibx.egeuysal.com/api/todos/generate',
+  }),
+  buildApiSubmitAction(thoughtInput),
 ];
 
 const captureShortcut = buildShortcut(captureActions, {
@@ -151,99 +96,22 @@ const captureShortcut = buildShortcut(captureActions, {
   showInWidget: true,
 });
 
-const syncActions = [
-  getTextFromInput({}, queueNoteInput),
-  conditional({
-    input: '=',
-    value: '',
-    ifTrue: [exitShortcut()],
-  }),
-  conditional({
-    input: 'Contains',
-    value: 'text:',
-    ifTrue: [
-      matchText(
-        {
-          // Extract all content after the `text:` line (including new lines).
-          pattern: '(?ims)(?<=^text:\\s)[\\s\\S]+',
-          caseSensitive: false,
-        },
-        extractedQueueText,
-      ),
-      getTextFromInput({}, extractedQueueTextValue),
-      conditional({
-        input: '=',
-        value: '',
-        ifTrue: [
-          text(
-            {
-              text: withVariables`${queueNoteInput}`,
-            },
-            queuePayloadText,
-          ),
-        ],
-        ifFalse: [
-          text(
-            {
-              text: withVariables`${extractedQueueTextValue}`,
-            },
-            queuePayloadText,
-          ),
-        ],
-      }),
-    ],
-    ifFalse: [
-      text(
-        {
-          text: withVariables`${queueNoteInput}`,
-        },
-        queuePayloadText,
-      ),
-    ],
-  }),
-  // Payload is now isolated from auth actions and cannot accidentally become API key.
-  conditional({
-    input: 'Contains',
-    value: 'iak_',
-    ifTrue: [exitShortcut()],
-  }),
-  ...sharedApiKeyActions(),
-  URL({
-    url: 'https://ibx.egeuysal.com/api/todos/generate',
-  }),
-  buildApiSubmitAction(queuePayloadText),
-];
-
-const syncShortcut = buildShortcut(syncActions, {
-  icon: {
-    color: 20,
-    glyph: 59511,
-  },
-  showInWidget: true,
-});
-
 const outputDir = path.join(__dirname, 'dist');
 const captureOutputPath = path.join(outputDir, 'ibx-capture.shortcut');
-const syncOutputPath = path.join(outputDir, 'ibx-sync-queue.shortcut');
 const publicDir = path.join(__dirname, '..', 'public', 'shortcuts');
 const capturePublicPath = path.join(publicDir, 'ibx-capture.shortcut');
-const syncPublicPath = path.join(publicDir, 'ibx-sync-queue.shortcut');
 const unsignedPublicPath = path.join(publicDir, 'ibx-capture-unsigned.shortcut');
+const legacySyncOutputPath = path.join(outputDir, 'ibx-sync-queue.shortcut');
+const legacySyncPublicPath = path.join(publicDir, 'ibx-sync-queue.shortcut');
 
 fs.mkdirSync(outputDir, { recursive: true });
 fs.mkdirSync(publicDir, { recursive: true });
 fs.writeFileSync(captureOutputPath, captureShortcut);
-fs.writeFileSync(syncOutputPath, syncShortcut);
 
 try {
   execFileSync(
     'shortcuts',
     ['sign', '--mode', 'anyone', '--input', captureOutputPath, '--output', capturePublicPath],
-    { stdio: 'pipe' },
-  );
-  execFileSync(
-    'shortcuts',
-    ['sign', '--mode', 'anyone', '--input', syncOutputPath, '--output', syncPublicPath],
     { stdio: 'pipe' },
   );
 } catch (error) {
@@ -259,8 +127,12 @@ try {
 if (fs.existsSync(unsignedPublicPath)) {
   fs.rmSync(unsignedPublicPath);
 }
+if (fs.existsSync(legacySyncOutputPath)) {
+  fs.rmSync(legacySyncOutputPath);
+}
+if (fs.existsSync(legacySyncPublicPath)) {
+  fs.rmSync(legacySyncPublicPath);
+}
 
 console.log(`generated unsigned ${captureOutputPath}`);
 console.log(`generated signed ${capturePublicPath}`);
-console.log(`generated unsigned ${syncOutputPath}`);
-console.log(`generated signed ${syncPublicPath}`);

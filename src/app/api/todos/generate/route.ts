@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         error:
-          "Received an API key in text payload. Your sync shortcut is using the wrong variable. Reinstall the latest ibx-sync-queue shortcut.",
+          "Received an API key in text payload. Your shortcut is using the wrong variable. Reinstall the latest ibx-capture shortcut.",
       },
       { status: 400 },
     );
