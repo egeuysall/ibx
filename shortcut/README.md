@@ -51,5 +51,5 @@ Then use a separate personal automation/shortcut to:
 
 1. Find notes containing `IBX_QUEUE`
 2. Repeat with each note result
-3. Run `ibx-sync-queue` with Repeat Item as input
+3. Run `ibx-sync-queue` with Repeat Item as input (it extracts the `text:` line automatically)
 4. If successful, delete/archive processed note
