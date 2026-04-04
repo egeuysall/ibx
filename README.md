@@ -196,6 +196,7 @@ Available commands:
 - `ibx todos list [--view today|upcoming|archive|all] [--json]`
 - `ibx todos done --id <todoId>`
 - `ibx todos open --id <todoId>`
+- `ibx todos delete --id <todoId>`
 - `ibx todos set --id <todoId> [--due YYYY-MM-DD] [--priority 1|2|3] [--recurrence none|daily|weekly|monthly]`
 
 Build CLI artifacts:

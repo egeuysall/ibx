@@ -25,6 +25,7 @@ ibx todos list --view today
 - `ibx todos list [--view today|upcoming|archive|all] [--json]`
 - `ibx todos done --id ...`
 - `ibx todos open --id ...`
+- `ibx todos delete --id ...`
 - `ibx todos set --id ... [--due YYYY-MM-DD] [--priority 1|2|3] [--recurrence none|daily|weekly|monthly]`
 
 ## local build

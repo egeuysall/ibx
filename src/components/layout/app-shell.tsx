@@ -7,6 +7,16 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 
 import { LoginScreen } from "@/components/auth/login-screen";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Toaster } from "@/components/ui/sonner";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -376,6 +386,7 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
   const [pendingTodoId, setPendingTodoId] = useState<string | null>(null);
   const [editingTodoId, setEditingTodoId] = useState<string | null>(null);
   const [holdingTodoId, setHoldingTodoId] = useState<string | null>(null);
+  const [todoPendingDelete, setTodoPendingDelete] = useState<TodoItem | null>(null);
   const [holdProgress, setHoldProgress] = useState(0);
   const [expandedNoteIds, setExpandedNoteIds] = useState<
     Record<string, boolean>
@@ -944,16 +955,17 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
     }
   };
 
-  const deleteTodo = async (todo: TodoItem) => {
-    const shouldDelete = window.confirm(`delete "${todo.title}"?`);
-    if (!shouldDelete) {
+  const confirmDeleteTodo = async () => {
+    if (!todoPendingDelete) {
       return;
     }
 
-    setPendingTodoId(todo.id);
+    const targetTodo = todoPendingDelete;
+    setPendingTodoId(targetTodo.id);
     try {
-      await apiClient.deleteTodo(todo.id);
-      setEditingTodoId((current) => (current === todo.id ? null : current));
+      await apiClient.deleteTodo(targetTodo.id);
+      setEditingTodoId((current) => (current === targetTodo.id ? null : current));
+      setTodoPendingDelete(null);
       toast.message("todo deleted");
       await refreshTodos();
     } catch (error) {
@@ -1486,7 +1498,7 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
                                 size="sm"
                                 disabled={pendingTodoId === todo.id}
                                 onClick={() => {
-                                  void deleteTodo(todo);
+                                  setTodoPendingDelete(todo);
                                 }}
                                 onPointerDown={(event) =>
                                   event.stopPropagation()
@@ -1505,6 +1517,36 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
             )}
           </main>
         </SidebarInset>
+        <AlertDialog
+          open={todoPendingDelete !== null}
+          onOpenChange={(nextOpen) => {
+            if (!nextOpen) {
+              setTodoPendingDelete(null);
+            }
+          }}
+        >
+          <AlertDialogContent size="sm">
+            <AlertDialogHeader>
+              <AlertDialogTitle>delete todo?</AlertDialogTitle>
+              <AlertDialogDescription>
+                this permanently removes {todoPendingDelete?.title ?? "this todo"}.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={pendingTodoId !== null}>
+                cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                disabled={pendingTodoId !== null}
+                onClick={() => {
+                  void confirmDeleteTodo();
+                }}
+              >
+                delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </SidebarProvider>
 
       <Toaster position="bottom-right" />

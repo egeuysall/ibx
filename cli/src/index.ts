@@ -458,6 +458,7 @@ function printHelp() {
   print("  ibx todos list [--view today|upcoming|archive|all] [--json]");
   print("  ibx todos done --id <todoId>");
   print("  ibx todos open --id <todoId>");
+  print("  ibx todos delete --id <todoId>");
   print("  ibx todos set --id <todoId> [--due YYYY-MM-DD] [--priority 1|2|3] [--recurrence none|daily|weekly|monthly]");
 }
 
@@ -629,6 +630,25 @@ async function runTodosCommand(parsed: ParsedArgs) {
     }
 
     printOk(`${subcommand} ${todoId}`);
+    return;
+  }
+
+  if (subcommand === "delete" || subcommand === "remove") {
+    const todoId = getStringOption(parsed, "id") ?? parsed.positionals[2] ?? null;
+    if (!todoId) {
+      throw new Error("Provide todo id with --id.");
+    }
+
+    await requestJson<{ ok: true }>(config, `/api/todos/${todoId}`, {
+      method: "DELETE",
+    });
+
+    if (outputJson) {
+      printJson({ ok: true, id: todoId, status: "deleted" });
+      return;
+    }
+
+    printOk(`deleted ${todoId}`);
     return;
   }
 
