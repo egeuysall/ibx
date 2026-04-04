@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getRouteAuth, unauthorizedJson, validateCsrfForSessionAuth } from "@/lib/auth-server";
 import { api, convex } from "@/lib/convex-server";
 
+const DATE_KEY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
 function getExternalId(params: { externalId: string }) {
   const externalId = params.externalId?.trim();
   if (!externalId || externalId.length > 64) {
@@ -10,6 +12,26 @@ function getExternalId(params: { externalId: string }) {
   }
 
   return externalId;
+}
+
+function getStartOfUtcDay(timestamp: number) {
+  const currentDate = new Date(timestamp);
+  return Date.UTC(
+    currentDate.getUTCFullYear(),
+    currentDate.getUTCMonth(),
+    currentDate.getUTCDate(),
+  );
+}
+
+function parseTodayStartUtc(today: string | null | undefined) {
+  if (today && DATE_KEY_REGEX.test(today)) {
+    const parsed = Date.parse(`${today}T00:00:00.000Z`);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return getStartOfUtcDay(Date.now());
 }
 
 export async function GET(
@@ -32,13 +54,7 @@ export async function GET(
     return NextResponse.json({ error: "Invalid thought id." }, { status: 400 });
   }
 
-  const now = Date.now();
-  const currentDate = new Date(now);
-  const todayStartUtc = Date.UTC(
-    currentDate.getUTCFullYear(),
-    currentDate.getUTCMonth(),
-    currentDate.getUTCDate(),
-  );
+  const todayStartUtc = parseTodayStartUtc(request.nextUrl.searchParams.get("today"));
 
   await convex.mutation(api.todos.enforceDueDatesAndReschedule, { todayStartUtc });
 

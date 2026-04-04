@@ -9,6 +9,14 @@ import type {
 
 type ApiErrorPayload = { error?: string };
 
+function getLocalDateKey() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export class ApiError extends Error {
   status: number;
 
@@ -71,7 +79,8 @@ export const apiClient = {
   },
 
   async listTodos(externalId: string) {
-    return requestJson<{ todos: TodoItem[] }>(`/api/thoughts/${externalId}/todos`, {
+    const today = getLocalDateKey();
+    return requestJson<{ todos: TodoItem[] }>(`/api/thoughts/${externalId}/todos?today=${today}`, {
       method: "GET",
     });
   },
@@ -84,24 +93,28 @@ export const apiClient = {
   },
 
   async generateTodos(externalId: string) {
+    const today = getLocalDateKey();
     return requestJson<{ ok: true; created: number }>(
       `/api/thoughts/${externalId}/generate`,
       {
         method: "POST",
+        body: JSON.stringify({ today }),
       },
     );
   },
 
   async listAllTodos() {
-    return requestJson<{ todos: TodoItem[] }>("/api/todos", {
+    const today = getLocalDateKey();
+    return requestJson<{ todos: TodoItem[] }>(`/api/todos?today=${today}`, {
       method: "GET",
     });
   },
 
   async generateTodosFromInput(text: string) {
+    const today = getLocalDateKey();
     return requestJson<{ ok: true; runId: string; created: number }>("/api/todos/generate", {
       method: "POST",
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text, today }),
     });
   },
 

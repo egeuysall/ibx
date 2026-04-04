@@ -8,6 +8,8 @@ import { api, convex } from "@/lib/convex-server";
 import { getEgeContext } from "@/lib/ege-context";
 import { planGeneratedTodos } from "@/lib/todo-planning";
 
+const DATE_KEY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
 function normalizeInputText(value: unknown) {
   if (typeof value !== "string") {
     return null;
@@ -22,6 +24,20 @@ function getStartOfUtcDay(timestamp: number) {
   return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
 }
 
+function parseTodayStartUtc(today: unknown) {
+  if (typeof today === "string") {
+    const normalized = today.trim();
+    if (DATE_KEY_REGEX.test(normalized)) {
+      const parsed = Date.parse(`${normalized}T00:00:00.000Z`);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+  }
+
+  return getStartOfUtcDay(Date.now());
+}
+
 export async function POST(request: NextRequest) {
   const auth = await getRouteAuth(request);
   if (!auth) {
@@ -32,8 +48,11 @@ export async function POST(request: NextRequest) {
     return csrfError;
   }
 
-  const body = (await request.json().catch(() => null)) as { text?: unknown } | null;
+  const body = (await request.json().catch(() => null)) as
+    | { text?: unknown; today?: unknown }
+    | null;
   const rawText = normalizeInputText(body?.text);
+  const todayStartUtc = parseTodayStartUtc(body?.today);
 
   if (!rawText) {
     return NextResponse.json({ error: "Input is required." }, { status: 400 });
@@ -74,10 +93,10 @@ export async function POST(request: NextRequest) {
     }
 
     await convex.mutation(api.todos.enforceDueDatesAndReschedule, {
-      todayStartUtc: getStartOfUtcDay(Date.now()),
+      todayStartUtc,
     });
     const existingTodos = await convex.query(api.todos.listAll, {});
-    const plannedTodos = planGeneratedTodos(generatedTodos, existingTodos);
+    const plannedTodos = planGeneratedTodos(generatedTodos, existingTodos, todayStartUtc);
 
     if (plannedTodos.length > 0) {
       await convex.mutation(api.todos.createMany, {

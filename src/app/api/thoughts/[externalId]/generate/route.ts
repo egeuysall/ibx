@@ -8,6 +8,8 @@ import { generateTodosFromThought } from "@/lib/ai";
 import { api, convex } from "@/lib/convex-server";
 import { planGeneratedTodos } from "@/lib/todo-planning";
 
+const DATE_KEY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
 function getExternalId(params: { externalId: string }) {
   const externalId = params.externalId?.trim();
   if (!externalId || externalId.length > 64) {
@@ -20,6 +22,20 @@ function getExternalId(params: { externalId: string }) {
 function getStartOfUtcDay(timestamp: number) {
   const date = new Date(timestamp);
   return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+}
+
+function parseTodayStartUtc(today: unknown) {
+  if (typeof today === "string") {
+    const normalized = today.trim();
+    if (DATE_KEY_REGEX.test(normalized)) {
+      const parsed = Date.parse(`${normalized}T00:00:00.000Z`);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+  }
+
+  return getStartOfUtcDay(Date.now());
 }
 
 export async function POST(
@@ -41,6 +57,9 @@ export async function POST(
   if (!externalId) {
     return NextResponse.json({ error: "Invalid thought id." }, { status: 400 });
   }
+
+  const body = (await request.json().catch(() => null)) as { today?: unknown } | null;
+  const todayStartUtc = parseTodayStartUtc(body?.today);
 
   const thought = await convex.query(api.thoughts.getByExternalId, { externalId });
   if (!thought) {
@@ -72,10 +91,10 @@ export async function POST(
     });
 
     await convex.mutation(api.todos.enforceDueDatesAndReschedule, {
-      todayStartUtc: getStartOfUtcDay(Date.now()),
+      todayStartUtc,
     });
     const existingTodos = await convex.query(api.todos.listAll, {});
-    const plannedTodos = planGeneratedTodos(generatedTodos, existingTodos);
+    const plannedTodos = planGeneratedTodos(generatedTodos, existingTodos, todayStartUtc);
 
     if (plannedTodos.length > 0) {
       await convex.mutation(api.todos.createMany, {

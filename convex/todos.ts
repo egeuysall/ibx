@@ -25,6 +25,28 @@ function isDueTodayUtc(timestamp: number | null | undefined, todayStartUtc: numb
   return timestamp >= todayStartUtc && timestamp < todayStartUtc + DAY_MS;
 }
 
+function getNextRecurringDueDate(
+  recurrence: "daily" | "weekly" | "monthly",
+  dueDate: number | null | undefined,
+  now: number,
+) {
+  const todayStartUtc = getStartOfUtcDay(now);
+  const baseDueDate =
+    typeof dueDate === "number" ? Math.max(dueDate, todayStartUtc) : todayStartUtc;
+
+  if (recurrence === "daily") {
+    return baseDueDate + DAY_MS;
+  }
+
+  if (recurrence === "weekly") {
+    return baseDueDate + 7 * DAY_MS;
+  }
+
+  const date = new Date(baseDueDate);
+  date.setUTCMonth(date.getUTCMonth() + 1);
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+}
+
 export const byThought = query({
   args: {
     thoughtId: v.id("thoughts"),
@@ -194,6 +216,33 @@ export const updateStatus = mutation({
     }
 
     await ctx.db.patch(args.todoId, { status: args.status });
+
+    const isRecurringCompletion =
+      args.status === "done" &&
+      existingTodo.status === "open" &&
+      existingTodo.recurrence &&
+      existingTodo.recurrence !== "none";
+
+    if (isRecurringCompletion) {
+      const recurrence = existingTodo.recurrence as "daily" | "weekly" | "monthly";
+      const now = Date.now();
+      const nextDueDate = getNextRecurringDueDate(recurrence, existingTodo.dueDate, now);
+
+      await ctx.db.insert("todos", {
+        thoughtId: existingTodo.thoughtId,
+        thoughtExternalId: existingTodo.thoughtExternalId,
+        title: existingTodo.title,
+        notes: existingTodo.notes ?? null,
+        status: "open",
+        dueDate: nextDueDate,
+        recurrence,
+        priority:
+          existingTodo.priority === 1 || existingTodo.priority === 3 ? existingTodo.priority : 2,
+        source: existingTodo.source ?? "manual",
+        createdAt: now,
+      });
+    }
+
     return args.todoId;
   },
 });

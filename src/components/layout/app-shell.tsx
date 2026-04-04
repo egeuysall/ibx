@@ -12,7 +12,11 @@ import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Sidebar,
   SidebarContent,
@@ -51,6 +55,8 @@ const FILTER_STORAGE_KEY = "ibx:active-view";
 const PROMPT_AUTOFOCUS_STORAGE_KEY = "ibx:prompt-autofocus";
 const SHORTCUT_CAPTURE_KEY_PREFIX = "ibx:shortcut-capture:";
 const NOTE_PREVIEW_LENGTH = 160;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const TODAY_FALLBACK_COUNT = 5;
 const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const UTC_LONG_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -70,7 +76,6 @@ const LOCAL_STATUS_TIME_FORMATTER = new Intl.DateTimeFormat("en-US", {
   hour: "numeric",
   minute: "2-digit",
   hour12: true,
-  timeZoneName: "short",
 });
 
 function readStoredPromptInput() {
@@ -144,7 +149,11 @@ function dateKeyToLocalDate(dateKey: string) {
   const month = Number(monthText);
   const day = Number(dayText);
 
-  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+  if (
+    !Number.isInteger(year) ||
+    !Number.isInteger(month) ||
+    !Number.isInteger(day)
+  ) {
     return null;
   }
 
@@ -206,8 +215,18 @@ function displayRecurrence(recurrence: TodoRecurrence) {
   return recurrence;
 }
 
+function normalizeTodoPriority(
+  priority: number | null | undefined,
+): TodoPriority {
+  if (priority === 1 || priority === 3) {
+    return priority;
+  }
+
+  return 2;
+}
+
 function displayPriority(priority: number) {
-  return `p${priority}`;
+  return `p${normalizeTodoPriority(priority)}`;
 }
 
 function getPreviewNotes(notes: string) {
@@ -224,8 +243,11 @@ function sortTodos(todos: TodoItem[]) {
       return a.status === "open" ? -1 : 1;
     }
 
-    if (a.status === "open" && b.status === "open" && a.priority !== b.priority) {
-      return a.priority - b.priority;
+    const aPriority = normalizeTodoPriority(a.priority);
+    const bPriority = normalizeTodoPriority(b.priority);
+
+    if (a.status === "open" && b.status === "open" && aPriority !== bPriority) {
+      return aPriority - bPriority;
     }
 
     const aDueDate = a.dueDate ?? Number.MAX_SAFE_INTEGER;
@@ -239,11 +261,77 @@ function sortTodos(todos: TodoItem[]) {
   });
 }
 
+function getStartOfLocalDay(timestamp: number) {
+  const date = new Date(timestamp);
+  return new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+  ).getTime();
+}
+
+function getRelativeDayLabel(dateKey: string, now: number) {
+  if (!ISO_DATE_REGEX.test(dateKey)) {
+    return null;
+  }
+
+  const targetDate = dateKeyToLocalDate(dateKey);
+  if (!targetDate) {
+    return null;
+  }
+
+  const targetStart = targetDate.getTime();
+  const todayStart = getStartOfLocalDay(now);
+  const diffDays = Math.round((targetStart - todayStart) / DAY_MS);
+
+  if (diffDays === 0) {
+    return "today";
+  }
+
+  if (diffDays === 1) {
+    return "tomorrow";
+  }
+
+  if (diffDays === -1) {
+    return "yesterday";
+  }
+
+  if (diffDays > 1) {
+    return `in ${diffDays}d`;
+  }
+
+  return `${Math.abs(diffDays)}d ago`;
+}
+
+function formatSectionDateLabel(
+  dateKey: string | null,
+  filter: TodoFilter,
+  now: number,
+) {
+  if (dateKey === null) {
+    return "no date";
+  }
+
+  const formattedDate = formatDateKey(dateKey, UTC_SHORT_DATE_FORMATTER);
+  if (filter !== "upcoming" && filter !== "archive") {
+    return formattedDate;
+  }
+
+  const relativeLabel = getRelativeDayLabel(dateKey, now);
+  return relativeLabel ? `${formattedDate} // ${relativeLabel}` : formattedDate;
+}
+
 type TodoFilter = "today" | "upcoming" | "archive";
 type TodoSection = {
   key: string;
   label: string | null;
   todos: TodoItem[];
+};
+
+const TODAY_PRIORITY_LABELS: Record<TodoPriority, string> = {
+  1: "p1 // must-do",
+  2: "p2 // should-do",
+  3: "p3 // could-do",
 };
 
 function normalizeFilter(value: string | null | undefined): TodoFilter {
@@ -273,7 +361,9 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
   const [queuedPromptCount, setQueuedPromptCount] = useState(0);
   const [pendingTodoId, setPendingTodoId] = useState<string | null>(null);
   const [editingTodoId, setEditingTodoId] = useState<string | null>(null);
-  const [expandedNoteIds, setExpandedNoteIds] = useState<Record<string, boolean>>({});
+  const [expandedNoteIds, setExpandedNoteIds] = useState<
+    Record<string, boolean>
+  >({});
   const [currentTimestamp, setCurrentTimestamp] = useState(() => Date.now());
   const promptInputRef = useRef<HTMLInputElement | null>(null);
   const hasAppliedInitialAutofocus = useRef(false);
@@ -310,27 +400,30 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
     }
   }, [filter, hasHydratedPreferences]);
 
-  const refreshTodos = useCallback(async (showLoading = false) => {
-    if (!isAuthenticated) {
-      return;
-    }
-
-    if (showLoading) {
-      setIsLoadingTodos(true);
-    }
-
-    try {
-      const { todos: nextTodos } = await apiClient.listAllTodos();
-      setTodos(sortTodos(nextTodos));
-      setHasLoadedTodos(true);
-    } catch (error) {
-      toast.error(parseErrorMessage(error));
-    } finally {
-      if (showLoading) {
-        setIsLoadingTodos(false);
+  const refreshTodos = useCallback(
+    async (showLoading = false) => {
+      if (!isAuthenticated) {
+        return;
       }
-    }
-  }, [isAuthenticated]);
+
+      if (showLoading) {
+        setIsLoadingTodos(true);
+      }
+
+      try {
+        const { todos: nextTodos } = await apiClient.listAllTodos();
+        setTodos(sortTodos(nextTodos));
+        setHasLoadedTodos(true);
+      } catch (error) {
+        toast.error(parseErrorMessage(error));
+      } finally {
+        if (showLoading) {
+          setIsLoadingTodos(false);
+        }
+      }
+    },
+    [isAuthenticated],
+  );
 
   const refreshQueuedPromptCount = useCallback(async () => {
     try {
@@ -341,19 +434,22 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
     }
   }, []);
 
-  const queuePrompt = useCallback(async (text: string, source: "app" | "shortcut") => {
-    const cleanInput = text.trim().slice(0, 8_000);
-    if (!cleanInput) {
-      return null;
-    }
+  const queuePrompt = useCallback(
+    async (text: string, source: "app" | "shortcut") => {
+      const cleanInput = text.trim().slice(0, 8_000);
+      if (!cleanInput) {
+        return null;
+      }
 
-    const queued = await addQueuedPrompt({
-      text: cleanInput,
-      source,
-    });
-    setQueuedPromptCount((previous) => previous + 1);
-    return queued.id;
-  }, []);
+      const queued = await addQueuedPrompt({
+        text: cleanInput,
+        source,
+      });
+      setQueuedPromptCount((previous) => previous + 1);
+      return queued.id;
+    },
+    [],
+  );
 
   const flushQueuedPrompts = useCallback(async () => {
     if (!isAuthenticated || !isOnline || isQueueFlushRunning.current) {
@@ -403,7 +499,9 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
       }
 
       if (failedItems > 0) {
-        toast.error(`${failedItems} queued item${failedItems === 1 ? "" : "s"} failed`);
+        toast.error(
+          `${failedItems} queued item${failedItems === 1 ? "" : "s"} failed`,
+        );
       }
 
       await refreshTodos();
@@ -450,30 +548,33 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
     return () => window.clearInterval(timer);
   }, [flushQueuedPrompts, isAuthenticated, refreshTodos]);
 
-  const focusPromptInputAtEnd = useCallback((force = false) => {
-    if (!promptAutofocus || isGenerating || isProcessingQueue) {
-      return;
-    }
+  const focusPromptInputAtEnd = useCallback(
+    (force = false) => {
+      if (!promptAutofocus || isGenerating || isProcessingQueue) {
+        return;
+      }
 
-    const input = promptInputRef.current;
-    if (!input) {
-      return;
-    }
+      const input = promptInputRef.current;
+      if (!input) {
+        return;
+      }
 
-    const activeElement = document.activeElement;
-    if (
-      !force &&
-      activeElement &&
-      activeElement !== document.body &&
-      activeElement !== input
-    ) {
-      return;
-    }
+      const activeElement = document.activeElement;
+      if (
+        !force &&
+        activeElement &&
+        activeElement !== document.body &&
+        activeElement !== input
+      ) {
+        return;
+      }
 
-    input.focus({ preventScroll: true });
-    const cursorPosition = input.value.length;
-    input.setSelectionRange(cursorPosition, cursorPosition);
-  }, [isGenerating, isProcessingQueue, promptAutofocus]);
+      input.focus({ preventScroll: true });
+      const cursorPosition = input.value.length;
+      input.setSelectionRange(cursorPosition, cursorPosition);
+    },
+    [isGenerating, isProcessingQueue, promptAutofocus],
+  );
 
   useEffect(() => {
     if (!hasHydratedPreferences || !promptAutofocus) {
@@ -498,7 +599,12 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
     });
 
     return () => window.cancelAnimationFrame(animationFrame);
-  }, [focusPromptInputAtEnd, hasHydratedPreferences, promptAutofocus, searchParams]);
+  }, [
+    focusPromptInputAtEnd,
+    hasHydratedPreferences,
+    promptAutofocus,
+    searchParams,
+  ]);
 
   useEffect(() => {
     if (!hasHydratedPreferences) {
@@ -539,7 +645,9 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
     }
 
     const captureId = searchParams.get("captureId");
-    const dedupeKey = captureId ? `${SHORTCUT_CAPTURE_KEY_PREFIX}${captureId}` : null;
+    const dedupeKey = captureId
+      ? `${SHORTCUT_CAPTURE_KEY_PREFIX}${captureId}`
+      : null;
 
     const clearShortcutParams = () => {
       const params = new URLSearchParams(searchParams.toString());
@@ -553,7 +661,11 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
       router.replace(`/?${params.toString()}`, { scroll: false });
     };
 
-    if (dedupeKey && typeof window !== "undefined" && window.sessionStorage.getItem(dedupeKey)) {
+    if (
+      dedupeKey &&
+      typeof window !== "undefined" &&
+      window.sessionStorage.getItem(dedupeKey)
+    ) {
       clearShortcutParams();
       return;
     }
@@ -562,7 +674,8 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
       window.sessionStorage.setItem(dedupeKey, "1");
     }
 
-    const source = searchParams.get("source") === "shortcut" ? "shortcut" : "app";
+    const source =
+      searchParams.get("source") === "shortcut" ? "shortcut" : "app";
 
     void (async () => {
       const queuedId = await queuePrompt(shortcutText, source);
@@ -580,7 +693,15 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
 
       clearShortcutParams();
     })();
-  }, [filter, flushQueuedPrompts, isAuthenticated, isOnline, queuePrompt, router, searchParams]);
+  }, [
+    filter,
+    flushQueuedPrompts,
+    isAuthenticated,
+    isOnline,
+    queuePrompt,
+    router,
+    searchParams,
+  ]);
 
   const setActiveFilter = useCallback(
     (nextFilter: TodoFilter) => {
@@ -725,10 +846,16 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
   const groupedTodos = useMemo(() => {
     const todayDateKey = getLocalDateKey(Date.now());
     const openTodos = todos.filter((todo) => todo.status === "open");
+    const dueToday = openTodos.filter((todo) =>
+      isTodoOnDateKey(todo.dueDate, todayDateKey),
+    );
+    const fallbackToday =
+      dueToday.length > 0 ? dueToday : openTodos.slice(0, TODAY_FALLBACK_COUNT);
+    const todayIds = new Set(fallbackToday.map((todo) => todo.id));
 
     return {
-      today: openTodos.filter((todo) => isTodoOnDateKey(todo.dueDate, todayDateKey)),
-      upcoming: openTodos.filter((todo) => !isTodoOnDateKey(todo.dueDate, todayDateKey)),
+      today: fallbackToday,
+      upcoming: openTodos.filter((todo) => !todayIds.has(todo.id)),
       archive: todos.filter((todo) => todo.status === "done"),
     };
   }, [todos]);
@@ -747,17 +874,21 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
 
   const todoSections = useMemo<TodoSection[]>(() => {
     if (filter === "today") {
-      const todayDateKey = getLocalDateKey(Date.now());
-      return [
-        {
-          key: "today",
-          label: `today // ${formatDateKey(todayDateKey, UTC_SHORT_DATE_FORMATTER)}`,
-          todos: filteredTodos,
-        },
-      ];
+      return ([1, 2, 3] as TodoPriority[])
+        .map((priority) => ({
+          key: `today-p${priority}`,
+          label: TODAY_PRIORITY_LABELS[priority],
+          todos: filteredTodos.filter(
+            (todo) => normalizeTodoPriority(todo.priority) === priority,
+          ),
+        }))
+        .filter((section) => section.todos.length > 0);
     }
 
-    const sectionsByDate = new Map<string, { dateKey: string | null; todos: TodoItem[] }>();
+    const sectionsByDate = new Map<
+      string,
+      { dateKey: string | null; todos: TodoItem[] }
+    >();
 
     for (const todo of filteredTodos) {
       const dateKey = getTodoDateKey(todo.dueDate);
@@ -795,10 +926,7 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
       })
       .map(([key, section]) => ({
         key,
-        label:
-          section.dateKey === null
-            ? "no date"
-            : formatDateKey(section.dateKey, UTC_SHORT_DATE_FORMATTER),
+        label: formatSectionDateLabel(section.dateKey, filter, Date.now()),
         todos: section.todos,
       }));
   }, [filter, filteredTodos]);
@@ -835,8 +963,12 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
                     onClick={() => setActiveFilter("today")}
                     className="group-data-[collapsible=icon]:justify-center"
                   >
-                    <span className="group-data-[collapsible=icon]:hidden">today</span>
-                    <span className="hidden group-data-[collapsible=icon]:inline">{"\\"}</span>
+                    <span className="group-data-[collapsible=icon]:hidden">
+                      today
+                    </span>
+                    <span className="hidden group-data-[collapsible=icon]:inline">
+                      {"\\"}
+                    </span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
                 <SidebarMenuItem>
@@ -845,8 +977,12 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
                     onClick={() => setActiveFilter("upcoming")}
                     className="group-data-[collapsible=icon]:justify-center"
                   >
-                    <span className="group-data-[collapsible=icon]:hidden">upcoming</span>
-                    <span className="hidden group-data-[collapsible=icon]:inline">/</span>
+                    <span className="group-data-[collapsible=icon]:hidden">
+                      upcoming
+                    </span>
+                    <span className="hidden group-data-[collapsible=icon]:inline">
+                      /
+                    </span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
                 <SidebarMenuItem>
@@ -855,8 +991,12 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
                     onClick={() => setActiveFilter("archive")}
                     className="group-data-[collapsible=icon]:justify-center"
                   >
-                    <span className="group-data-[collapsible=icon]:hidden">archive</span>
-                    <span className="hidden group-data-[collapsible=icon]:inline">[</span>
+                    <span className="group-data-[collapsible=icon]:hidden">
+                      archive
+                    </span>
+                    <span className="hidden group-data-[collapsible=icon]:inline">
+                      [
+                    </span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
                 <SidebarMenuItem>
@@ -864,8 +1004,12 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
                     render={<Link href="/settings" prefetch={false} />}
                     className="group-data-[collapsible=icon]:justify-center"
                   >
-                    <span className="group-data-[collapsible=icon]:hidden">settings</span>
-                    <span className="hidden group-data-[collapsible=icon]:inline">]</span>
+                    <span className="group-data-[collapsible=icon]:hidden">
+                      settings
+                    </span>
+                    <span className="hidden group-data-[collapsible=icon]:inline">
+                      ]
+                    </span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               </SidebarMenu>
@@ -882,7 +1026,11 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
         <SidebarInset className="min-h-dvh flex flex-col">
           <header className="sticky top-0 z-20 flex h-12 items-center border-b bg-background px-4 md:px-6">
             <div className="flex w-full items-center gap-2">
-              <SidebarTrigger className="md:hidden" size="icon-sm" variant="ghost" />
+              <SidebarTrigger
+                className="md:hidden"
+                size="icon-sm"
+                variant="ghost"
+              />
               <span className="text-muted-foreground">{">"}</span>
               <Input
                 ref={promptInputRef}
@@ -903,7 +1051,11 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
                 size="sm"
                 onClick={() => void handleGenerateTodos()}
                 disabled={isGenerating || isProcessingQueue}
-                title={queuedPromptCount > 0 ? `${queuedPromptCount} queued` : undefined}
+                title={
+                  queuedPromptCount > 0
+                    ? `${queuedPromptCount} queued`
+                    : undefined
+                }
               >
                 {isGenerating || isProcessingQueue ? "running..." : "run"}
               </Button>
@@ -912,41 +1064,67 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
 
           <main className="min-h-0 flex-1 overflow-y-auto py-4">
             {!hasLoadedTodos && isLoadingTodos ? (
-              <p className="px-4 text-xs text-muted-foreground md:px-6">loading todos…</p>
+              <p className="px-4 text-sm text-muted-foreground md:px-6">
+                loading todos…
+              </p>
             ) : filteredTodos.length === 0 ? (
-              <p className="px-4 text-sm text-muted-foreground md:px-6">No todos in this view yet.</p>
+              <p className="px-4 text-sm text-muted-foreground md:px-6">
+                no todos in this view yet.
+              </p>
             ) : (
               <div className="flex flex-col gap-4">
                 {todoSections.map((section) => (
                   <section
                     key={section.key}
-                    className={cn("flex flex-col gap-0", section.label ? "pt-2" : "")}
+                    className={cn(
+                      "flex flex-col gap-0",
+                      section.label ? "pt-2" : "",
+                    )}
                   >
                     {section.label ? (
-                      <p className="px-4 pb-2 text-xs text-muted-foreground md:px-6">{section.label}</p>
+                      <p className="px-4 pb-2 text-xs text-muted-foreground md:px-6">
+                        {section.label}
+                      </p>
                     ) : null}
                     {section.todos.map((todo) => (
                       <article
                         key={todo.id}
                         className="border-b cursor-pointer"
-                        onClick={() => setEditingTodoId(todo.id)}
+                        onClick={() =>
+                          setEditingTodoId((currentTodoId) =>
+                            currentTodoId === todo.id ? null : todo.id,
+                          )
+                        }
                       >
                         <div className="flex flex-col gap-2 px-4 py-3 md:px-6">
                           <div className="flex items-start gap-3">
-                            <Checkbox
-                              checked={todo.status === "done"}
-                              onCheckedChange={(checked) => void updateTodoStatus(todo, Boolean(checked))}
-                              onClick={(event) => event.stopPropagation()}
+                            <button
+                              type="button"
+                              className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-input transition-colors hover:border-foreground disabled:opacity-50"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void updateTodoStatus(
+                                  todo,
+                                  todo.status !== "done",
+                                );
+                              }}
                               onPointerDown={(event) => event.stopPropagation()}
-                              aria-label={`Toggle ${todo.title}`}
+                              aria-label={`Mark ${todo.title} as ${todo.status === "done" ? "open" : "done"}`}
                               disabled={pendingTodoId === todo.id}
-                            />
+                            >
+                              <Checkbox
+                                checked={todo.status === "done"}
+                                className="pointer-events-none h-4 w-4"
+                                aria-hidden
+                              />
+                            </button>
                             <div className="flex min-w-0 flex-1 flex-col gap-1">
                               <div className="flex items-start justify-between gap-2">
                                 <p
                                   className={cn(
                                     "text-sm",
-                                    todo.status === "done" && "line-through opacity-70",
+                                    todo.status === "done" &&
+                                      "line-through opacity-70",
                                   )}
                                 >
                                   {todo.title}
@@ -955,7 +1133,9 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
                               {todo.notes ? (
                                 <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                                   <p className="max-w-full break-words">
-                                    {expandedNoteIds[todo.id] ? todo.notes : getPreviewNotes(todo.notes)}
+                                    {expandedNoteIds[todo.id]
+                                      ? todo.notes
+                                      : getPreviewNotes(todo.notes)}
                                   </p>
                                   {todo.notes.length > NOTE_PREVIEW_LENGTH ? (
                                     <Button
@@ -969,15 +1149,20 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
                                           [todo.id]: !current[todo.id],
                                         }));
                                       }}
-                                      onPointerDown={(event) => event.stopPropagation()}
+                                      onPointerDown={(event) =>
+                                        event.stopPropagation()
+                                      }
                                     >
-                                      {expandedNoteIds[todo.id] ? "less" : "more"}
+                                      {expandedNoteIds[todo.id]
+                                        ? "less"
+                                        : "more"}
                                     </Button>
                                   ) : null}
                                 </div>
                               ) : null}
                               <p className="text-xs text-muted-foreground">
-                                {displayPriority(todo.priority)} / due: {displayDueDate(todo.dueDate)} /{" "}
+                                {displayPriority(todo.priority)} / due:{" "}
+                                {displayDueDate(todo.dueDate)} /{" "}
                                 {displayRecurrence(todo.recurrence)}
                               </p>
                             </div>
@@ -996,7 +1181,8 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
                                       size="sm"
                                       className={cn(
                                         "w-full justify-start sm:w-44",
-                                        !todo.dueDate && "text-muted-foreground",
+                                        !todo.dueDate &&
+                                          "text-muted-foreground",
                                       )}
                                       disabled={pendingTodoId === todo.id}
                                     />
@@ -1010,11 +1196,16 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
                                     mode="single"
                                     selected={
                                       todo.dueDate
-                                        ? (dateKeyToLocalDate(getTodoDateKey(todo.dueDate) ?? "") ?? undefined)
+                                        ? (dateKeyToLocalDate(
+                                            getTodoDateKey(todo.dueDate) ?? "",
+                                          ) ?? undefined)
                                         : undefined
                                     }
                                     onSelect={(date) =>
-                                      void updateTodoDate(todo, date ? format(date, "yyyy-MM-dd") : "")
+                                      void updateTodoDate(
+                                        todo,
+                                        date ? format(date, "yyyy-MM-dd") : "",
+                                      )
                                     }
                                   />
                                 </PopoverContent>
@@ -1022,7 +1213,9 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
                               <ToggleGroup
                                 multiple={false}
                                 value={[String(todo.priority)]}
-                                onValueChange={(values) => void updateTodoPriority(todo, values)}
+                                onValueChange={(values) =>
+                                  void updateTodoPriority(todo, values)
+                                }
                                 variant="default"
                                 size="sm"
                               >
@@ -1048,7 +1241,9 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
                               <ToggleGroup
                                 multiple={false}
                                 value={[todo.recurrence]}
-                                onValueChange={(values) => void updateTodoRecurrence(todo, values)}
+                                onValueChange={(values) =>
+                                  void updateTodoRecurrence(todo, values)
+                                }
                                 variant="default"
                                 size="sm"
                               >
