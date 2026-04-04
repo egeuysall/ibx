@@ -456,10 +456,10 @@ function printHelp() {
   print("  ibx auth logout");
   print("  ibx add [--input \"...\"]");
   print("  ibx todos list [--view today|upcoming|archive|all] [--json]");
-  print("  ibx todos done --id <todoId>");
-  print("  ibx todos open --id <todoId>");
-  print("  ibx todos delete --id <todoId>");
-  print("  ibx todos set --id <todoId> [--due YYYY-MM-DD] [--priority 1|2|3] [--recurrence none|daily|weekly|monthly]");
+  print("  ibx todos done --id <todoId|prefix>");
+  print("  ibx todos open --id <todoId|prefix>");
+  print("  ibx todos delete --id <todoId|prefix>");
+  print("  ibx todos set --id <todoId|prefix> [--due YYYY-MM-DD] [--priority 1|2|3] [--recurrence none|daily|weekly|monthly]");
 }
 
 async function runAuthCommand(parsed: ParsedArgs) {
@@ -585,6 +585,35 @@ async function runAddCommand(parsed: ParsedArgs) {
   }
 }
 
+async function resolveTodoId(config: Pick<CliConfig, "baseUrl" | "apiKey">, idOrPrefix: string) {
+  const candidate = idOrPrefix.trim();
+  if (candidate.length < 4) {
+    throw new Error("Todo id must be full id or at least 4 characters.");
+  }
+
+  const response = await requestJson<{ todos: TodoItem[] }>(config, "/api/todos", {
+    method: "GET",
+  });
+
+  const exactMatch = response.todos.find((todo) => todo.id === candidate);
+  if (exactMatch) {
+    return exactMatch.id;
+  }
+
+  const prefixMatches = response.todos.filter((todo) => todo.id.startsWith(candidate));
+  if (prefixMatches.length === 1) {
+    return prefixMatches[0].id;
+  }
+
+  if (prefixMatches.length === 0) {
+    throw new Error(`No todo matches "${candidate}".`);
+  }
+
+  throw new Error(
+    `Ambiguous todo id prefix "${candidate}" (${prefixMatches.length} matches). Use more characters or full id.`,
+  );
+}
+
 async function runTodosCommand(parsed: ParsedArgs) {
   const subcommand = parsed.positionals[1] ?? "list";
   const outputJson = hasFlag(parsed, "json");
@@ -614,10 +643,11 @@ async function runTodosCommand(parsed: ParsedArgs) {
   }
 
   if (subcommand === "done" || subcommand === "open") {
-    const todoId = getStringOption(parsed, "id") ?? parsed.positionals[2] ?? null;
-    if (!todoId) {
+    const todoIdInput = getStringOption(parsed, "id") ?? parsed.positionals[2] ?? null;
+    if (!todoIdInput) {
       throw new Error("Provide todo id with --id.");
     }
+    const todoId = await resolveTodoId(config, todoIdInput);
 
     await requestJson<{ ok: true }>(config, `/api/todos/${todoId}`, {
       method: "PATCH",
@@ -634,10 +664,11 @@ async function runTodosCommand(parsed: ParsedArgs) {
   }
 
   if (subcommand === "delete" || subcommand === "remove") {
-    const todoId = getStringOption(parsed, "id") ?? parsed.positionals[2] ?? null;
-    if (!todoId) {
+    const todoIdInput = getStringOption(parsed, "id") ?? parsed.positionals[2] ?? null;
+    if (!todoIdInput) {
       throw new Error("Provide todo id with --id.");
     }
+    const todoId = await resolveTodoId(config, todoIdInput);
 
     await requestJson<{ ok: true }>(config, `/api/todos/${todoId}`, {
       method: "DELETE",
@@ -653,10 +684,11 @@ async function runTodosCommand(parsed: ParsedArgs) {
   }
 
   if (subcommand === "set") {
-    const todoId = getStringOption(parsed, "id") ?? parsed.positionals[2] ?? null;
-    if (!todoId) {
+    const todoIdInput = getStringOption(parsed, "id") ?? parsed.positionals[2] ?? null;
+    if (!todoIdInput) {
       throw new Error("Provide todo id with --id.");
     }
+    const todoId = await resolveTodoId(config, todoIdInput);
 
     const due = getStringOption(parsed, "due");
     if (due && !/^\d{4}-\d{2}-\d{2}$/.test(due)) {
