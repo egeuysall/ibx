@@ -133,10 +133,10 @@ const actions = [
     value: '',
     ifTrue: [
       text({
-        text: withVariables`https://ibx.egeuysal.com/?shortcut=${encodedInput}&source=shortcut&captureId=${captureId}&ts=${captureId}`,
+        text: withVariables`webapp://ibx.egeuysal.com/?shortcut=${encodedInput}&source=shortcut&captureId=${captureId}&ts=${captureId}`,
       }),
       openURLs(),
-      showResult({ text: 'offline: opened ibx link for local capture queue' }),
+      showResult({ text: 'offline: launched ibx PWA for local capture queue' }),
     ],
     ifFalse: [
       URL({
