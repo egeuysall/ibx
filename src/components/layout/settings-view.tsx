@@ -34,9 +34,9 @@ const PICKER_ITEM_CLASS =
   "border border-input aria-pressed:border-foreground aria-pressed:bg-foreground aria-pressed:text-background data-[state=on]:border-foreground data-[state=on]:bg-foreground data-[state=on]:text-background";
 const CLI_INSTALL_COMMAND = "curl -fsSL https://ibx.egeuysal.com/install.sh | bash";
 const SHORTCUT_INSTALL_URL =
-  "https://ibx.egeuysal.com/shortcuts/ibx-capture.shortcut?v=20260404-sync-fallback";
+  "https://ibx.egeuysal.com/shortcuts/ibx-capture.shortcut?v=20260404-dual-shortcuts";
 const SHORTCUT_SYNC_INSTALL_URL =
-  "https://ibx.egeuysal.com/shortcuts/ibx-sync-queue.shortcut?v=20260404-sync-fallback";
+  "https://ibx.egeuysal.com/shortcuts/ibx-sync-queue.shortcut?v=20260404-dual-shortcuts";
 const LOCAL_STATUS_TIME_FORMATTER = new Intl.DateTimeFormat("en-US", {
   weekday: "short",
   month: "short",
@@ -488,6 +488,9 @@ export function SettingsView() {
                 <div className="rounded-md border border-input p-2">
                   <p className="text-xs text-muted-foreground">apple shortcut install link</p>
                   <code className="mt-1 block break-all text-xs">{SHORTCUT_INSTALL_URL}</code>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    `ibx-capture`: capture to app when online, queue into notes when offline.
+                  </p>
                   <div className="mt-2 flex flex-wrap items-center gap-1.5">
                     <Button
                       variant="outline"
@@ -503,6 +506,9 @@ export function SettingsView() {
                 <div className="rounded-md border border-input p-2">
                   <p className="text-xs text-muted-foreground">apple sync shortcut install link</p>
                   <code className="mt-1 block break-all text-xs">{SHORTCUT_SYNC_INSTALL_URL}</code>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    `ibx-sync-queue`: run with note input (`Repeat Item`) to sync queued `IBX_QUEUE` notes.
+                  </p>
                   <div className="mt-2 flex flex-wrap items-center gap-1.5">
                     <Button
                       variant="outline"
