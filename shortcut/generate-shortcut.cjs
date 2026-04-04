@@ -165,6 +165,12 @@ const syncActions = [
     ifTrue: [exitShortcut()],
   }),
   conditional({
+    // Extra guard: if input still looks like an API key, never post.
+    input: 'Contains',
+    value: 'iak_',
+    ifTrue: [exitShortcut()],
+  }),
+  conditional({
     input: 'Contains',
     value: 'text:',
     ifTrue: [
@@ -187,7 +193,13 @@ const syncActions = [
       }),
       buildApiSubmitAction(extractedQueueTextValue),
     ],
-    ifFalse: [exitShortcut()],
+    ifFalse: [
+      // Fallback for Notes inputs that don't preserve the exact `text:` marker.
+      URL({
+        url: 'https://ibx.egeuysal.com/api/todos/generate',
+      }),
+      buildApiSubmitAction(queueNoteInput),
+    ],
   }),
 ];
 
