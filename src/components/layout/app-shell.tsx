@@ -925,20 +925,20 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
         return;
       }
 
-      if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey) {
-        if (event.code === "Digit1" || event.key === "1") {
+      if (event.altKey && !event.metaKey && !event.ctrlKey && !event.shiftKey) {
+        if (event.code === "KeyJ") {
           event.preventDefault();
           setActiveFilter("today");
           return;
         }
 
-        if (event.code === "Digit2" || event.key === "2") {
+        if (event.code === "KeyK") {
           event.preventDefault();
           setActiveFilter("upcoming");
           return;
         }
 
-        if (event.code === "Digit3" || event.key === "3") {
+        if (event.code === "KeyL") {
           event.preventDefault();
           setActiveFilter("archive");
         }
@@ -1600,7 +1600,7 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
                                 onBlur={() => {
                                   void updateTodoTitle(todo);
                                 }}
-                                className="h-8 w-full lowercase sm:w-72"
+                                className="h-7 w-full lowercase text-[0.8rem] sm:w-72"
                                 disabled={pendingTodoId === todo.id}
                                 maxLength={140}
                                 aria-label="Edit todo title"

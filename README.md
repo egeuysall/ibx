@@ -22,9 +22,9 @@ If offline, prompts stay queued and are sent when connectivity returns.
 
 ## Keyboard Shortcuts
 
-- `Cmd/Ctrl + 1` → switch to `today` view
-- `Cmd/Ctrl + 2` → switch to `upcoming` view
-- `Cmd/Ctrl + 3` → switch to `archive` view
+- `Option/Alt + J` → switch to `today` view
+- `Option/Alt + K` → switch to `upcoming` view
+- `Option/Alt + L` → switch to `archive` view
 - `Cmd/Ctrl + Shift + K` → focus the prompt input (`> type once, generate todos`)
 - `Enter` (inside prompt input) → submit prompt and generate todos
 - `Cmd/Ctrl + B` → toggle sidebar

@@ -49,6 +49,7 @@
 }
 
 :root {
+  --caret-color: #000000;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -84,6 +85,7 @@
 }
 
 .dark {
+  --caret-color: #ffffff;
   --background: oklch(0.09 0 0);
   --foreground: oklch(0.94 0 0);
   --card: oklch(0.11 0 0);
@@ -130,6 +132,13 @@
   body {
     @apply bg-background text-foreground;
     background-image: none;
+    caret-color: var(--caret-color);
+  }
+
+  input,
+  textarea,
+  [contenteditable="true"] {
+    caret-color: var(--caret-color);
   }
 
   .dark body {
