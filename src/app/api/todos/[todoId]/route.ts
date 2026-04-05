@@ -29,17 +29,20 @@ export async function PATCH(
     dueDate?: unknown;
     recurrence?: unknown;
     priority?: unknown;
+    title?: unknown;
   } | null;
 
   const status = body?.status;
   const dueDate = body?.dueDate;
   const recurrence = body?.recurrence;
   const priority = body?.priority;
+  const title = body?.title;
 
   const hasStatus = status === "open" || status === "done";
   const hasSchedule = dueDate !== undefined || recurrence !== undefined || priority !== undefined;
+  const hasTitle = title !== undefined;
 
-  if (!hasStatus && !hasSchedule) {
+  if (!hasStatus && !hasSchedule && !hasTitle) {
     return NextResponse.json({ error: "Nothing to update." }, { status: 400 });
   }
 
@@ -93,6 +96,20 @@ export async function PATCH(
       ...(priority !== undefined
         ? { priority: normalizedPriority as 1 | 2 | 3 }
         : {}),
+    });
+  }
+
+  if (hasTitle) {
+    const normalizedTitle =
+      typeof title === "string" ? title.trim().slice(0, 140) : "";
+
+    if (!normalizedTitle) {
+      return NextResponse.json({ error: "Todo title is required." }, { status: 400 });
+    }
+
+    await convex.mutation(api.todos.updateTitle, {
+      todoId: todoId as never,
+      title: normalizedTitle,
     });
   }
 

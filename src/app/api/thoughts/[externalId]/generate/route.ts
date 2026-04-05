@@ -39,7 +39,7 @@ function parseTodayStartUtc(today: unknown) {
     }
   }
 
-  return getStartOfUtcDay(Date.now());
+  return null;
 }
 
 export async function POST(
@@ -64,7 +64,8 @@ export async function POST(
 
   const body = (await request.json().catch(() => null)) as { today?: unknown } | null;
   const todayStartUtc = parseTodayStartUtc(body?.today);
-  const todayDateKey = toDateKey(todayStartUtc);
+  const effectiveTodayStartUtc = todayStartUtc ?? getStartOfUtcDay(Date.now());
+  const todayDateKey = toDateKey(effectiveTodayStartUtc);
 
   const thought = await convex.query(api.thoughts.getByExternalId, { externalId });
   if (!thought) {
@@ -96,11 +97,13 @@ export async function POST(
       todayDateKey,
     });
 
-    await convex.mutation(api.todos.enforceDueDatesAndReschedule, {
-      todayStartUtc,
-    });
+    if (todayStartUtc !== null) {
+      await convex.mutation(api.todos.enforceDueDatesAndReschedule, {
+        todayStartUtc,
+      });
+    }
     const existingTodos = await convex.query(api.todos.listAll, {});
-    const plannedTodos = planGeneratedTodos(generatedTodos, existingTodos, todayStartUtc);
+    const plannedTodos = planGeneratedTodos(generatedTodos, existingTodos, effectiveTodayStartUtc);
 
     if (plannedTodos.length > 0) {
       await convex.mutation(api.todos.createMany, {

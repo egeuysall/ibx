@@ -161,6 +161,7 @@ export const apiClient = {
       dueDate?: string | null;
       recurrence?: TodoRecurrence;
       priority?: TodoPriority;
+      title?: string;
     },
   ) {
     return requestJson<{ ok: true }>(`/api/todos/${todoId}`, {

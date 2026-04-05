@@ -10,19 +10,10 @@ const recurrenceValidator = v.union(
 );
 const priorityValidator = v.union(v.literal(1), v.literal(2), v.literal(3));
 const DAY_MS = 24 * 60 * 60 * 1000;
-const MAX_TODOS_TODAY = 30;
 
 function getStartOfUtcDay(timestamp: number) {
   const date = new Date(timestamp);
   return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
-}
-
-function isDueTodayUtc(timestamp: number | null | undefined, todayStartUtc: number) {
-  if (typeof timestamp !== "number") {
-    return false;
-  }
-
-  return timestamp >= todayStartUtc && timestamp < todayStartUtc + DAY_MS;
 }
 
 function getNextRecurringDueDate(
@@ -74,12 +65,6 @@ export const enforceDueDatesAndReschedule = mutation({
   handler: async (ctx, args) => {
     const todos = await ctx.db.query("todos").withIndex("by_createdAt").order("desc").take(500);
     let updated = 0;
-    const normalizedOpenTodos: Array<{
-      _id: (typeof todos)[number]["_id"];
-      dueDate: number;
-      priority: 1 | 2 | 3;
-      createdAt: number;
-    }> = [];
 
     for (const todo of todos) {
       let nextDueDate = typeof todo.dueDate === "number" ? todo.dueDate : args.todayStartUtc;
@@ -101,31 +86,6 @@ export const enforceDueDatesAndReschedule = mutation({
         updated += 1;
       }
 
-      if (todo.status === "open") {
-        normalizedOpenTodos.push({
-          _id: todo._id,
-          dueDate: nextDueDate,
-          priority: nextPriority,
-          createdAt: todo.createdAt,
-        });
-      }
-    }
-
-    const openDueToday = normalizedOpenTodos
-      .filter((todo) => isDueTodayUtc(todo.dueDate, args.todayStartUtc))
-      .sort((left, right) => {
-        if (left.priority !== right.priority) {
-          return left.priority - right.priority;
-        }
-
-        return left.createdAt - right.createdAt;
-      });
-
-    const overflowTodos = openDueToday.slice(MAX_TODOS_TODAY);
-    for (const [index, todo] of overflowTodos.entries()) {
-      const nextDueDate = args.todayStartUtc + (index + 1) * DAY_MS;
-      await ctx.db.patch(todo._id, { dueDate: nextDueDate });
-      updated += 1;
     }
 
     return { updated };
@@ -311,6 +271,26 @@ export const updateSchedule = mutation({
     }
 
     await ctx.db.patch(args.todoId, patch);
+    return args.todoId;
+  },
+});
+
+export const updateTitle = mutation({
+  args: {
+    todoId: v.id("todos"),
+    title: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const existingTodo = await ctx.db.get(args.todoId);
+    if (!existingTodo) {
+      return null;
+    }
+
+    if (existingTodo.title === args.title) {
+      return args.todoId;
+    }
+
+    await ctx.db.patch(args.todoId, { title: args.title });
     return args.todoId;
   },
 });

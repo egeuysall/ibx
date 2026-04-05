@@ -5,11 +5,6 @@ import { api, convex } from "@/lib/convex-server";
 
 const DATE_KEY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
-function getStartOfUtcDay(timestamp: number) {
-  const date = new Date(timestamp);
-  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
-}
-
 function parseTodayStartUtc(today: string | null | undefined) {
   if (today && DATE_KEY_REGEX.test(today)) {
     const parsed = Date.parse(`${today}T00:00:00.000Z`);
@@ -18,7 +13,7 @@ function parseTodayStartUtc(today: string | null | undefined) {
     }
   }
 
-  return getStartOfUtcDay(Date.now());
+  return null;
 }
 
 export async function GET(request: NextRequest) {
@@ -27,9 +22,12 @@ export async function GET(request: NextRequest) {
     return unauthorizedJson();
   }
 
-  await convex.mutation(api.todos.enforceDueDatesAndReschedule, {
-    todayStartUtc: parseTodayStartUtc(request.nextUrl.searchParams.get("today")),
-  });
+  const todayStartUtc = parseTodayStartUtc(request.nextUrl.searchParams.get("today"));
+  if (todayStartUtc !== null) {
+    await convex.mutation(api.todos.enforceDueDatesAndReschedule, {
+      todayStartUtc,
+    });
+  }
 
   const todos = await convex.query(api.todos.listAll, {});
 

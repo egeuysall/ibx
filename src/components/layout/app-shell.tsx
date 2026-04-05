@@ -475,6 +475,7 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
   const [queuedPromptCount, setQueuedPromptCount] = useState(0);
   const [pendingTodoId, setPendingTodoId] = useState<string | null>(null);
   const [editingTodoId, setEditingTodoId] = useState<string | null>(null);
+  const [editingTitleInput, setEditingTitleInput] = useState("");
   const [holdingTodoId, setHoldingTodoId] = useState<string | null>(null);
   const [todoPendingDelete, setTodoPendingDelete] = useState<TodoItem | null>(null);
   const [holdProgress, setHoldProgress] = useState(0);
@@ -1079,6 +1080,57 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
     }
   };
 
+  const updateTodoTitle = async (todo: TodoItem) => {
+    const nextTitle = editingTitleInput.trim().slice(0, 140);
+
+    if (!nextTitle) {
+      toast.error("todo title is required");
+      setEditingTitleInput(todo.title);
+      return;
+    }
+
+    if (nextTitle === todo.title) {
+      return;
+    }
+
+    setPendingTodoId(todo.id);
+    const previousTitle = todo.title;
+    setTodos((previousTodos) =>
+      sortTodos(
+        previousTodos.map((item) =>
+          item.id === todo.id
+            ? {
+                ...item,
+                title: nextTitle,
+              }
+            : item,
+        ),
+      ),
+    );
+
+    try {
+      await apiClient.updateTodo(todo.id, { title: nextTitle });
+      await refreshTodos();
+    } catch (error) {
+      toast.error(parseErrorMessage(error));
+      setTodos((previousTodos) =>
+        sortTodos(
+          previousTodos.map((item) =>
+            item.id === todo.id
+              ? {
+                  ...item,
+                  title: previousTitle,
+                }
+              : item,
+          ),
+        ),
+      );
+      setEditingTitleInput(previousTitle);
+    } finally {
+      setPendingTodoId(null);
+    }
+  };
+
   const confirmDeleteTodo = async () => {
     if (!todoPendingDelete) {
       return;
@@ -1088,7 +1140,14 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
     setPendingTodoId(targetTodo.id);
     try {
       await apiClient.deleteTodo(targetTodo.id);
-      setEditingTodoId((current) => (current === targetTodo.id ? null : current));
+      setEditingTodoId((current) => {
+        if (current === targetTodo.id) {
+          setEditingTitleInput("");
+          return null;
+        }
+
+        return current;
+      });
       setTodoPendingDelete(null);
       toast.message("todo deleted");
       await refreshTodos();
@@ -1355,9 +1414,11 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
                             return;
                           }
 
-                          setEditingTodoId((currentTodoId) =>
-                            currentTodoId === todo.id ? null : todo.id,
-                          );
+                          setEditingTodoId((currentTodoId) => {
+                            const isClosing = currentTodoId === todo.id;
+                            setEditingTitleInput(isClosing ? "" : todo.title);
+                            return isClosing ? null : todo.id;
+                          });
                         }}
                         onPointerDown={(event) => {
                           if (
@@ -1518,6 +1579,40 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
                               onClick={(event) => event.stopPropagation()}
                               onPointerDown={(event) => event.stopPropagation()}
                             >
+                              <Input
+                                value={editingTitleInput}
+                                onChange={(event) =>
+                                  setEditingTitleInput(event.target.value)
+                                }
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter") {
+                                    event.preventDefault();
+                                    void updateTodoTitle(todo);
+                                  }
+
+                                  if (event.key === "Escape") {
+                                    event.preventDefault();
+                                    setEditingTitleInput(todo.title);
+                                  }
+                                }}
+                                className="h-8 w-full sm:w-72"
+                                disabled={pendingTodoId === todo.id}
+                                maxLength={140}
+                                aria-label="Edit todo title"
+                              />
+                              <Button
+                                type="button"
+                                size="sm"
+                                disabled={pendingTodoId === todo.id}
+                                onClick={() => {
+                                  void updateTodoTitle(todo);
+                                }}
+                                onPointerDown={(event) =>
+                                  event.stopPropagation()
+                                }
+                              >
+                                save title
+                              </Button>
                               <Popover>
                                 <PopoverTrigger
                                   render={

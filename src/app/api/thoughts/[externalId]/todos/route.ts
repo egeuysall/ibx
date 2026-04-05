@@ -14,15 +14,6 @@ function getExternalId(params: { externalId: string }) {
   return externalId;
 }
 
-function getStartOfUtcDay(timestamp: number) {
-  const currentDate = new Date(timestamp);
-  return Date.UTC(
-    currentDate.getUTCFullYear(),
-    currentDate.getUTCMonth(),
-    currentDate.getUTCDate(),
-  );
-}
-
 function parseTodayStartUtc(today: string | null | undefined) {
   if (today && DATE_KEY_REGEX.test(today)) {
     const parsed = Date.parse(`${today}T00:00:00.000Z`);
@@ -31,7 +22,7 @@ function parseTodayStartUtc(today: string | null | undefined) {
     }
   }
 
-  return getStartOfUtcDay(Date.now());
+  return null;
 }
 
 export async function GET(
@@ -55,8 +46,9 @@ export async function GET(
   }
 
   const todayStartUtc = parseTodayStartUtc(request.nextUrl.searchParams.get("today"));
-
-  await convex.mutation(api.todos.enforceDueDatesAndReschedule, { todayStartUtc });
+  if (todayStartUtc !== null) {
+    await convex.mutation(api.todos.enforceDueDatesAndReschedule, { todayStartUtc });
+  }
 
   const thought = await convex.query(api.thoughts.getByExternalId, { externalId });
   if (!thought) {
