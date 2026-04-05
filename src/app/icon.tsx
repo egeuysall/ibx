@@ -14,27 +14,29 @@ export default function Icon() {
         style={{
           width: "100%",
           height: "100%",
+          position: "relative",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           background: "transparent",
         }}
       >
-        <svg
-          viewBox="0 0 100 100"
-          width="74%"
-          height="74%"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
+        <span
+          style={{
+            position: "absolute",
+            left: "50%",
+            top: "50%",
+            transform: "translate(-50%, -50%)",
+            display: "block",
+            color: "#ffffff",
+            fontFamily: '"Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace',
+            fontSize: 360,
+            fontWeight: 700,
+            lineHeight: 1,
+          }}
         >
-          <polyline
-            points="34,34 66,50 34,66"
-            stroke="#ffffff"
-            strokeWidth="8.5"
-            strokeLinecap="square"
-            strokeLinejoin="miter"
-          />
-        </svg>
+          &gt;
+        </span>
       </div>
     ),
     {
