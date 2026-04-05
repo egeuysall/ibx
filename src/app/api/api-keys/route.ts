@@ -4,6 +4,8 @@ import { getRouteSession, unauthorizedJson, validateCsrfForSessionAuth } from "@
 import { createApiKey } from "@/lib/api-keys";
 import { api, convex } from "@/lib/convex-server";
 
+type ApiKeyPermission = "read" | "write" | "both";
+
 function normalizeKeyName(value: unknown) {
   if (typeof value !== "string") {
     return "default";
@@ -11,6 +13,14 @@ function normalizeKeyName(value: unknown) {
 
   const normalized = value.trim().slice(0, 64);
   return normalized.length > 0 ? normalized : "default";
+}
+
+function normalizePermission(value: unknown): ApiKeyPermission {
+  if (value === "read" || value === "write" || value === "both") {
+    return value;
+  }
+
+  return "both";
 }
 
 export async function GET(request: NextRequest) {
@@ -27,6 +37,7 @@ export async function GET(request: NextRequest) {
       name: key.name,
       prefix: key.prefix,
       last4: key.last4,
+      permission: key.permission ?? "both",
       createdAt: key.createdAt,
     })),
   });
@@ -42,8 +53,12 @@ export async function POST(request: NextRequest) {
     return csrfError;
   }
 
-  const body = (await request.json().catch(() => null)) as { name?: unknown } | null;
+  const body = (await request.json().catch(() => null)) as {
+    name?: unknown;
+    permission?: unknown;
+  } | null;
   const name = normalizeKeyName(body?.name);
+  const permission = normalizePermission(body?.permission);
 
   const { rawKey, keyHash, last4, prefix } = createApiKey();
 
@@ -52,6 +67,7 @@ export async function POST(request: NextRequest) {
     keyHash,
     prefix,
     last4,
+    permission,
   });
 
   return NextResponse.json({
@@ -62,6 +78,7 @@ export async function POST(request: NextRequest) {
       name,
       prefix,
       last4,
+      permission,
     },
   });
 }

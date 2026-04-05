@@ -2,7 +2,12 @@ import { randomUUID } from "node:crypto";
 
 import { NextRequest, NextResponse } from "next/server";
 
-import { getRouteAuth, unauthorizedJson, validateCsrfForSessionAuth } from "@/lib/auth-server";
+import {
+  getRouteAuth,
+  unauthorizedJson,
+  validateApiKeyPermission,
+  validateCsrfForSessionAuth,
+} from "@/lib/auth-server";
 import { getEgeContext } from "@/lib/ege-context";
 import { generateTodosFromThought } from "@/lib/ai";
 import { api, convex } from "@/lib/convex-server";
@@ -53,6 +58,10 @@ export async function POST(
   const csrfError = validateCsrfForSessionAuth(request, auth);
   if (csrfError) {
     return csrfError;
+  }
+  const permissionError = validateApiKeyPermission(request, auth);
+  if (permissionError) {
+    return permissionError;
   }
 
   const resolvedParams = await params;

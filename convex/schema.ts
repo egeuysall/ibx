@@ -15,6 +15,9 @@ export default defineSchema({
     keyHash: v.string(),
     prefix: v.string(),
     last4: v.string(),
+    permission: v.optional(
+      v.union(v.literal("read"), v.literal("write"), v.literal("both")),
+    ),
     createdAt: v.number(),
     revokedAt: v.union(v.number(), v.null()),
   })

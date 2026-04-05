@@ -125,6 +125,7 @@ export const apiClient = {
         name: string;
         prefix: string;
         last4: string;
+        permission: "read" | "write" | "both";
         createdAt: number;
       }>;
     }>("/api/api-keys", {
@@ -132,7 +133,7 @@ export const apiClient = {
     });
   },
 
-  async createApiKey(name: string) {
+  async createApiKey(name: string, permission: "read" | "write" | "both" = "both") {
     return requestJson<{
       ok: true;
       apiKey: string;
@@ -141,10 +142,11 @@ export const apiClient = {
         name: string;
         prefix: string;
         last4: string;
+        permission: "read" | "write" | "both";
       };
     }>("/api/api-keys", {
       method: "POST",
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name, permission }),
     });
   },
 

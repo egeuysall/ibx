@@ -12,6 +12,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       authenticated: true,
       authType: "apiKey",
+      permission: auth.apiKey.permission,
       expiresAt: null,
     });
   }

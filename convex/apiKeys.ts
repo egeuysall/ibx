@@ -24,6 +24,7 @@ export const create = mutation({
     keyHash: v.string(),
     prefix: v.string(),
     last4: v.string(),
+    permission: v.union(v.literal("read"), v.literal("write"), v.literal("both")),
   },
   handler: async (ctx, args) => {
     const existing = await ctx.db
@@ -40,6 +41,7 @@ export const create = mutation({
       keyHash: args.keyHash,
       prefix: args.prefix,
       last4: args.last4,
+      permission: args.permission,
       createdAt: Date.now(),
       revokedAt: null,
     });

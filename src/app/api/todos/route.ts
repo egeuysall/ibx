@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { getRouteAuth, unauthorizedJson } from "@/lib/auth-server";
+import {
+  getRouteAuth,
+  unauthorizedJson,
+  validateApiKeyPermission,
+} from "@/lib/auth-server";
 import { api, convex } from "@/lib/convex-server";
 
 const DATE_KEY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
@@ -20,6 +24,10 @@ export async function GET(request: NextRequest) {
   const auth = await getRouteAuth(request);
   if (!auth) {
     return unauthorizedJson();
+  }
+  const permissionError = validateApiKeyPermission(request, auth);
+  if (permissionError) {
+    return permissionError;
   }
 
   const todayStartUtc = parseTodayStartUtc(request.nextUrl.searchParams.get("today"));

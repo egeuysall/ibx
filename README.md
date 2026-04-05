@@ -164,8 +164,13 @@ Todos:
 API keys:
 
 - `GET /api/api-keys` (active only)
-- `POST /api/api-keys` (returns raw key once)
+- `POST /api/api-keys` (returns raw key once, optional `permission: read|write|both`)
 - `DELETE /api/api-keys/:keyId` (revokes key)
+
+API key permissions:
+- `read` => allows `GET/HEAD/OPTIONS` only
+- `write` => allows `POST/PATCH/DELETE` only
+- `both` => allows all operations (default)
 
 Bearer usage:
 

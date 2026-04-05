@@ -15,6 +15,10 @@ ibx accepts two auth modes:
 - Keys are generated with cryptographic randomness.
 - Only SHA-256 hashes are stored server-side.
 - Revoked keys cannot authenticate.
+- Keys support permissions:
+  - `read` => allows `GET/HEAD/OPTIONS`
+  - `write` => allows `POST/PATCH/DELETE`
+  - `both` => allows all methods (default)
 
 ### Create and revoke keys
 
@@ -23,6 +27,15 @@ Key management requires a valid session cookie:
 - `GET /api/api-keys`
 - `POST /api/api-keys`
 - `DELETE /api/api-keys/:keyId`
+
+Create payload supports optional permission:
+
+```json
+{
+  "name": "my-integration",
+  "permission": "both"
+}
+```
 
 Use API keys for app-to-app or server-to-server calls.
 

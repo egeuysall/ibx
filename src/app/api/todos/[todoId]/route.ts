@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { getRouteAuth, unauthorizedJson, validateCsrfForSessionAuth } from "@/lib/auth-server";
+import {
+  getRouteAuth,
+  unauthorizedJson,
+  validateApiKeyPermission,
+  validateCsrfForSessionAuth,
+} from "@/lib/auth-server";
 import { api, convex } from "@/lib/convex-server";
 import type { TodoStatus } from "@/lib/types";
 
@@ -15,6 +20,10 @@ export async function PATCH(
   const csrfError = validateCsrfForSessionAuth(request, auth);
   if (csrfError) {
     return csrfError;
+  }
+  const permissionError = validateApiKeyPermission(request, auth);
+  if (permissionError) {
+    return permissionError;
   }
 
   const resolvedParams = await params;
@@ -127,6 +136,10 @@ export async function DELETE(
   const csrfError = validateCsrfForSessionAuth(request, auth);
   if (csrfError) {
     return csrfError;
+  }
+  const permissionError = validateApiKeyPermission(request, auth);
+  if (permissionError) {
+    return permissionError;
   }
 
   const resolvedParams = await params;

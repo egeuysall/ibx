@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { getRouteAuth, unauthorizedJson, validateCsrfForSessionAuth } from "@/lib/auth-server";
+import {
+  getRouteAuth,
+  unauthorizedJson,
+  validateApiKeyPermission,
+  validateCsrfForSessionAuth,
+} from "@/lib/auth-server";
 import { api, convex } from "@/lib/convex-server";
 import type { ThoughtStatus } from "@/lib/types";
 
@@ -72,6 +77,10 @@ export async function POST(request: NextRequest) {
   const csrfError = validateCsrfForSessionAuth(request, auth);
   if (csrfError) {
     return csrfError;
+  }
+  const permissionError = validateApiKeyPermission(request, auth);
+  if (permissionError) {
+    return permissionError;
   }
 
   const payload = (await request.json().catch(() => null)) as { thoughts?: unknown } | null;

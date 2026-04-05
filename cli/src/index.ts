@@ -287,6 +287,7 @@ async function verifyAuth(baseUrl: string, apiKey: string) {
   const payload = (await response.json().catch(() => ({}))) as {
     authenticated?: boolean;
     authType?: string;
+    permission?: string;
     error?: string;
   };
 
@@ -637,12 +638,14 @@ async function runAuthCommand(parsed: ParsedArgs) {
         ok: true,
         baseUrl,
         authType: verification.authType ?? "apiKey",
+        permission: verification.permission ?? "both",
       });
       return;
     }
 
     printOk(`connected to ${baseUrl}`);
     printInfo(`auth: ${verification.authType ?? "apiKey"}`);
+    printInfo(`permission: ${verification.permission ?? "both"}`);
     return;
   }
 
@@ -677,6 +680,7 @@ async function runAuthCommand(parsed: ParsedArgs) {
         printJson({
           authenticated: true,
           authType: verification.authType ?? "apiKey",
+          permission: verification.permission ?? "both",
           baseUrl: config.baseUrl,
           keyHint: `${API_KEY_PREFIX}...${config.apiKey.slice(-4)}`,
         });
@@ -685,6 +689,7 @@ async function runAuthCommand(parsed: ParsedArgs) {
 
       printOk(`authenticated (${verification.authType ?? "apiKey"})`);
       print(`${color.gray("server:")} ${config.baseUrl}`);
+      print(`${color.gray("permission:")} ${verification.permission ?? "both"}`);
       print(
         `${color.gray("key:")} ${API_KEY_PREFIX}...${config.apiKey.slice(-4)}`,
       );

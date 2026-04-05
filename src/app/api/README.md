@@ -26,6 +26,11 @@ curl -sS "$IBX_BASE_URL/api/session" \
   -H "Authorization: Bearer $IBX_API_KEY"
 ```
 
+API key permissions:
+- `read` => `GET/HEAD/OPTIONS` only
+- `write` => `POST/PATCH/DELETE` only
+- `both` => all operations
+
 ## Bearer-Key Endpoints
 
 ### `POST /api/todos/generate`

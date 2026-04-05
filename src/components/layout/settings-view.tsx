@@ -46,11 +46,13 @@ const LOCAL_STATUS_TIME_FORMATTER = new Intl.DateTimeFormat("en-US", {
 });
 
 type DefaultView = "today" | "upcoming" | "archive";
+type ApiKeyPermission = "read" | "write" | "both";
 type ApiKeySummary = {
   id: string;
   name: string;
   prefix: string;
   last4: string;
+  permission: ApiKeyPermission;
   createdAt: number;
 };
 
@@ -92,6 +94,7 @@ export function SettingsView() {
   const [promptAutofocus, setPromptAutofocus] = useState(true);
   const [hasHydratedPreferences, setHasHydratedPreferences] = useState(false);
   const [keyName, setKeyName] = useState("cli");
+  const [keyPermission, setKeyPermission] = useState<ApiKeyPermission>("both");
   const [createdApiKey, setCreatedApiKey] = useState<string | null>(null);
   const [apiKeys, setApiKeys] = useState<ApiKeySummary[]>([]);
   const [isLoadingKeys, setIsLoadingKeys] = useState(true);
@@ -201,9 +204,10 @@ export function SettingsView() {
   const handleCreateApiKey = () => {
     startCreateKeyTransition(async () => {
       try {
-        const created = await apiClient.createApiKey(keyName);
+        const created = await apiClient.createApiKey(keyName, keyPermission);
         setCreatedApiKey(created.apiKey);
         setKeyName("cli");
+        setKeyPermission("both");
         toast.message("API key created");
         await refreshApiKeys();
       } catch (error) {
@@ -447,6 +451,32 @@ export function SettingsView() {
                   className="h-7 w-44 rounded-md border border-input bg-background px-2 text-xs outline-none focus-visible:border-ring"
                   placeholder="key name"
                 />
+                <ToggleGroup
+                  multiple={false}
+                  value={[keyPermission]}
+                  onValueChange={(values) => {
+                    const nextPermission = values[0];
+                    if (
+                      nextPermission === "read" ||
+                      nextPermission === "write" ||
+                      nextPermission === "both"
+                    ) {
+                      setKeyPermission(nextPermission);
+                    }
+                  }}
+                  variant="default"
+                  size="sm"
+                >
+                  <ToggleGroupItem value="both" className={PICKER_ITEM_CLASS}>
+                    both
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="read" className={PICKER_ITEM_CLASS}>
+                    read
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="write" className={PICKER_ITEM_CLASS}>
+                    write
+                  </ToggleGroupItem>
+                </ToggleGroup>
                 <Button
                   variant="outline"
                   size="sm"
@@ -501,7 +531,7 @@ export function SettingsView() {
                       <div className="min-w-0">
                         <p>{key.name}</p>
                         <p className="text-muted-foreground">
-                          {key.prefix}_...{key.last4}
+                          {key.prefix}_...{key.last4} / {key.permission}
                         </p>
                       </div>
                       <Button

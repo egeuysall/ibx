@@ -25,6 +25,7 @@ export type ApiKeyCheck = {
   name: string;
   prefix: string;
   last4: string;
+  permission: "read" | "write" | "both";
   createdAt: number;
 };
 
@@ -109,6 +110,7 @@ async function resolveApiKey(rawKey: string) {
     name: key.name,
     prefix: key.prefix,
     last4: key.last4,
+    permission: key.permission ?? "both",
     createdAt: key.createdAt,
   } satisfies ApiKeyCheck;
 }
@@ -218,6 +220,33 @@ export function validateCsrfForSessionAuth(request: NextRequest, auth: RouteAuth
   }
 
   return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+}
+
+export function validateApiKeyPermission(request: NextRequest, auth: RouteAuth) {
+  if (auth.type !== "apiKey") {
+    return null;
+  }
+
+  if (auth.apiKey.permission === "both") {
+    return null;
+  }
+
+  const isSafeMethod = SAFE_METHODS.has(request.method);
+  if (auth.apiKey.permission === "read" && isSafeMethod) {
+    return null;
+  }
+
+  if (auth.apiKey.permission === "write" && !isSafeMethod) {
+    return null;
+  }
+
+  const operationType = isSafeMethod ? "read" : "write";
+  return NextResponse.json(
+    {
+      error: `API key does not allow ${operationType} operations.`,
+    },
+    { status: 403 },
+  );
 }
 
 export function unauthorizedJson(message = "Unauthorized") {

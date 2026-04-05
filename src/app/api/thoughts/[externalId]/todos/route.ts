@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { getRouteAuth, unauthorizedJson, validateCsrfForSessionAuth } from "@/lib/auth-server";
+import {
+  getRouteAuth,
+  unauthorizedJson,
+  validateApiKeyPermission,
+  validateCsrfForSessionAuth,
+} from "@/lib/auth-server";
 import { api, convex } from "@/lib/convex-server";
 
 const DATE_KEY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
@@ -36,6 +41,10 @@ export async function GET(
   const csrfError = validateCsrfForSessionAuth(request, auth);
   if (csrfError) {
     return csrfError;
+  }
+  const permissionError = validateApiKeyPermission(request, auth);
+  if (permissionError) {
+    return permissionError;
   }
 
   const resolvedParams = await params;
@@ -86,6 +95,10 @@ export async function POST(
   const csrfError = validateCsrfForSessionAuth(request, auth);
   if (csrfError) {
     return csrfError;
+  }
+  const permissionError = validateApiKeyPermission(request, auth);
+  if (permissionError) {
+    return permissionError;
   }
 
   const resolvedParams = await params;

@@ -3,7 +3,12 @@ import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 
 import { generateTodosFromThought } from "@/lib/ai";
-import { getRouteAuth, unauthorizedJson, validateCsrfForSessionAuth } from "@/lib/auth-server";
+import {
+  getRouteAuth,
+  unauthorizedJson,
+  validateApiKeyPermission,
+  validateCsrfForSessionAuth,
+} from "@/lib/auth-server";
 import { api, convex } from "@/lib/convex-server";
 import { getEgeContext } from "@/lib/ege-context";
 import { planGeneratedTodos } from "@/lib/todo-planning";
@@ -86,6 +91,10 @@ export async function POST(request: NextRequest) {
   const csrfError = validateCsrfForSessionAuth(request, auth);
   if (csrfError) {
     return csrfError;
+  }
+  const permissionError = validateApiKeyPermission(request, auth);
+  if (permissionError) {
+    return permissionError;
   }
 
   const body = (await request.json().catch(() => null)) as

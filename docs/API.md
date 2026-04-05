@@ -26,9 +26,15 @@ Request:
 
 ```json
 {
-  "name": "my-integration"
+  "name": "my-integration",
+  "permission": "both"
 }
 ```
+
+`permission` can be:
+- `"read"`: allows `GET/HEAD/OPTIONS` only
+- `"write"`: allows `POST/PATCH/DELETE` only
+- `"both"`: allows all operations (default)
 
 Response:
 
@@ -40,7 +46,8 @@ Response:
     "id": "...",
     "name": "my-integration",
     "prefix": "iak",
-    "last4": "abcd"
+    "last4": "abcd",
+    "permission": "both"
   }
 }
 ```
@@ -59,6 +66,7 @@ With Bearer auth, returns:
 {
   "authenticated": true,
   "authType": "apiKey",
+  "permission": "both",
   "expiresAt": null
 }
 ```
@@ -177,7 +185,7 @@ Typical status codes:
 
 - `400` invalid input
 - `401` unauthorized
-- `403` forbidden (CSRF/session-origin check failure)
+- `403` forbidden (CSRF/session-origin check failure or API key permission mismatch)
 - `404` resource not found
 - `429` login rate limit
 - `500` internal or AI generation failure
