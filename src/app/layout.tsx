@@ -11,7 +11,7 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const ICON_VERSION = "20260404";
+const ICON_VERSION = "20260405";
 
 export const metadata: Metadata = {
   title: "ibx",
