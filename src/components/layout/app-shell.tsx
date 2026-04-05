@@ -400,25 +400,30 @@ function decodePathShortcutPayload(pathname: string) {
   }
 }
 
-function readShortcutPayloadFromLocation(location: Location): ShortcutPayload | null {
+function readShortcutPayloadFromLocation(
+  location: Location,
+): ShortcutPayload | null {
   const url = new URL(location.href);
   const hashParams = readHashParams(url.hash);
   const pathPayload = decodePathShortcutPayload(url.pathname);
 
-  const text = url.searchParams.get("shortcut")
-    ?? hashParams.get("shortcut")
-    ?? pathPayload?.text
-    ?? null;
+  const text =
+    url.searchParams.get("shortcut") ??
+    hashParams.get("shortcut") ??
+    pathPayload?.text ??
+    null;
 
   if (!text) {
     return null;
   }
 
-  const sourceParam = url.searchParams.get("source") ?? hashParams.get("source");
-  const captureId = url.searchParams.get("captureId")
-    ?? hashParams.get("captureId")
-    ?? pathPayload?.captureId
-    ?? null;
+  const sourceParam =
+    url.searchParams.get("source") ?? hashParams.get("source");
+  const captureId =
+    url.searchParams.get("captureId") ??
+    hashParams.get("captureId") ??
+    pathPayload?.captureId ??
+    null;
 
   return {
     text,
@@ -427,7 +432,10 @@ function readShortcutPayloadFromLocation(location: Location): ShortcutPayload | 
   };
 }
 
-function clearShortcutPayloadFromLocation(location: Location, fallbackFilter: TodoFilter) {
+function clearShortcutPayloadFromLocation(
+  location: Location,
+  fallbackFilter: TodoFilter,
+) {
   const url = new URL(location.href);
   const hashParams = readHashParams(url.hash);
 
@@ -477,7 +485,9 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
   const [editingTodoId, setEditingTodoId] = useState<string | null>(null);
   const [editingTitleInput, setEditingTitleInput] = useState("");
   const [holdingTodoId, setHoldingTodoId] = useState<string | null>(null);
-  const [todoPendingDelete, setTodoPendingDelete] = useState<TodoItem | null>(null);
+  const [todoPendingDelete, setTodoPendingDelete] = useState<TodoItem | null>(
+    null,
+  );
   const [holdProgress, setHoldProgress] = useState(0);
   const [expandedNoteIds, setExpandedNoteIds] = useState<
     Record<string, boolean>
@@ -859,7 +869,9 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
           toast.message("shortcut received. generating todos…");
           await flushQueuedPrompts();
         } else if (!isOnline) {
-          toast.message("shortcut received offline. queued for next connection.");
+          toast.message(
+            "shortcut received offline. queued for next connection.",
+          );
         } else {
           toast.message("shortcut received. sign in to process queued items.");
         }
@@ -1351,7 +1363,7 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
                 onChange={(event) => setPromptInput(event.target.value)}
                 placeholder="type once, generate todos"
                 autoFocus={promptAutofocus}
-                className="h-8 border-0 bg-transparent px-0 shadow-none ring-0 focus-visible:border-transparent focus-visible:ring-0 dark:bg-transparent"
+                className="h-8 border-0 bg-transparent lowercase text-[0.8rem]! px-0 shadow-none ring-0 focus-visible:border-transparent focus-visible:ring-0 dark:bg-transparent"
                 onKeyDown={(event) => {
                   if (event.key === "Enter") {
                     event.preventDefault();
@@ -1740,7 +1752,8 @@ export function AppShell({ initialAuthenticated }: AppShellProps) {
             <AlertDialogHeader>
               <AlertDialogTitle>delete todo?</AlertDialogTitle>
               <AlertDialogDescription>
-                this permanently removes {todoPendingDelete?.title ?? "this todo"}.
+                this permanently removes{" "}
+                {todoPendingDelete?.title ?? "this todo"}.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
