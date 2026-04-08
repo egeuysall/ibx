@@ -142,7 +142,7 @@ function SidebarProvider({
     readStoredSidebarOpen(defaultOpen)
   )
 
-  React.useEffect(() => {
+  const syncOpenFromStorage = React.useCallback(() => {
     if (openProp !== undefined) {
       setHasHydratedOpen(true)
       return
@@ -151,6 +151,27 @@ function SidebarProvider({
     _setOpen(readStoredSidebarOpen(defaultOpen))
     setHasHydratedOpen(true)
   }, [defaultOpen, openProp])
+
+  React.useEffect(() => {
+    syncOpenFromStorage()
+  }, [syncOpenFromStorage])
+
+  React.useEffect(() => {
+    if (openProp !== undefined) {
+      return
+    }
+
+    const handleRehydrate = () => {
+      syncOpenFromStorage()
+    }
+
+    window.addEventListener("pageshow", handleRehydrate)
+    window.addEventListener("focus", handleRehydrate)
+    return () => {
+      window.removeEventListener("pageshow", handleRehydrate)
+      window.removeEventListener("focus", handleRehydrate)
+    }
+  }, [openProp, syncOpenFromStorage])
 
   const persistSidebarOpen = React.useCallback((openState: boolean) => {
     document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
