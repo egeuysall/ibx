@@ -32,9 +32,9 @@ function ComboboxTrigger({
       {children}
       <span
         aria-hidden
-        className="pointer-events-none inline-flex size-4 items-center justify-center text-[0.75rem] leading-none text-muted-foreground"
+        className="pointer-events-none inline-flex size-4 items-center justify-center text-muted-foreground"
       >
-        v
+        <span className="mb-0.5 block size-2 rotate-45 border-b border-r border-current" />
       </span>
     </ComboboxPrimitive.Trigger>
   )
@@ -50,9 +50,10 @@ function ComboboxClear({ className, ...props }: ComboboxPrimitive.Clear.Props) {
     >
       <span
         aria-hidden
-        className="pointer-events-none inline-flex size-4 items-center justify-center text-[0.75rem] leading-none"
+        className="pointer-events-none relative inline-flex size-4 items-center justify-center"
       >
-        x
+        <span className="absolute h-px w-2.5 rotate-45 bg-current" />
+        <span className="absolute h-px w-2.5 -rotate-45 bg-current" />
       </span>
     </ComboboxPrimitive.Clear>
   )
@@ -162,10 +163,9 @@ function ComboboxItem({
       >
         <span
           aria-hidden
-          className="pointer-events-none inline-flex size-4 items-center justify-center text-[0.75rem] leading-none"
-        >
-          +
-        </span>
+          className="pointer-events-none block size-1.5 rounded-full bg-current"
+      >
+      </span>
       </ComboboxPrimitive.ItemIndicator>
     </ComboboxPrimitive.Item>
   )
@@ -269,9 +269,10 @@ function ComboboxChip({
         >
           <span
             aria-hidden
-            className="pointer-events-none inline-flex size-4 items-center justify-center text-[0.75rem] leading-none"
+            className="pointer-events-none relative inline-flex size-4 items-center justify-center"
           >
-            x
+            <span className="absolute h-px w-2.5 rotate-45 bg-current" />
+            <span className="absolute h-px w-2.5 -rotate-45 bg-current" />
           </span>
         </ComboboxPrimitive.ChipRemove>
       )}
