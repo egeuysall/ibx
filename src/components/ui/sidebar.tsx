@@ -33,6 +33,23 @@ const SIDEBAR_WIDTH_MOBILE = "18rem"
 const SIDEBAR_WIDTH_ICON = "3rem"
 const SIDEBAR_KEYBOARD_SHORTCUT = "b"
 
+function parseStoredSidebarOpen(value: string | null | undefined) {
+  if (typeof value !== "string") {
+    return null
+  }
+
+  const normalized = value.trim().toLowerCase()
+  if (normalized === "true" || normalized === "1" || normalized === "on") {
+    return true
+  }
+
+  if (normalized === "false" || normalized === "0" || normalized === "off") {
+    return false
+  }
+
+  return null
+}
+
 function readSidebarOpenFromCookie() {
   if (typeof document === "undefined") {
     return null
@@ -46,11 +63,9 @@ function readSidebarOpenFromCookie() {
     }
 
     const rawValue = rawValueParts.join("=").trim()
-    if (rawValue === "true") {
-      return true
-    }
-    if (rawValue === "false") {
-      return false
+    const parsed = parseStoredSidebarOpen(rawValue)
+    if (parsed !== null) {
+      return parsed
     }
   }
 
@@ -67,12 +82,9 @@ function readStoredSidebarOpen(defaultOpen: boolean) {
       window.localStorage.getItem(SIDEBAR_LOCAL_STORAGE_KEY) ??
       window.localStorage.getItem(SIDEBAR_LOCAL_STORAGE_KEY_LEGACY)
 
-    if (storedValue === "true" || storedValue === "1") {
-      return true
-    }
-
-    if (storedValue === "false" || storedValue === "0") {
-      return false
+    const parsed = parseStoredSidebarOpen(storedValue)
+    if (parsed !== null) {
+      return parsed
     }
   } catch {
     // Ignore localStorage failures (private mode, blocked storage)
@@ -122,6 +134,7 @@ function SidebarProvider({
 }) {
   const isMobile = useIsMobile()
   const [openMobile, setOpenMobile] = React.useState(false)
+  const [hasHydratedOpen, setHasHydratedOpen] = React.useState(false)
 
   // This is the internal state of the sidebar.
   // We use openProp and setOpenProp for control from outside the component.
@@ -131,10 +144,12 @@ function SidebarProvider({
 
   React.useEffect(() => {
     if (openProp !== undefined) {
+      setHasHydratedOpen(true)
       return
     }
 
     _setOpen(readStoredSidebarOpen(defaultOpen))
+    setHasHydratedOpen(true)
   }, [defaultOpen, openProp])
 
   const persistSidebarOpen = React.useCallback((openState: boolean) => {
@@ -156,12 +171,12 @@ function SidebarProvider({
   const open = openProp ?? _open
 
   React.useEffect(() => {
-    if (isMobile) {
+    if (isMobile || !hasHydratedOpen) {
       return
     }
 
     persistSidebarOpen(open)
-  }, [isMobile, open, persistSidebarOpen])
+  }, [hasHydratedOpen, isMobile, open, persistSidebarOpen])
 
   const setOpen = React.useCallback(
     (value: boolean | ((value: boolean) => boolean)) => {

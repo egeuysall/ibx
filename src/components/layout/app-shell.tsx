@@ -999,7 +999,6 @@ export function AppShell({
   const holdStartedAtRef = useRef<number | null>(null);
   const holdStartRef = useRef<{ x: number; y: number } | null>(null);
   const heldTodoIdRef = useRef<string | null>(null);
-  const openedEditOnPointerDownTodoIdRef = useRef<string | null>(null);
   const suppressNextClickRef = useRef(false);
   const isShortcutConsumeRunning = useRef(false);
   const lastUnauthorizedToastAtRef = useRef(0);
@@ -2493,11 +2492,6 @@ export function AppShell({
                               return;
                             }
 
-                            if (openedEditOnPointerDownTodoIdRef.current === todo.id) {
-                              openedEditOnPointerDownTodoIdRef.current = null;
-                              return;
-                            }
-
                             setEditingTodoId((currentTodoId) => {
                               const isClosing = currentTodoId === todo.id;
                               setEditingTitleInput(isClosing ? "" : todo.title);
@@ -2517,13 +2511,6 @@ export function AppShell({
                                 event.button !== 0)
                             ) {
                               return;
-                            }
-
-                            if (editingTodoId !== todo.id) {
-                              openedEditOnPointerDownTodoIdRef.current = todo.id;
-                              setEditingTodoId(todo.id);
-                              setEditingTitleInput(todo.title);
-                              setEditingLinksInput(todoMeta.linksInputValue);
                             }
 
                             cancelHoldInteraction();
