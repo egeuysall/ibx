@@ -27,6 +27,7 @@ import {
 const SIDEBAR_COOKIE_NAME = "sidebar_state"
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
 const SIDEBAR_LOCAL_STORAGE_KEY = "ibx:sidebar-open"
+const SIDEBAR_LOCAL_STORAGE_KEY_LEGACY = "ibx-sidebar-open"
 const SIDEBAR_WIDTH = "16rem"
 const SIDEBAR_WIDTH_MOBILE = "18rem"
 const SIDEBAR_WIDTH_ICON = "3rem"
@@ -62,12 +63,15 @@ function readStoredSidebarOpen(defaultOpen: boolean) {
   }
 
   try {
-    const storedValue = window.localStorage.getItem(SIDEBAR_LOCAL_STORAGE_KEY)
-    if (storedValue === "true") {
+    const storedValue =
+      window.localStorage.getItem(SIDEBAR_LOCAL_STORAGE_KEY) ??
+      window.localStorage.getItem(SIDEBAR_LOCAL_STORAGE_KEY_LEGACY)
+
+    if (storedValue === "true" || storedValue === "1") {
       return true
     }
 
-    if (storedValue === "false") {
+    if (storedValue === "false" || storedValue === "0") {
       return false
     }
   } catch {
@@ -138,6 +142,10 @@ function SidebarProvider({
     try {
       window.localStorage.setItem(
         SIDEBAR_LOCAL_STORAGE_KEY,
+        String(openState)
+      )
+      window.localStorage.setItem(
+        SIDEBAR_LOCAL_STORAGE_KEY_LEGACY,
         String(openState)
       )
     } catch {
