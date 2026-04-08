@@ -30,12 +30,6 @@ function ComboboxTrigger({
       {...props}
     >
       {children}
-      <span
-        aria-hidden
-        className="pointer-events-none inline-flex size-4 items-center justify-center text-muted-foreground"
-      >
-        <span className="mb-0.5 block size-2 rotate-45 border-b border-r border-current" />
-      </span>
     </ComboboxPrimitive.Trigger>
   )
 }
