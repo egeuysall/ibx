@@ -459,7 +459,7 @@ export function SettingsView() {
 
   return (
     <>
-      <SidebarProvider>
+      <SidebarProvider defaultOpen={false}>
         <Sidebar collapsible="icon">
           <SidebarHeader className="h-12 border-b p-0">
             <div className="flex h-12 items-center justify-between px-3 group-data-[collapsible=icon]:hidden">
@@ -484,7 +484,7 @@ export function SettingsView() {
                         zen
                       </span>
                       <span className="hidden group-data-[collapsible=icon]:inline">
-                        t
+                        {">"}
                       </span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>

@@ -250,6 +250,23 @@ function inferEstimatedHoursForTask(
   }
 
   if (
+    /\b(workout|exercise|gym|run|running|lift|lifting|training|cardio|stretch|warmup|warm-up|mobility)\b/.test(
+      normalized,
+    )
+  ) {
+    const baseHoursByPriority: Record<1 | 2 | 3, number> = {
+      1: 1.5,
+      2: 1,
+      3: 0.75,
+    };
+    return applyExecutionSpeedMultiplierWithMinimum(
+      baseHoursByPriority[priority],
+      executionSpeedMultiplier,
+      0.5,
+    );
+  }
+
+  if (
     /\b(email|reply|message|text|dm|ping|confirm|submit|upload|copy|paste|bookmark|quick|minor|small|tiny|15m|15 min)\b/.test(
       normalized,
     )
@@ -811,6 +828,9 @@ export function resolveNonOverlappingTimeBlocks(
       ? options.todayStartUtc
       : getStartOfUtcDay(Date.now());
   const allowOutsideAvailability = options.allowOutsideAvailability ?? false;
+  const todayDateKey =
+    getDateKeyInTimezone(todayStartUtc, TZ_PARTS_FORMATTER) ??
+    new Date(todayStartUtc).toISOString().slice(0, 10);
   const results = new Map<string, number | null>();
 
   const candidateTodoIds = new Set(
@@ -905,6 +925,19 @@ export function resolveNonOverlappingTimeBlocks(
       } => value !== null,
     )
     .sort((left, right) => {
+      const leftDueDateKey =
+        getDateKeyInTimezone(left.dueDateTimestamp, TZ_PARTS_FORMATTER) ??
+        new Date(left.dueDateTimestamp).toISOString().slice(0, 10);
+      const rightDueDateKey =
+        getDateKeyInTimezone(right.dueDateTimestamp, TZ_PARTS_FORMATTER) ??
+        new Date(right.dueDateTimestamp).toISOString().slice(0, 10);
+      const leftIsToday = leftDueDateKey === todayDateKey;
+      const rightIsToday = rightDueDateKey === todayDateKey;
+
+      if (leftIsToday !== rightIsToday) {
+        return leftIsToday ? -1 : 1;
+      }
+
       if (left.priority !== right.priority) {
         return left.priority - right.priority;
       }

@@ -54,6 +54,8 @@ const MAX_GENERATED_TODOS = 30;
 const MAX_AGENT_UPDATES = 500;
 const MAX_AGENT_DELETES = 500;
 const DEFAULT_EXECUTION_SPEED_MULTIPLIER = 4;
+const AI_RETRY_MAX_ATTEMPTS = 3;
+const AI_RETRY_BASE_DELAY_MS = 250;
 const CHECKLIST_ITEM_REGEX = /^\s*(?:[-*]\s+|\d+[.)]\s+)(?:\[[ xX]\]\s*)?/;
 
 function estimateIntentCount(rawText: string) {
@@ -240,6 +242,23 @@ function inferEstimatedHoursForTask(
       1: 2.5,
       2: 2,
       3: 1.5,
+    };
+    return applyExecutionSpeedMultiplierWithMinimum(
+      baseHoursByPriority[priority],
+      executionSpeedMultiplier,
+      0.5,
+    );
+  }
+
+  if (
+    /\b(workout|exercise|gym|run|running|lift|lifting|training|cardio|stretch|warmup|warm-up|mobility)\b/.test(
+      normalized,
+    )
+  ) {
+    const baseHoursByPriority: Record<1 | 2 | 3, number> = {
+      1: 1.5,
+      2: 1,
+      3: 0.75,
     };
     return applyExecutionSpeedMultiplierWithMinimum(
       baseHoursByPriority[priority],
@@ -450,7 +469,6 @@ function normalizeTodoUpdateOperations(
   value: unknown,
   existingTodoIds: Set<string>,
   requireTaskDescriptions: boolean,
-  executionSpeedMultiplier: number,
 ) {
   if (!Array.isArray(value)) {
     return [];
@@ -524,10 +542,7 @@ function normalizeTodoUpdateOperations(
           estimatedHoursSource,
         );
         if (normalizedEstimatedHours !== null) {
-          nextUpdate.estimatedHours = applyExecutionSpeedMultiplier(
-            normalizedEstimatedHours,
-            executionSpeedMultiplier,
-          );
+          nextUpdate.estimatedHours = normalizedEstimatedHours;
         }
       }
     }
@@ -640,6 +655,98 @@ function tryParseContent(content: string) {
   return null;
 }
 
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function isRetryableStatus(status: number) {
+  return status === 408 || status === 409 || status === 425 || status === 429 || status >= 500;
+}
+
+function isRetryableGatewayError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  if (error.name === "AbortError" || error.name === "TimeoutError") {
+    return true;
+  }
+
+  const message = error.message.toLowerCase();
+  return (
+    message.includes("timeout") ||
+    message.includes("timed out") ||
+    message.includes("network") ||
+    message.includes("fetch failed") ||
+    message.includes("json") ||
+    message.includes("econnreset") ||
+    message.includes("etimedout") ||
+    message.includes("temporar")
+  );
+}
+
+type ChatCompletionMessage = {
+  role: "system" | "user";
+  content: string;
+};
+
+async function requestChatCompletionContent(
+  apiKey: string,
+  model: string,
+  messages: ChatCompletionMessage[],
+  timeoutMs: number,
+) {
+  let lastError: unknown = null;
+
+  for (let attempt = 1; attempt <= AI_RETRY_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await fetch(AI_GATEWAY_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          temperature: 0,
+          messages,
+        }),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+
+      if (!response.ok) {
+        if (attempt < AI_RETRY_MAX_ATTEMPTS && isRetryableStatus(response.status)) {
+          await sleep(AI_RETRY_BASE_DELAY_MS * 2 ** (attempt - 1));
+          continue;
+        }
+
+        throw new Error(`AI request failed with status ${response.status}.`);
+      }
+
+      const payload = (await response.json()) as {
+        choices?: Array<{ message?: { content?: string | null } }>;
+      };
+      return payload.choices?.[0]?.message?.content ?? "";
+    } catch (error) {
+      lastError = error;
+      if (attempt < AI_RETRY_MAX_ATTEMPTS && isRetryableGatewayError(error)) {
+        await sleep(AI_RETRY_BASE_DELAY_MS * 2 ** (attempt - 1));
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  if (lastError instanceof Error) {
+    throw lastError;
+  }
+
+  throw new Error("AI request failed.");
+}
+
 type GenerationOptions = {
   profileContext: string;
   recentRunMemories: string[];
@@ -723,25 +830,19 @@ export async function generateTodoAgentPlanFromThought(
     : "No past run memory available yet.";
   const estimatedIntentCount = estimateIntentCount(rawText);
   const maxTodosForPrompt = Math.max(
-    1,
-    Math.min(MAX_GENERATED_TODOS, estimatedIntentCount * 2),
+    12,
+    Math.min(MAX_GENERATED_TODOS, estimatedIntentCount * 3),
   );
   const existingTodosBlock = formatExistingTodosForAgent(options.existingTodos);
   const existingTodoIds = new Set(options.existingTodos.map((todo) => todo.id));
 
-  const response = await fetch(AI_GATEWAY_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      temperature: 0,
-      messages: [
-        {
-          role: "system",
-          content: `You are ibx's todo operations agent. 
+  const content = await requestChatCompletionContent(
+    apiKey,
+    model,
+    [
+      {
+        role: "system",
+        content: `You are ibx's todo operations agent. 
 Decide whether the user input should mutate existing todos, create new todos, or both.
 Return strict JSON only in this shape:
 {
@@ -756,8 +857,10 @@ Rules:
 - If the prompt asks to schedule/prioritize/reschedule/move/update/delete existing tasks, use mode="mutate" and operate on existing todo IDs.
 - Do NOT create a task for a command. Execute commands as updates/deletes.
 - If the prompt asks for both command-style mutations and new tasks, include both update/delete and create.
+- Never require keywords like "create", "add", or "new". Any standalone actionable intent without an existing todo ID should go into create.
 - Never invent IDs. Use only IDs from Existing Todos.
 - For bulk requests (example: "put all upcoming tasks to today"), include one update entry per matching todo id.
+- Only do broad updates across many existing todos when the user explicitly uses global scope words like "all", "every", or "everything".
 - Default dueDate for created todos to ${options.todayDateKey} unless explicitly specified.
 - Keep titles actionable and <= 140 chars.
 - Keep notes concise and <= ${MAX_NOTES_LENGTH} chars.
@@ -790,6 +893,7 @@ Rules:
       ? `Additional availability preferences: ${availabilityNotes}.`
       : "No additional availability preferences provided."
   }
+- If the user lists many separate actionable items, include one create item for each item, up to ${maxTodosForPrompt}.
 - Keep at most ${maxTodosForPrompt} items in create.
 - If no changes are needed, return empty arrays.
 
@@ -801,25 +905,15 @@ ${memoryBlock}
 
 Existing Todos:
 ${existingTodosBlock}`,
-        },
-        {
-          role: "user",
-          content: rawText,
-        },
-      ],
-    }),
-    signal: AbortSignal.timeout(20_000),
-  });
+      },
+      {
+        role: "user",
+        content: rawText,
+      },
+    ],
+    20_000,
+  );
 
-  if (!response.ok) {
-    throw new Error(`AI request failed with status ${response.status}.`);
-  }
-
-  const payload = (await response.json()) as {
-    choices?: Array<{ message?: { content?: string | null } }>;
-  };
-
-  const content = payload.choices?.[0]?.message?.content;
   if (!content) {
     return {
       mode: "create",
@@ -835,24 +929,33 @@ ${existingTodosBlock}`,
     throw new Error("AI response was not valid JSON.");
   }
 
-  const modeSource = Reflect.get(parsed, "mode");
-  const mode = modeSource === "mutate" ? "mutate" : "create";
+  const createSource = Array.isArray(parsed)
+    ? parsed
+    : Reflect.get(parsed, "create") ??
+      Reflect.get(parsed, "todos") ??
+      Reflect.get(parsed, "tasks");
+  const updateSource =
+    Reflect.get(parsed, "update") ?? Reflect.get(parsed, "updates");
+  const deleteIdsSource =
+    Reflect.get(parsed, "deleteIds") ??
+    Reflect.get(parsed, "deletes") ??
+    Reflect.get(parsed, "delete");
   const create = normalizeTodos(
-    Reflect.get(parsed, "create"),
+    createSource,
     maxTodosForPrompt,
     requireTaskDescriptions,
     executionSpeedMultiplier,
   );
   const update = normalizeTodoUpdateOperations(
-    Reflect.get(parsed, "update"),
+    updateSource,
     existingTodoIds,
     requireTaskDescriptions,
-    executionSpeedMultiplier,
   );
   const deleteIds = normalizeDeleteIds(
-    Reflect.get(parsed, "deleteIds"),
+    deleteIdsSource,
     existingTodoIds,
   );
+  const mode = update.length > 0 || deleteIds.length > 0 ? "mutate" : "create";
   const messageSource = Reflect.get(parsed, "message");
   const message =
     typeof messageSource === "string" ? clampText(messageSource, 240) : null;
@@ -897,23 +1000,17 @@ export async function generateTodosFromThought(
     : "No past run memory available yet.";
   const estimatedIntentCount = estimateIntentCount(rawText);
   const maxTodosForPrompt = Math.max(
-    1,
-    Math.min(MAX_GENERATED_TODOS, estimatedIntentCount * 2),
+    12,
+    Math.min(MAX_GENERATED_TODOS, estimatedIntentCount * 3),
   );
 
-  const response = await fetch(AI_GATEWAY_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      temperature: 0,
-      messages: [
-        {
-          role: "system",
-          content: `You convert a messy thought into actionable todos for Ege.
+  const content = await requestChatCompletionContent(
+    apiKey,
+    model,
+    [
+      {
+        role: "system",
+        content: `You convert a messy thought into actionable todos for Ege.
 Return strict JSON only: an array of objects.
 Each object must be:
 {"title":"...", "notes": string, "dueDate":"YYYY-MM-DD"|null, "estimatedHours": number|null, "timeBlockStart":"YYYY-MM-DDTHH:mm"|null, "recurrence":"none"|"daily"|"weekly"|"monthly", "priority":1|2|3}
@@ -939,6 +1036,7 @@ Rules:
       : "When links are disabled, keep notes text-only."
   }
 - Create one todo per concrete intent. Do not split one intent into meta subtasks.
+- Never require keywords like "create", "add", or "new". If an item is actionable, turn it into a todo.
 - Do not add planning/setup tasks like "plan how to..." unless explicitly requested.
 - Use recurrence only when the thought clearly implies repeated cadence.
 - Today's date in the user's timezone is ${options.todayDateKey}.
@@ -967,6 +1065,7 @@ Rules:
       : "No additional user availability preferences provided."
   }
 - Set priority: 1=must-do today, 2=important, 3=nice-to-have.
+- If the user lists many separate actionable items, include one todo per item, up to ${maxTodosForPrompt}.
 - Keep at most ${maxTodosForPrompt} todos for this input.
 - If no actionable todos exist, return [].
 
@@ -975,25 +1074,15 @@ ${options.profileContext}
 
 Recent run memory:
 ${memoryBlock}`,
-        },
-        {
-          role: "user",
-          content: rawText,
-        },
-      ],
-    }),
-    signal: AbortSignal.timeout(18_000),
-  });
+      },
+      {
+        role: "user",
+        content: rawText,
+      },
+    ],
+    18_000,
+  );
 
-  if (!response.ok) {
-    throw new Error(`AI request failed with status ${response.status}.`);
-  }
-
-  const payload = (await response.json()) as {
-    choices?: Array<{ message?: { content?: string | null } }>;
-  };
-
-  const content = payload.choices?.[0]?.message?.content;
   if (!content) {
     return [];
   }
@@ -1013,7 +1102,10 @@ ${memoryBlock}`,
   }
 
   if (typeof parsed === "object" && parsed) {
-    const nested = Reflect.get(parsed, "todos");
+    const nested =
+      Reflect.get(parsed, "todos") ??
+      Reflect.get(parsed, "tasks") ??
+      Reflect.get(parsed, "create");
     return normalizeTodos(
       nested,
       maxTodosForPrompt,

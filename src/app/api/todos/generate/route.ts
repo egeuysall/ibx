@@ -4,7 +4,6 @@ import { NextRequest, NextResponse } from "next/server";
 
 import {
   generateTodoAgentPlanFromThought,
-  generateTodosFromThought,
 } from "@/lib/ai";
 import {
   getRouteAuth,
@@ -34,11 +33,84 @@ const HOURS_INTENT_REGEX =
   /\b(hours?|estimate|estimated|duration|how long)\b/i;
 const GLOBAL_TASK_TARGET_REGEX =
   /\b((?:all|every)(?:\s+of)?(?:\s+my)?(?:\s+\w+){0,2}\s+(?:tasks?|todos?)|everything)\b/i;
+const GLOBAL_TASK_GENERIC_QUALIFIER_TOKENS = new Set([
+  "all",
+  "every",
+  "of",
+  "my",
+  "task",
+  "tasks",
+  "todo",
+  "todos",
+  "open",
+  "current",
+  "existing",
+  "active",
+  "pending",
+  "remaining",
+  "today",
+  "this",
+  "week",
+]);
 const TODAY_TARGET_REGEX = /\btoday\b/i;
+const DUE_DATE_TODAY_INTENT_REGEX =
+  /\b(?:set|move|put|make|change)\b[\s\S]{0,60}\b(?:all|every)(?:\s+of)?(?:\s+my)?(?:\s+\w+){0,2}\s+(?:tasks?|todos?)\b[\s\S]{0,40}\b(?:due|deadline)\b[\s\S]{0,20}\btoday\b/i;
+const MUTATION_COMMAND_TITLE_REGEX =
+  /\b(reschedule|schedule|prioritize|reorder|move)\b[\s\S]{0,40}\b(tasks?|todos?)\b/i;
+const MUTATION_COMMAND_CREATE_PREFIX_REGEX =
+  /^(reschedule|schedule|prioritize|reorder|move|shift|assign|set|keep|change|update|delete|remove|clear|mark|complete|reopen)\b/i;
+const MUTATION_CONTROL_PHRASE_REGEX =
+  /\b(due date|deadline|time-?block|non-?overlapping|calendar slot)\b/i;
+const BROAD_SCOPED_UPDATE_LIMIT = 25;
+const SCOPED_UPDATE_STOPWORDS = new Set([
+  "a",
+  "an",
+  "and",
+  "assign",
+  "block",
+  "blocks",
+  "calendar",
+  "clear",
+  "consistent",
+  "created",
+  "dates",
+  "day",
+  "days",
+  "do",
+  "due",
+  "everything",
+  "first",
+  "for",
+  "force",
+  "from",
+  "just",
+  "keep",
+  "move",
+  "non",
+  "not",
+  "only",
+  "overlapping",
+  "prioritize",
+  "realistic",
+  "reorder",
+  "reschedule",
+  "schedule",
+  "shift",
+  "slot",
+  "tasks",
+  "time",
+  "today",
+  "todo",
+  "todos",
+  "tomorrow",
+  "you",
+]);
 const MAX_AGENT_DELETE_OPS = 250;
 const MAX_AGENT_UPDATE_OPS = 250;
 const MAX_AGENT_CREATE_OPS = 100;
 const DEFAULT_EXECUTION_SPEED_MULTIPLIER = 4;
+const MUTATION_RETRY_MAX_ATTEMPTS = 3;
+const MUTATION_RETRY_BASE_DELAY_MS = 120;
 const USER_TIMEZONE = "America/Chicago";
 const USER_DAY_FORMATTER = new Intl.DateTimeFormat("en-US", {
   timeZone: USER_TIMEZONE,
@@ -46,6 +118,9 @@ const USER_DAY_FORMATTER = new Intl.DateTimeFormat("en-US", {
   month: "2-digit",
   day: "2-digit",
 });
+type AgentCreateItem = Awaited<
+  ReturnType<typeof generateTodoAgentPlanFromThought>
+>["create"][number];
 
 function normalizeInputText(value: unknown) {
   if (typeof value !== "string") {
@@ -167,11 +242,127 @@ function hasHoursIntent(inputText: string) {
 }
 
 function hasGlobalRescheduleIntent(inputText: string) {
-  return hasSchedulingIntent(inputText) && GLOBAL_TASK_TARGET_REGEX.test(inputText);
+  return hasSchedulingIntent(inputText) && hasGlobalTaskTargetIntent(inputText);
 }
 
 function hasForceTodayTarget(inputText: string) {
   return TODAY_TARGET_REGEX.test(inputText);
+}
+
+function hasForceTodayDueDateIntent(inputText: string) {
+  return DUE_DATE_TODAY_INTENT_REGEX.test(inputText);
+}
+
+function hasGlobalTaskTargetIntent(inputText: string) {
+  const normalized = inputText.toLowerCase();
+  if (normalized.includes("everything")) {
+    return true;
+  }
+
+  const match = GLOBAL_TASK_TARGET_REGEX.exec(normalized);
+  if (!match) {
+    return false;
+  }
+
+  const tokens = match[0].match(/[a-z0-9-]+/g);
+  if (!tokens) {
+    return false;
+  }
+
+  const scopedQualifierTokens = tokens.filter(
+    (token) => !GLOBAL_TASK_GENERIC_QUALIFIER_TOKENS.has(token),
+  );
+  return scopedQualifierTokens.length === 0;
+}
+
+function extractScopedUpdateTerms(inputText: string) {
+  const matches = inputText
+    .toLowerCase()
+    .match(/[a-z0-9][a-z0-9-]{2,}/g);
+  if (!matches) {
+    return [];
+  }
+
+  const terms: string[] = [];
+  const seen = new Set<string>();
+  for (const token of matches) {
+    if (token.length < 4 || SCOPED_UPDATE_STOPWORDS.has(token)) {
+      continue;
+    }
+
+    if (!seen.has(token)) {
+      seen.add(token);
+      terms.push(token);
+    }
+
+    if (terms.length >= 20) {
+      break;
+    }
+  }
+
+  return terms;
+}
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function isRetryableMutationError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  return (
+    message.includes("timeout") ||
+    message.includes("timed out") ||
+    message.includes("temporar") ||
+    message.includes("network") ||
+    message.includes("fetch failed") ||
+    message.includes("econnreset") ||
+    message.includes("etimedout") ||
+    message.includes("429") ||
+    message.includes("503") ||
+    message.includes("502") ||
+    message.includes("504")
+  );
+}
+
+async function withMutationRetry<T>(operation: () => Promise<T>) {
+  let lastError: unknown = null;
+
+  for (let attempt = 1; attempt <= MUTATION_RETRY_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      if (
+        attempt < MUTATION_RETRY_MAX_ATTEMPTS &&
+        isRetryableMutationError(error)
+      ) {
+        await sleep(MUTATION_RETRY_BASE_DELAY_MS * 2 ** (attempt - 1));
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("Mutation failed.");
+}
+
+function normalizeDueDateTimestamp(dueDate: number | null | undefined) {
+  if (typeof dueDate !== "number" || !Number.isFinite(dueDate)) {
+    return null;
+  }
+
+  const parsed = Date.parse(`${getUserDateKey(dueDate)}T00:00:00.000Z`);
+  if (Number.isFinite(parsed)) {
+    return parsed;
+  }
+
+  return getStartOfUtcDay(dueDate);
 }
 
 function normalizeEstimatedHours(hours: number | null | undefined) {
@@ -285,6 +476,23 @@ function inferEstimatedHoursForTask(
   }
 
   if (
+    /\b(workout|exercise|gym|run|running|lift|lifting|training|cardio|stretch|warmup|warm-up|mobility)\b/.test(
+      normalizedText,
+    )
+  ) {
+    const baseHoursByPriority: Record<1 | 2 | 3, number> = {
+      1: 1.5,
+      2: 1,
+      3: 0.75,
+    };
+    return applyExecutionSpeedMultiplierWithMinimum(
+      baseHoursByPriority[priority],
+      executionSpeedMultiplier,
+      0.5,
+    );
+  }
+
+  if (
     /\b(email|reply|message|text|dm|ping|confirm|submit|upload|copy|paste|bookmark|quick|minor|small|tiny|15m|15 min)\b/.test(
       normalizedText,
     )
@@ -316,6 +524,211 @@ function normalizePriority(priority: 1 | 2 | 3 | null | undefined): 1 | 2 | 3 {
   return 2;
 }
 
+function resolveEstimatedHoursForScheduling({
+  requestedEstimatedHours,
+  existingEstimatedHours,
+  title,
+  notes,
+  priority,
+  executionSpeedMultiplier,
+  normalizeOutliers,
+}: {
+  requestedEstimatedHours: number | null | undefined;
+  existingEstimatedHours: number | null | undefined;
+  title: string;
+  notes: string | null;
+  priority: 1 | 2 | 3;
+  executionSpeedMultiplier: number;
+  normalizeOutliers: boolean;
+}) {
+  const requested = normalizeEstimatedHours(requestedEstimatedHours);
+  if (requested !== null) {
+    return requested;
+  }
+
+  const inferred = inferEstimatedHoursForTask(
+    title,
+    notes,
+    priority,
+    executionSpeedMultiplier,
+  );
+  const existing = normalizeEstimatedHours(existingEstimatedHours);
+  if (existing === null) {
+    return inferred;
+  }
+
+  if (!normalizeOutliers) {
+    return existing;
+  }
+
+  const ratio = existing / inferred;
+  if (ratio < 0.67 || ratio > 1.75) {
+    return inferred;
+  }
+
+  return existing;
+}
+
+function normalizeTitleKey(title: string) {
+  return title
+    .toLocaleLowerCase()
+    .replace(/['"`’]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function fallbackNotesFromTitle(title: string) {
+  const trimmed = title.trim().replace(/[.!?]+$/g, "");
+  if (!trimmed) {
+    return null;
+  }
+
+  return `Complete ${trimmed}.`.slice(0, 160);
+}
+
+function inferPriorityFromSegment(segment: string): 1 | 2 | 3 {
+  const normalized = segment.toLowerCase();
+  if (/\b(urgent|asap|must|critical|today|now)\b/.test(normalized)) {
+    return 1;
+  }
+
+  if (/\b(later|someday|optional|nice to have)\b/.test(normalized)) {
+    return 3;
+  }
+
+  return 2;
+}
+
+function isMutationCommandSegment(segment: string) {
+  const normalized = segment.trim().toLowerCase();
+  if (!normalized) {
+    return true;
+  }
+
+  if (MUTATION_COMMAND_TITLE_REGEX.test(normalized)) {
+    return true;
+  }
+
+  return (
+    /\b(reschedule|schedule|prioritize|move|shift|update|delete|remove|clear|mark|complete|reopen)\b/.test(
+      normalized,
+    ) &&
+    /\b(tasks?|todos?|everything)\b/.test(normalized)
+  );
+}
+
+function isLikelyMutationCommandCreateTitle(title: string) {
+  const normalized = title.trim().toLowerCase();
+  if (!normalized) {
+    return true;
+  }
+
+  if (isMutationCommandSegment(normalized)) {
+    return true;
+  }
+
+  if (MUTATION_COMMAND_CREATE_PREFIX_REGEX.test(normalized)) {
+    return true;
+  }
+
+  return (
+    MUTATION_CONTROL_PHRASE_REGEX.test(normalized) &&
+    /\b(assign|keep|set|change|move|reschedule|schedule|update)\b/.test(
+      normalized,
+    )
+  );
+}
+
+function extractCreateTodosFromInput(
+  inputText: string,
+  executionSpeedMultiplier: number,
+  maxItems: number,
+) {
+  const baseSegments = inputText
+    .split(/\r?\n|[;]+|\bthen\b/gi)
+    .map((segment) =>
+      segment
+        .replace(/^\s*(?:[-*]\s+|\d+[.)]\s+)(?:\[[ xX]\]\s*)?/, "")
+        .trim(),
+    )
+    .filter(Boolean);
+  const segments =
+    baseSegments.length > 1
+      ? baseSegments
+      : inputText
+          .split(/\band\b/gi)
+          .map((segment) => segment.trim())
+          .filter(Boolean);
+
+  const createItems: AgentCreateItem[] = [];
+  const seenTitleKeys = new Set<string>();
+
+  for (const segment of segments) {
+    if (isMutationCommandSegment(segment)) {
+      continue;
+    }
+
+    const title = segment.replace(/\s+/g, " ").trim().slice(0, 140);
+    if (!title) {
+      continue;
+    }
+
+    const key = normalizeTitleKey(title);
+    if (!key || seenTitleKeys.has(key)) {
+      continue;
+    }
+
+    const priority = inferPriorityFromSegment(title);
+    createItems.push({
+      title,
+      notes: fallbackNotesFromTitle(title),
+      dueDate: null,
+      estimatedHours: inferEstimatedHoursForTask(
+        title,
+        null,
+        priority,
+        executionSpeedMultiplier,
+      ),
+      timeBlockStart: null,
+      recurrence: "none",
+      priority,
+    });
+    seenTitleKeys.add(key);
+
+    if (createItems.length >= maxItems) {
+      break;
+    }
+  }
+
+  return createItems;
+}
+
+function hasExplicitMultiItemCreateInput(inputText: string) {
+  const trimmed = inputText.trim();
+  if (!trimmed) {
+    return false;
+  }
+
+  const bulletLikeItems = trimmed.match(/^\s*(?:[-*]|\d+[.)])\s+/gm);
+  if (bulletLikeItems && bulletLikeItems.length >= 2) {
+    return true;
+  }
+
+  const newlineSegments = trimmed
+    .split(/\r?\n/)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  if (newlineSegments.length >= 2) {
+    return true;
+  }
+
+  const semicolonSegments = trimmed
+    .split(";")
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  return semicolonSegments.length >= 2;
+}
+
 function toExistingTodoSnapshot(
   todos: Array<{
     _id: unknown;
@@ -335,7 +748,7 @@ function toExistingTodoSnapshot(
     title: todo.title,
     notes: todo.notes ?? null,
     status: todo.status,
-    dueDate: todo.dueDate ?? null,
+    dueDate: normalizeDueDateTimestamp(todo.dueDate),
     estimatedHours:
       typeof todo.estimatedHours === "number" ? todo.estimatedHours : null,
     timeBlockStart:
@@ -408,14 +821,16 @@ export async function POST(request: NextRequest) {
   const aiRunId = randomUUID();
   const createdAt = Date.now();
 
-  await convex.mutation(api.thoughts.upsert, {
-    externalId,
-    rawText: inputText,
-    createdAt,
-    status: "processing",
-    synced: true,
-    aiRunId,
-  });
+  await withMutationRetry(() =>
+    convex.mutation(api.thoughts.upsert, {
+      externalId,
+      rawText: inputText,
+      createdAt,
+      status: "processing",
+      synced: true,
+      aiRunId,
+    }),
+  );
 
   try {
     const [profileContext, recentRunMemories] = await Promise.all([
@@ -423,10 +838,12 @@ export async function POST(request: NextRequest) {
       convex.query(api.memories.listRecentRunMemories, { limit: 8 }),
     ]);
 
-    await convex.mutation(api.memories.upsertProfileMemory, {
-      key: "ege:profile:agents-json",
-      content: profileContext,
-    });
+    await withMutationRetry(() =>
+      convex.mutation(api.memories.upsertProfileMemory, {
+        key: "ege:profile:agents-json",
+        content: profileContext,
+      }),
+    );
 
     const thought = await convex.query(api.thoughts.getByExternalId, { externalId });
     if (!thought) {
@@ -434,9 +851,11 @@ export async function POST(request: NextRequest) {
     }
 
     if (todayStartUtc !== null) {
-      await convex.mutation(api.todos.enforceDueDatesAndReschedule, {
-        todayStartUtc,
-      });
+      await withMutationRetry(() =>
+        convex.mutation(api.todos.enforceDueDatesAndReschedule, {
+          todayStartUtc,
+        }),
+      );
     }
     const existingTodos = await convex.query(api.todos.listAll, {});
     const existingSnapshot = toExistingTodoSnapshot(existingTodos);
@@ -448,21 +867,6 @@ export async function POST(request: NextRequest) {
       todayDateKey,
       preferences,
       existingTodos: existingSnapshot,
-    }).catch(async () => {
-      const generatedTodos = await generateTodosFromThought(inputText, {
-        profileContext,
-        recentRunMemories: recentRunMemories.map((memory) => memory.content),
-        todayDateKey,
-        preferences,
-      });
-
-      return {
-        mode: "create" as const,
-        create: generatedTodos,
-        update: [],
-        deleteIds: [],
-        message: null,
-      };
     });
 
     let deleted = 0;
@@ -474,18 +878,88 @@ export async function POST(request: NextRequest) {
     const hasDurationIntent = hasHoursIntent(inputText);
     const hasGlobalReschedule = hasGlobalRescheduleIntent(inputText);
     const hasGlobalDurationUpdate =
-      hasDurationIntent && GLOBAL_TASK_TARGET_REGEX.test(inputText);
-    const forceTodayScheduling = hasGlobalReschedule && hasForceTodayTarget(inputText);
+      hasDurationIntent && hasGlobalTaskTargetIntent(inputText);
+    const hasExplicitMultiItemInput = hasExplicitMultiItemCreateInput(inputText);
+    const forceTodayScheduling =
+      hasGlobalReschedule &&
+      hasForceTodayTarget(inputText) &&
+      hasForceTodayDueDateIntent(inputText);
+    const allowUpdateOps =
+      hasScheduleIntent ||
+      hasDurationIntent ||
+      hasGlobalReschedule ||
+      hasGlobalDurationUpdate;
+    const existingOpenTitleKeys = new Set(
+      existingSnapshot
+        .filter((todo) => todo.status === "open")
+        .map((todo) => normalizeTitleKey(todo.title))
+        .filter((key) => key.length > 0),
+    );
+    const shouldPreferDeterministicCreateExtraction =
+      hasExplicitMultiItemInput &&
+      !hasScheduleIntent &&
+      !hasDurationIntent &&
+      agentPlan.update.length === 0 &&
+      agentPlan.deleteIds.length === 0;
+    const mergedCreateItems = shouldPreferDeterministicCreateExtraction
+      ? []
+      : [...agentPlan.create];
+    const shouldSupplementCreate =
+      hasGlobalReschedule ||
+      mergedCreateItems.length === 0 ||
+      hasExplicitMultiItemInput;
+    const supplementalCreateItems = shouldSupplementCreate
+      ? extractCreateTodosFromInput(
+          inputText,
+          preferences.executionSpeedMultiplier,
+          MAX_AGENT_CREATE_OPS,
+        )
+      : [];
+    const mergedCreateKeys = new Set(
+      mergedCreateItems
+        .map((todo) => normalizeTitleKey(todo.title))
+        .filter((key) => key.length > 0),
+    );
+    for (const supplemental of supplementalCreateItems) {
+      const key = normalizeTitleKey(supplemental.title);
+      if (!key || mergedCreateKeys.has(key) || existingOpenTitleKeys.has(key)) {
+        continue;
+      }
+
+      mergedCreateItems.push(supplemental);
+      mergedCreateKeys.add(key);
+      if (mergedCreateItems.length >= MAX_AGENT_CREATE_OPS) {
+        break;
+      }
+    }
     const requestedDeleteIds = allowDeleteOps ? agentPlan.deleteIds : [];
+    const requestedUpdateOps = allowUpdateOps ? agentPlan.update : [];
+    const existingById = new Map(existingSnapshot.map((todo) => [todo.id, todo]));
     const filteredDeleteIds = requestedDeleteIds.filter((id) =>
       existingTodoIds.has(id),
     );
     const cappedDeleteIds = filteredDeleteIds.slice(0, MAX_AGENT_DELETE_OPS);
     const deleteIdSet = new Set(cappedDeleteIds);
-    const filteredUpdateOps = agentPlan.update.filter(
+    const filteredUpdateOps = requestedUpdateOps.filter(
       (update) => existingTodoIds.has(update.id) && !deleteIdSet.has(update.id),
     );
-    const cappedUpdateOps = filteredUpdateOps.slice(0, MAX_AGENT_UPDATE_OPS);
+    const scopedUpdateTerms = extractScopedUpdateTerms(inputText);
+    const shouldGuardBroadScopedUpdates =
+      hasScheduleIntent && !hasGlobalReschedule && !hasGlobalDurationUpdate;
+    const scopedUpdateOps = shouldGuardBroadScopedUpdates
+      ? scopedUpdateTerms.length > 0
+        ? filteredUpdateOps.filter((update) => {
+            const existingTodo = existingById.get(update.id);
+            if (!existingTodo) {
+              return false;
+            }
+
+            const haystack = `${existingTodo.title} ${existingTodo.notes ?? ""}`.toLowerCase();
+            return scopedUpdateTerms.some((term) => haystack.includes(term));
+          })
+        : filteredUpdateOps.slice(0, BROAD_SCOPED_UPDATE_LIMIT)
+      : filteredUpdateOps;
+    const cappedUpdateOps = scopedUpdateOps.slice(0, MAX_AGENT_UPDATE_OPS);
     const updateOpsById = new Map(cappedUpdateOps.map((update) => [update.id, update]));
     if (hasGlobalReschedule) {
       for (const todo of existingSnapshot) {
@@ -513,14 +987,19 @@ export async function POST(request: NextRequest) {
       0,
       MAX_AGENT_UPDATE_OPS,
     );
-    const createItems = hasGlobalReschedule
-      ? []
-      : agentPlan.create.slice(0, MAX_AGENT_CREATE_OPS);
+    const shouldFilterMutationCommandCreates =
+      hasScheduleIntent || hasGlobalReschedule || requestedUpdateOps.length > 0;
+    const createItems = mergedCreateItems
+      .filter((todo) =>
+        shouldFilterMutationCommandCreates
+          ? !isLikelyMutationCommandCreateTitle(todo.title)
+          : true,
+      )
+      .slice(0, MAX_AGENT_CREATE_OPS);
     const droppedMutationOps =
       (requestedDeleteIds.length - cappedDeleteIds.length) +
-      (agentPlan.update.length - cappedUpdateOps.length);
+      (requestedUpdateOps.length - cappedUpdateOps.length);
 
-    const existingById = new Map(existingSnapshot.map((todo) => [todo.id, todo]));
     const schedulingCandidates: TimeBlockScheduleCandidate[] = [];
     const inferredEstimatedHoursByUpdateId = new Map<string, number>();
     const inferredEstimatedHoursByCreateKey = new Map<string, number>();
@@ -537,14 +1016,15 @@ export async function POST(request: NextRequest) {
       }
 
       const nextPriority = normalizePriority(update.priority ?? existingTodo.priority);
-      const nextEstimatedHours =
-        normalizeEstimatedHours(update.estimatedHours ?? existingTodo.estimatedHours) ??
-        inferEstimatedHoursForTask(
-          update.title ?? existingTodo.title,
-          update.notes === undefined ? existingTodo.notes : update.notes,
-          nextPriority,
-          preferences.executionSpeedMultiplier,
-        );
+      const nextEstimatedHours = resolveEstimatedHoursForScheduling({
+        requestedEstimatedHours: update.estimatedHours,
+        existingEstimatedHours: existingTodo.estimatedHours,
+        title: update.title ?? existingTodo.title,
+        notes: update.notes === undefined ? existingTodo.notes : update.notes,
+        priority: nextPriority,
+        executionSpeedMultiplier: preferences.executionSpeedMultiplier,
+        normalizeOutliers: hasDurationIntent || hasGlobalDurationUpdate,
+      });
       const parsedDueDate = forceTodayScheduling
         ? effectiveTodayStartUtc
         : update.dueDate === undefined
@@ -635,9 +1115,11 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      const deletedTodoId = await convex.mutation(api.todos.deleteOneByStringId, {
-        todoId: deleteId,
-      });
+      const deletedTodoId = await withMutationRetry(() =>
+        convex.mutation(api.todos.deleteOneByStringId, {
+          todoId: deleteId,
+        }),
+      );
       if (deletedTodoId) {
         deleted += 1;
         existingTodoIds.delete(deleteId);
@@ -646,6 +1128,10 @@ export async function POST(request: NextRequest) {
 
     for (const update of effectiveUpdateOps) {
       if (!existingTodoIds.has(update.id)) {
+        continue;
+      }
+      const existingTodo = existingById.get(update.id);
+      if (!existingTodo) {
         continue;
       }
 
@@ -689,6 +1175,11 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      const shouldAutoAdjustEstimatedHours =
+        hasDurationIntent ||
+        hasGlobalDurationUpdate ||
+        normalizeEstimatedHours(existingTodo.estimatedHours) === null;
+
       if (update.estimatedHours !== undefined) {
         const normalizedEstimatedHours = normalizeEstimatedHours(
           update.estimatedHours,
@@ -696,7 +1187,7 @@ export async function POST(request: NextRequest) {
         if (normalizedEstimatedHours !== null) {
           patch.estimatedHours = normalizedEstimatedHours;
           touched = true;
-        } else if (hasScheduleIntent || hasDurationIntent) {
+        } else if (shouldAutoAdjustEstimatedHours) {
           const inferredEstimatedHours = inferredEstimatedHoursByUpdateId.get(
             update.id,
           );
@@ -708,7 +1199,7 @@ export async function POST(request: NextRequest) {
           patch.estimatedHours = null;
           touched = true;
         }
-      } else if (hasScheduleIntent || hasDurationIntent) {
+      } else if (shouldAutoAdjustEstimatedHours) {
         const inferredEstimatedHours = inferredEstimatedHoursByUpdateId.get(update.id);
         if (typeof inferredEstimatedHours === "number") {
           patch.estimatedHours = inferredEstimatedHours;
@@ -736,29 +1227,34 @@ export async function POST(request: NextRequest) {
       }
 
       if (touched) {
-        await convex.mutation(api.todos.updateFromAgent, {
-          todoId: patch.todoId as never,
-          ...(patch.title !== undefined ? { title: patch.title } : {}),
-          ...(patch.notes !== undefined ? { notes: patch.notes } : {}),
-          ...(patch.dueDate !== undefined ? { dueDate: patch.dueDate } : {}),
-          ...(patch.estimatedHours !== undefined
-            ? { estimatedHours: patch.estimatedHours }
-            : {}),
-          ...(patch.timeBlockStart !== undefined
-            ? { timeBlockStart: patch.timeBlockStart }
-            : {}),
-          ...(patch.recurrence !== undefined
-            ? { recurrence: patch.recurrence }
-            : {}),
-          ...(patch.priority !== undefined ? { priority: patch.priority } : {}),
-        });
+        await withMutationRetry(() =>
+          convex.mutation(api.todos.updateFromAgent, {
+            todoId: patch.todoId as never,
+            ...(patch.title !== undefined ? { title: patch.title } : {}),
+            ...(patch.notes !== undefined ? { notes: patch.notes } : {}),
+            ...(patch.dueDate !== undefined ? { dueDate: patch.dueDate } : {}),
+            ...(patch.estimatedHours !== undefined
+              ? { estimatedHours: patch.estimatedHours }
+              : {}),
+            ...(patch.timeBlockStart !== undefined
+              ? { timeBlockStart: patch.timeBlockStart }
+              : {}),
+            ...(patch.recurrence !== undefined
+              ? { recurrence: patch.recurrence }
+              : {}),
+            ...(patch.priority !== undefined ? { priority: patch.priority } : {}),
+          }),
+        );
       }
 
-      if (update.status !== undefined) {
-        await convex.mutation(api.todos.updateStatus, {
-          todoId: update.id as never,
-          status: update.status,
-        });
+      const nextStatus = update.status;
+      if (nextStatus !== undefined) {
+        await withMutationRetry(() =>
+          convex.mutation(api.todos.updateStatus, {
+            todoId: update.id as never,
+            status: nextStatus,
+          }),
+        );
         touched = true;
       }
 
@@ -768,54 +1264,75 @@ export async function POST(request: NextRequest) {
     }
 
     if (createItems.length > 0) {
-      await convex.mutation(api.todos.createMany, {
-        thoughtId: thought._id,
-        thoughtExternalId: externalId,
-        items: createItems.map((todo, index) => {
-          const parsedDueDate = todo.dueDate
-            ? Date.parse(`${todo.dueDate}T00:00:00.000Z`)
-            : NaN;
-          const createKey = `c:${index}`;
-          const hasResolvedCreateTime = resolvedTimeBlocks.has(createKey);
+      await withMutationRetry(() =>
+        convex.mutation(api.todos.createMany, {
+          thoughtId: thought._id,
+          thoughtExternalId: externalId,
+          items: createItems.map((todo, index) => {
+            const parsedDueDate = todo.dueDate
+              ? Date.parse(`${todo.dueDate}T00:00:00.000Z`)
+              : NaN;
+            const createKey = `c:${index}`;
+            const hasResolvedCreateTime = resolvedTimeBlocks.has(createKey);
 
-          return {
-            title: todo.title,
-            notes: todo.notes,
-            dueDate: Number.isFinite(parsedDueDate) ? parsedDueDate : null,
-            estimatedHours:
-              inferredEstimatedHoursByCreateKey.get(createKey) ??
-              todo.estimatedHours,
-            timeBlockStart:
-              hasResolvedCreateTime
-                ? (resolvedTimeBlocks.get(createKey) ?? null)
-                : todo.timeBlockStart,
-            recurrence: todo.recurrence,
-            priority: todo.priority,
-            source: "ai" as const,
-          };
+            return {
+              title: todo.title,
+              notes: todo.notes,
+              dueDate: Number.isFinite(parsedDueDate) ? parsedDueDate : null,
+              estimatedHours:
+                inferredEstimatedHoursByCreateKey.get(createKey) ??
+                todo.estimatedHours,
+              timeBlockStart:
+                hasResolvedCreateTime
+                  ? (resolvedTimeBlocks.get(createKey) ?? null)
+                  : todo.timeBlockStart,
+              recurrence: todo.recurrence,
+              priority: todo.priority,
+              source: "ai" as const,
+            };
+          }),
         }),
-      });
+      );
       created = createItems.length;
     }
 
-    await convex.mutation(api.thoughts.updateStatus, {
-      externalId,
-      status: "done",
-      aiRunId,
-      synced: true,
-    });
+    await withMutationRetry(() =>
+      convex.mutation(api.thoughts.updateStatus, {
+        externalId,
+        status: "done",
+        aiRunId,
+        synced: true,
+      }),
+    );
 
-    await convex.mutation(api.memories.addRunMemory, {
-      runExternalId: externalId,
-      content: `input="${inputText.slice(0, 240)}" mode=${agentPlan.mode} created=${created} updated=${updated} deleted=${deleted} todos titles=[${agentPlan.create
-        .map((todo) => todo.title)
-        .slice(0, 6)
-        .join(" | ")}] droppedMutationOps=${droppedMutationOps}`,
-    });
+    const effectiveMode =
+      updated > 0 || deleted > 0 ? ("mutate" as const) : ("create" as const);
 
+    await withMutationRetry(() =>
+      convex.mutation(api.memories.addRunMemory, {
+        runExternalId: externalId,
+        content: `input="${inputText.slice(0, 240)}" mode=${effectiveMode} created=${created} updated=${updated} deleted=${deleted} todos titles=[${createItems
+          .map((todo) => todo.title)
+          .slice(0, 6)
+          .join(" | ")}] droppedMutationOps=${droppedMutationOps}`,
+      }),
+    );
+
+    const shouldSuppressAgentMessage =
+      created > 0 &&
+      updated === 0 &&
+      deleted === 0 &&
+      typeof agentPlan.message === "string" &&
+      /\b(todo ids?|can't apply mutation|exact existing todo ids)\b/i.test(
+        agentPlan.message,
+      );
     const responseMessage = hasGlobalReschedule
       ? `Rescheduled open tasks with non-overlap and availability constraints (${USER_TIMEZONE}).`
-      : agentPlan.message;
+      : shouldSuppressAgentMessage
+        ? null
+        : effectiveMode === "mutate"
+          ? agentPlan.message
+          : null;
 
     return NextResponse.json({
       ok: true,
@@ -823,23 +1340,27 @@ export async function POST(request: NextRequest) {
       created,
       updated,
       deleted,
-      mode: agentPlan.mode,
+      mode: effectiveMode,
       message: responseMessage,
       droppedMutationOps,
     });
   } catch (error) {
-    await convex.mutation(api.thoughts.updateStatus, {
-      externalId,
-      status: "failed",
-      aiRunId,
-      synced: true,
-    });
+    await withMutationRetry(() =>
+      convex.mutation(api.thoughts.updateStatus, {
+        externalId,
+        status: "failed",
+        aiRunId,
+        synced: true,
+      }),
+    );
 
     const message = error instanceof Error ? error.message : "AI generation failed.";
-    await convex.mutation(api.memories.addRunMemory, {
-      runExternalId: externalId,
-      content: `input="${inputText.slice(0, 240)}" failed="${message.slice(0, 220)}"`,
-    });
+    await withMutationRetry(() =>
+      convex.mutation(api.memories.addRunMemory, {
+        runExternalId: externalId,
+        content: `input="${inputText.slice(0, 240)}" failed="${message.slice(0, 220)}"`,
+      }),
+    );
 
     return NextResponse.json({ error: message }, { status: 500 });
   }

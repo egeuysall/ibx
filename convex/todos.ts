@@ -97,6 +97,14 @@ function normalizeTimeBlockStart(input: number | null | undefined) {
   return input;
 }
 
+function normalizeTitleKey(title: string) {
+  return title
+    .toLocaleLowerCase()
+    .replace(/['"`’]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
 export const byThought = query({
   args: {
     thoughtId: v.id("thoughts"),
@@ -172,8 +180,28 @@ export const createMany = mutation({
     const now = Date.now();
     const todayStartUtc = getStartOfConfiguredDay(now);
     const insertedIds = [];
+    const existingForThought = await ctx.db
+      .query("todos")
+      .withIndex("by_thoughtId_and_createdAt", (q) => q.eq("thoughtId", args.thoughtId))
+      .order("desc")
+      .take(300);
+    const existingOpenTitleKeys = new Set(
+      existingForThought
+        .filter((todo) => todo.status === "open")
+        .map((todo) => normalizeTitleKey(todo.title))
+        .filter((key) => key.length > 0),
+    );
+    const seenBatchTitleKeys = new Set<string>();
 
     for (const item of args.items) {
+      const titleKey = normalizeTitleKey(item.title);
+      if (
+        titleKey &&
+        (existingOpenTitleKeys.has(titleKey) || seenBatchTitleKeys.has(titleKey))
+      ) {
+        continue;
+      }
+
       const normalizedEstimatedHours =
         normalizeEstimatedHours(item.estimatedHours) ??
         defaultEstimatedHoursForPriority(item.priority);
@@ -196,6 +224,9 @@ export const createMany = mutation({
         createdAt: now,
       });
       insertedIds.push(todoId);
+      if (titleKey) {
+        seenBatchTitleKeys.add(titleKey);
+      }
     }
 
     return insertedIds;
@@ -224,6 +255,22 @@ export const createOne = mutation({
     const normalizedTimeBlockStart = normalizeTimeBlockStart(
       args.timeBlockStart,
     );
+    const titleKey = normalizeTitleKey(args.title);
+
+    if (titleKey) {
+      const existingForThought = await ctx.db
+        .query("todos")
+        .withIndex("by_thoughtId_and_createdAt", (q) => q.eq("thoughtId", args.thoughtId))
+        .order("desc")
+        .take(300);
+      const existingMatch = existingForThought.find(
+        (todo) =>
+          todo.status === "open" && normalizeTitleKey(todo.title) === titleKey,
+      );
+      if (existingMatch) {
+        return existingMatch._id;
+      }
+    }
 
     return await ctx.db.insert("todos", {
       thoughtId: args.thoughtId,
