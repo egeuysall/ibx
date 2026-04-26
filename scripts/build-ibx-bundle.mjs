@@ -17,12 +17,40 @@ await build({
   platform: "node",
   format: "esm",
   target: ["node20"],
+  banner: {
+    js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);",
+  },
+  plugins: [
+    {
+      name: "stub-react-devtools-core",
+      setup(builder) {
+        builder.onResolve({ filter: /^react-devtools-core$/ }, () => ({
+          path: "react-devtools-core",
+          namespace: "react-devtools-core-stub",
+        }));
+        builder.onLoad(
+          { filter: /.*/, namespace: "react-devtools-core-stub" },
+          () => ({
+            contents:
+              "export default { initialize() {}, connectToDevTools() {} };",
+            loader: "js",
+          }),
+        );
+      },
+    },
+  ],
   sourcemap: false,
   minify: true,
   outfile: `${rootDir}/public/ibx`,
 });
 
-chmodSync(`${rootDir}/public/ibx`, 0o755);
+const bundlePath = `${rootDir}/public/ibx`;
+writeFileSync(
+  bundlePath,
+  readFileSync(bundlePath, "utf8").replace(/[ \t]+$/gm, ""),
+  "utf8",
+);
+chmodSync(bundlePath, 0o755);
 writeFileSync(
   `${rootDir}/public/ibx-version.json`,
   `${JSON.stringify(
