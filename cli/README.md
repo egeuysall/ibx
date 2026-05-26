@@ -13,6 +13,7 @@ curl -fsSL https://ibx.egeuysal.com/install.sh | bash
 ```bash
 ibx auth login --api-key iak_xxx
 ibx add "finish landing page and email two leads" --auto-schedule
+ibx todos add "email Pat"
 ibx todos list --view today
 ibx td
 ```
@@ -29,6 +30,8 @@ ibx td
 - `ibx n [--input "..."]` (short)
 - `ibx todos list [--view today|upcoming|archive|all] [--json]`
 - `ibx t l [--view today|upcoming|archive|all] [--json]` (short)
+- `ibx todos add "title" [--notes "..."] [--due YYYY-MM-DD] [--hours 1.5|90m|1h] [--start HH:mm|HH:mm am/pm] [--priority 1|2|3, defaults to 1] [--recurrence none|daily|weekly|monthly] [--json]`
+- `ibx t a "title" [same flags]` (short)
 - `ibx td` (today's completed tasks in `America/Chicago`, override with `IBX_TIMEZONE`)
 - `ibx todos done --id <todoId|prefix>`
 - `ibx t x --id <todoId|prefix>` (short)

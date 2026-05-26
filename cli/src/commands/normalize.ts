@@ -53,6 +53,10 @@ export function normalizeTodosSubcommand(value: string | null) {
     return "run";
   }
 
+  if (value === "add" || value === "a" || value === "new" || value === "n") {
+    return "add";
+  }
+
   if (
     value === "today-done" ||
     value === "completed-today" ||

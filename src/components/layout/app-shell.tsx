@@ -62,6 +62,13 @@ import {
   removeQueuedPrompt,
   setCachedTodos,
 } from "@/lib/indexedDb";
+import {
+  getTodoLinksInputValue,
+  getTodoResourceLinks,
+  parseTodoLinksInput,
+  stripTodoLinksFromNotes,
+  type TodoResourceLink,
+} from "@/lib/todo-links";
 import { cn } from "@/lib/utils";
 import type {
   GenerationPreferences,
@@ -602,137 +609,12 @@ function getPreviewNotes(notes: string) {
   return `${notes.slice(0, NOTE_PREVIEW_LENGTH)}…`;
 }
 
-type TodoResourceLink = {
-  url: string;
-  label: string;
-};
-
 type TodoDisplayMeta = {
   description: string | null;
   descriptionPreview: string | null;
   links: TodoResourceLink[];
   linksInputValue: string;
 };
-
-const NOTE_URL_REGEX = /\bhttps?:\/\/[^\s<>()]+/gi;
-const NOTE_DOMAIN_REGEX =
-  /\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}(?:\/[^\s<>()]*)?/gi;
-
-function normalizeNoteUrl(rawUrl: string) {
-  const trimmed = rawUrl.replace(/[),.;!?]+$/g, "");
-  const withProtocol = /^https?:\/\//i.test(trimmed)
-    ? trimmed
-    : `https://${trimmed}`;
-
-  try {
-    const parsed = new URL(withProtocol);
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      return null;
-    }
-    parsed.hostname = parsed.hostname.toLowerCase();
-    if (parsed.pathname === "/") {
-      parsed.pathname = "";
-    }
-
-    return parsed.toString();
-  } catch {
-    return null;
-  }
-}
-
-function getTodoResourceLinks(notes: string | null): TodoResourceLink[] {
-  if (!notes) {
-    return [];
-  }
-
-  const matches = [
-    ...(notes.match(NOTE_URL_REGEX) ?? []),
-    ...(notes.match(NOTE_DOMAIN_REGEX) ?? []),
-  ];
-  if (matches.length === 0) {
-    return [];
-  }
-
-  const links: TodoResourceLink[] = [];
-  const seen = new Set<string>();
-  for (const match of matches) {
-    const normalized = normalizeNoteUrl(match);
-    if (!normalized || seen.has(normalized)) {
-      continue;
-    }
-    seen.add(normalized);
-
-    let label = normalized;
-    try {
-      const parsed = new URL(normalized);
-      const path =
-        parsed.pathname && parsed.pathname !== "/" ? parsed.pathname : "";
-      label = `${parsed.hostname}${path}`;
-    } catch {
-      // Keep normalized URL label fallback.
-    }
-
-    links.push({ url: normalized, label });
-  }
-
-  return links;
-}
-
-function parseTodoLinksInput(value: string) {
-  const tokens = value
-    .split(/[\s,]+/g)
-    .map((token) => token.trim())
-    .filter(Boolean);
-
-  const normalizedLinks: string[] = [];
-  const seen = new Set<string>();
-  let invalidCount = 0;
-
-  for (const token of tokens) {
-    const withProtocol = /^https?:\/\//i.test(token)
-      ? token
-      : /^[^\s]+\.[^\s]+$/.test(token)
-        ? `https://${token}`
-        : null;
-    const normalized = withProtocol ? normalizeNoteUrl(withProtocol) : null;
-
-    if (!normalized) {
-      invalidCount += 1;
-      continue;
-    }
-
-    if (!seen.has(normalized)) {
-      seen.add(normalized);
-      normalizedLinks.push(normalized);
-    }
-  }
-
-  return {
-    links: normalizedLinks,
-    invalidCount,
-  };
-}
-
-function getTodoLinksInputValue(notes: string | null) {
-  return getTodoResourceLinks(notes)
-    .map((link) => link.url)
-    .join(", ");
-}
-
-function stripTodoLinksFromNotes(notes: string | null) {
-  if (!notes) {
-    return null;
-  }
-
-  const stripped = notes
-    .replace(/\blinks?:\s*/gi, " ")
-    .replace(NOTE_URL_REGEX, " ")
-    .replace(NOTE_DOMAIN_REGEX, " ")
-    .replace(/\s*,\s*/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  return stripped || null;
-}
 
 function buildTodoNotesWithLinks(description: string | null, links: string[]) {
   const parts: string[] = [];
@@ -1020,6 +902,7 @@ export function AppShell({
   const [hasLoadedTodos, setHasLoadedTodos] = useState(false);
   const [isLoadingTodos, setIsLoadingTodos] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isAddingTodo, setIsAddingTodo] = useState(false);
   const [isProcessingQueue, setIsProcessingQueue] = useState(false);
   const [queuedPromptCount, setQueuedPromptCount] = useState(0);
   const [pendingTodoId, setPendingTodoId] = useState<string | null>(null);
@@ -1780,6 +1663,30 @@ export function AppShell({
     }
   };
 
+  const handleAddTodo = async () => {
+    const cleanInput = promptInput.trim();
+    if (!cleanInput) {
+      return;
+    }
+
+    if (!isOnline) {
+      toast.error("manual add needs a connection");
+      return;
+    }
+
+    setIsAddingTodo(true);
+    try {
+      await apiClient.createManualTodo(cleanInput);
+      setPromptInput("");
+      toast.message("todo added");
+      await refreshTodos();
+    } catch (error) {
+      toastApiError(error);
+    } finally {
+      setIsAddingTodo(false);
+    }
+  };
+
   const updateTodoStatus = async (todo: TodoItem, checked: boolean) => {
     const nextStatus = checked ? "done" : "open";
     setPendingTodoId(todo.id);
@@ -2439,12 +2346,20 @@ export function AppShell({
                     void handleGenerateTodos();
                   }
                 }}
-                disabled={isGenerating || isProcessingQueue}
+                disabled={isGenerating || isAddingTodo || isProcessingQueue}
               />
               <Button
                 size="sm"
+                variant="outline"
+                onClick={() => void handleAddTodo()}
+                disabled={isGenerating || isAddingTodo || isProcessingQueue}
+              >
+                {isAddingTodo ? "adding..." : "add"}
+              </Button>
+              <Button
+                size="sm"
                 onClick={() => void handleGenerateTodos()}
-                disabled={isGenerating || isProcessingQueue}
+                disabled={isGenerating || isAddingTodo || isProcessingQueue}
                 title={
                   queuedPromptCount > 0
                     ? `${queuedPromptCount} queued`

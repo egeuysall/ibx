@@ -185,6 +185,13 @@ export const apiClient = {
     });
   },
 
+  async createManualTodo(title: string) {
+    return requestJson<{ ok: true; id: string; thoughtId: string }>("/api/todos", {
+      method: "POST",
+      body: JSON.stringify({ title, priority: 1 }),
+    });
+  },
+
   async generateTodos(
     externalId: string,
     preferences?: GenerationPreferences,

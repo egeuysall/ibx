@@ -4,6 +4,7 @@ import { requireConfig } from "../core/config.js";
 import { filterTodosByView, getDateKeyInTimezone, getTodayDateKey, sortTodos } from "../core/dates.js";
 import { CliError } from "../core/errors.js";
 import { requestJson } from "../core/http.js";
+import { resolveAiInput } from "../core/input.js";
 import { color, logEvent, print, printJson, printOk } from "../core/output.js";
 import type { CliConfig, ParsedArgs, TodoItem, TodoPriority, TodoRecurrence } from "../core/types.js";
 import { printTodoList } from "../todos/format.js";
@@ -121,6 +122,113 @@ export async function runTodosCommand(parsed: ParsedArgs) {
 
   if (subcommand === "run") {
     await runAddCommand(parsed);
+    return;
+  }
+
+  if (subcommand === "add") {
+    const title = (await resolveAiInput(parsed))?.trim().slice(0, 140) ?? "";
+    if (!title) {
+      throw new CliError('No todo title provided.\nexample: ibx todos add "email Pat"', {
+        exitCode: EXIT_CODE.VALIDATION,
+        code: "MISSING_TITLE",
+      });
+    }
+
+    const due = getStringOption(parsed, "due");
+    if (due && !/^\d{4}-\d{2}-\d{2}$/.test(due)) {
+      throw new CliError("--due must be in YYYY-MM-DD format.", {
+        exitCode: EXIT_CODE.VALIDATION,
+        code: "DUE_DATE_INVALID",
+      });
+    }
+
+    const recurrence = parseRecurrence(getStringOption(parsed, "recurrence"));
+    if (getStringOption(parsed, "recurrence") && !recurrence) {
+      throw new CliError(
+        "--recurrence must be one of: none, daily, weekly, monthly.",
+        { exitCode: EXIT_CODE.VALIDATION, code: "RECURRENCE_INVALID" },
+      );
+    }
+
+    const priority = parsePriority(getStringOption(parsed, "priority"));
+    if (getStringOption(parsed, "priority") && !priority) {
+      throw new CliError("--priority must be one of: 1, 2, 3.", {
+        exitCode: EXIT_CODE.VALIDATION,
+        code: "PRIORITY_INVALID",
+      });
+    }
+
+    const notesInput = getStringOption(parsed, "notes");
+    const notes =
+      notesInput !== null ? notesInput.trim().slice(0, 640) || null : undefined;
+
+    const hoursRaw = getStringOption(parsed, "hours");
+    const hours = parseEstimatedHours(hoursRaw);
+    if (
+      hoursRaw !== null &&
+      hours === null &&
+      !["null", "none", "clear"].includes(hoursRaw.trim().toLowerCase())
+    ) {
+      throw new CliError("--hours must be a number or duration (e.g. 1.5, 90m, 1h 30m, clear).", {
+        exitCode: EXIT_CODE.VALIDATION,
+        code: "HOURS_INVALID",
+      });
+    }
+
+    const startParsed = parseTimeBlockStart(getStringOption(parsed, "start"), due);
+    const payload: {
+      title: string;
+      notes?: string | null;
+      dueDate?: string;
+      estimatedHours?: number | null;
+      timeBlockStart?: number | null;
+      recurrence?: TodoRecurrence;
+      priority?: TodoPriority;
+    } = { title };
+
+    if (notes !== undefined) {
+      payload.notes = notes;
+    }
+
+    if (due !== null) {
+      payload.dueDate = due;
+    }
+
+    if (hoursRaw !== null) {
+      payload.estimatedHours = hours;
+    }
+
+    if (startParsed.provided) {
+      payload.timeBlockStart = startParsed.timeBlockStart ?? null;
+    }
+
+    if (recurrence !== null) {
+      payload.recurrence = recurrence;
+    }
+
+    payload.priority = priority ?? 1;
+
+    const response = await requestJson<{ ok: true; id: string; thoughtId: string }>(
+      config,
+      "/api/todos",
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+      { action: "add manual todo" },
+    );
+
+    if (outputJson) {
+      printJson(response);
+      return;
+    }
+
+    logEvent("info", "todos.add", {
+      id: response.id,
+      dueDate: payload.dueDate ?? null,
+      priority: payload.priority ?? null,
+    });
+    printOk(`added ${response.id}`);
     return;
   }
 

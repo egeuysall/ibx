@@ -248,7 +248,7 @@ export const createOne = mutation({
   },
   handler: async (ctx, args) => {
     const todayStartUtc = getStartOfConfiguredDay(Date.now());
-    const normalizedPriority = args.priority ?? 2;
+    const normalizedPriority = args.priority ?? (args.source === "manual" ? 1 : 2);
     const normalizedEstimatedHours =
       normalizeEstimatedHours(args.estimatedHours) ??
       defaultEstimatedHoursForPriority(normalizedPriority);

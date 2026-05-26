@@ -84,6 +84,25 @@ curl -sS "$IBX_BASE_URL/api/todos?today=2026-04-03" \
   -H "Authorization: Bearer $IBX_API_KEY"
 ```
 
+### `POST /api/todos`
+Create one manual todo without running AI.
+
+Body fields:
+- `title`: string, required, max 140 chars
+- `notes`: string or `null`, optional, max 640 chars
+- `dueDate`: `YYYY-MM-DD`, optional
+- `estimatedHours`: number between `0.25` and `24`, optional
+- `timeBlockStart`: unix timestamp in milliseconds, optional
+- `recurrence`: `"none" | "daily" | "weekly" | "monthly"`, optional
+- `priority`: `1 | 2 | 3`, optional, defaults to `1` for manual todos
+
+```bash
+curl -sS -X POST "$IBX_BASE_URL/api/todos" \
+  -H "Authorization: Bearer $IBX_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"email Pat","dueDate":"2026-04-03"}'
+```
+
 ### `PATCH /api/todos/:todoId`
 Update an existing todo.
 
