@@ -148,7 +148,9 @@ export async function GET(request: NextRequest) {
     return new NextResponse("Unauthorized", { status: 401 });
   }
 
-  const todos = await convex.query(api.todos.listAll, {});
+  const todos = await convex.query(api.todos.listAll, {
+    ownerKey: key.ownerKey ?? null,
+  });
   const openScheduledTodos = todos
     .filter((todo) => todo.status === "open")
     .sort((left, right) => {

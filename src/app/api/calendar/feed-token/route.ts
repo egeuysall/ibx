@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import {
   getRouteAuth,
+  getRouteAuthOwnerKey,
   unauthorizedJson,
   validateApiKeyPermission,
   validateCsrfForSessionAuth,
@@ -40,8 +41,12 @@ export async function GET(request: NextRequest) {
   if (permissionError) {
     return permissionError;
   }
+  const ownerKey = getRouteAuthOwnerKey(auth);
 
-  const keys = await convex.query(api.apiKeys.list, { includeRevoked: false });
+  const keys = await convex.query(api.apiKeys.list, {
+    includeRevoked: false,
+    ownerKey,
+  });
   const activeFeed =
     keys.find((key) => key.prefix === CALENDAR_FEED_PREFIX) ?? null;
 
@@ -72,13 +77,18 @@ export async function POST(request: NextRequest) {
   if (csrfError) {
     return csrfError;
   }
+  const ownerKey = getRouteAuthOwnerKey(auth);
 
-  const keys = await convex.query(api.apiKeys.list, { includeRevoked: false });
+  const keys = await convex.query(api.apiKeys.list, {
+    includeRevoked: false,
+    ownerKey,
+  });
   const existingFeeds = keys.filter((key) => key.prefix === CALENDAR_FEED_PREFIX);
 
   await Promise.all(
     existingFeeds.map((feed) =>
       convex.mutation(api.apiKeys.revoke, {
+        ownerKey,
         keyId: feed._id,
       }),
     ),
@@ -87,6 +97,7 @@ export async function POST(request: NextRequest) {
   const { rawToken, keyHash, last4, prefix } = createCalendarFeedToken();
 
   const keyId = await convex.mutation(api.apiKeys.create, {
+    ownerKey,
     name: CALENDAR_FEED_NAME,
     keyHash,
     prefix,

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import {
   getRouteAuth,
+  getRouteAuthOwnerKey,
   unauthorizedJson,
   validateApiKeyPermission,
   validateCsrfForSessionAuth,
@@ -27,6 +28,7 @@ export async function PATCH(
   if (permissionError) {
     return permissionError;
   }
+  const ownerKey = getRouteAuthOwnerKey(auth);
 
   const resolvedParams = await params;
   const todoId = resolvedParams.todoId?.trim();
@@ -71,6 +73,7 @@ export async function PATCH(
 
   if (hasStatus) {
     await convex.mutation(api.todos.updateStatus, {
+      ownerKey,
       todoId: todoId as never,
       status: status as TodoStatus,
     });
@@ -144,6 +147,7 @@ export async function PATCH(
     }
 
     await convex.mutation(api.todos.updateSchedule, {
+      ownerKey,
       todoId: todoId as never,
       ...(dueDate !== undefined ? { dueDate: normalizedDueDate } : {}),
       ...(estimatedHours !== undefined
@@ -170,6 +174,7 @@ export async function PATCH(
     }
 
     await convex.mutation(api.todos.updateTitle, {
+      ownerKey,
       todoId: todoId as never,
       title: normalizedTitle,
     });
@@ -188,6 +193,7 @@ export async function PATCH(
     }
 
     await convex.mutation(api.todos.updateFromAgent, {
+      ownerKey,
       todoId: todoId as never,
       notes: normalizedNotes,
     });
@@ -212,6 +218,7 @@ export async function DELETE(
   if (permissionError) {
     return permissionError;
   }
+  const ownerKey = getRouteAuthOwnerKey(auth);
 
   const resolvedParams = await params;
   const todoId = resolvedParams.todoId?.trim();
@@ -221,6 +228,7 @@ export async function DELETE(
   }
 
   await convex.mutation(api.todos.deleteOneByStringId, {
+    ownerKey,
     todoId,
   });
 

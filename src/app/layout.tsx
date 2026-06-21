@@ -1,3 +1,5 @@
+import { ClerkProvider } from "@clerk/nextjs";
+import { shadcn } from "@clerk/ui/themes";
 import type { Metadata, Viewport } from "next";
 import { Geist_Mono } from "next/font/google";
 
@@ -40,10 +42,12 @@ export default function RootLayout({
       className={`${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full font-mono">
-        <TooltipProvider delay={120}>
-          <ServiceWorkerRegister />
-          {children}
-        </TooltipProvider>
+        <ClerkProvider appearance={{ theme: shadcn }}>
+          <TooltipProvider delay={120}>
+            <ServiceWorkerRegister />
+            {children}
+          </TooltipProvider>
+        </ClerkProvider>
       </body>
     </html>
   );

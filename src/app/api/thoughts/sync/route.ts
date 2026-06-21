@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import {
   getRouteAuth,
+  getRouteAuthOwnerKey,
   unauthorizedJson,
   validateApiKeyPermission,
   validateCsrfForSessionAuth,
@@ -82,6 +83,7 @@ export async function POST(request: NextRequest) {
   if (permissionError) {
     return permissionError;
   }
+  const ownerKey = getRouteAuthOwnerKey(auth);
 
   const payload = (await request.json().catch(() => null)) as { thoughts?: unknown } | null;
   const thoughts = Array.isArray(payload?.thoughts)
@@ -97,6 +99,7 @@ export async function POST(request: NextRequest) {
   await Promise.all(
     thoughts.map((thought) =>
       convex.mutation(api.thoughts.upsert, {
+        ownerKey,
         externalId: thought.externalId,
         rawText: thought.rawText,
         createdAt: thought.createdAt,
@@ -107,7 +110,7 @@ export async function POST(request: NextRequest) {
     ),
   );
 
-  const syncedThoughts = await convex.query(api.thoughts.list, {});
+  const syncedThoughts = await convex.query(api.thoughts.list, { ownerKey });
 
   return NextResponse.json({
     thoughts: syncedThoughts.map((thought) => ({

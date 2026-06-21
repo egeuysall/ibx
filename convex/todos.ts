@@ -107,30 +107,66 @@ function normalizeTitleKey(title: string) {
 
 export const byThought = query({
   args: {
+    ownerKey: v.union(v.string(), v.null()),
     thoughtId: v.id("thoughts"),
   },
   handler: async (ctx, args) => {
-    return await ctx.db
+    const todos = await ctx.db
       .query("todos")
       .withIndex("by_thoughtId_and_createdAt", (q) => q.eq("thoughtId", args.thoughtId))
       .order("desc")
       .take(300);
+    return todos.filter((todo) => (todo.ownerKey ?? null) === args.ownerKey);
   },
 });
 
 export const listAll = query({
-  args: {},
-  handler: async (ctx) => {
-    return await ctx.db.query("todos").withIndex("by_createdAt").order("desc").take(500);
+  args: {
+    ownerKey: v.union(v.string(), v.null()),
+  },
+  handler: async (ctx, args) => {
+    if (args.ownerKey !== null) {
+      return await ctx.db
+        .query("todos")
+        .withIndex("by_ownerKey_and_createdAt", (q) =>
+          q.eq("ownerKey", args.ownerKey),
+        )
+        .order("desc")
+        .take(500);
+    }
+
+    const todos = await ctx.db
+      .query("todos")
+      .withIndex("by_createdAt")
+      .order("desc")
+      .take(500);
+    return todos.filter((todo) => todo.ownerKey === null || todo.ownerKey === undefined);
   },
 });
 
 export const enforceDueDatesAndReschedule = mutation({
   args: {
+    ownerKey: v.union(v.string(), v.null()),
     todayStartUtc: v.number(),
   },
   handler: async (ctx, args) => {
-    const todos = await ctx.db.query("todos").withIndex("by_createdAt").order("desc").take(500);
+    const todos =
+      args.ownerKey === null
+        ? await ctx.db
+            .query("todos")
+            .withIndex("by_createdAt")
+            .order("desc")
+            .take(500)
+            .then((rows) =>
+              rows.filter((todo) => todo.ownerKey === null || todo.ownerKey === undefined),
+            )
+        : await ctx.db
+            .query("todos")
+            .withIndex("by_ownerKey_and_createdAt", (q) =>
+              q.eq("ownerKey", args.ownerKey),
+            )
+            .order("desc")
+            .take(500);
     let updated = 0;
 
     for (const todo of todos) {
@@ -161,6 +197,7 @@ export const enforceDueDatesAndReschedule = mutation({
 
 export const createMany = mutation({
   args: {
+    ownerKey: v.union(v.string(), v.null()),
     thoughtId: v.id("thoughts"),
     thoughtExternalId: v.string(),
     items: v.array(
@@ -210,6 +247,7 @@ export const createMany = mutation({
       );
 
       const todoId = await ctx.db.insert("todos", {
+        ownerKey: args.ownerKey,
         thoughtId: args.thoughtId,
         thoughtExternalId: args.thoughtExternalId,
         title: item.title,
@@ -235,6 +273,7 @@ export const createMany = mutation({
 
 export const createOne = mutation({
   args: {
+    ownerKey: v.union(v.string(), v.null()),
     thoughtId: v.id("thoughts"),
     thoughtExternalId: v.string(),
     title: v.string(),
@@ -273,6 +312,7 @@ export const createOne = mutation({
     }
 
     return await ctx.db.insert("todos", {
+      ownerKey: args.ownerKey,
       thoughtId: args.thoughtId,
       thoughtExternalId: args.thoughtExternalId,
       title: args.title,
@@ -291,12 +331,16 @@ export const createOne = mutation({
 
 export const updateStatus = mutation({
   args: {
+    ownerKey: v.union(v.string(), v.null()),
     todoId: v.id("todos"),
     status: todoStatusValidator,
   },
   handler: async (ctx, args) => {
     const existingTodo = await ctx.db.get(args.todoId);
     if (!existingTodo) {
+      return null;
+    }
+    if ((existingTodo.ownerKey ?? null) !== args.ownerKey) {
       return null;
     }
 
@@ -318,6 +362,7 @@ export const updateStatus = mutation({
       const nextDueDate = getNextRecurringDueDate(recurrence, existingTodo.dueDate, now);
 
       await ctx.db.insert("todos", {
+        ownerKey: args.ownerKey,
         thoughtId: existingTodo.thoughtId,
         thoughtExternalId: existingTodo.thoughtExternalId,
         title: existingTodo.title,
@@ -346,11 +391,15 @@ export const updateStatus = mutation({
 
 export const deleteOne = mutation({
   args: {
+    ownerKey: v.union(v.string(), v.null()),
     todoId: v.id("todos"),
   },
   handler: async (ctx, args) => {
     const existingTodo = await ctx.db.get(args.todoId);
     if (!existingTodo) {
+      return null;
+    }
+    if ((existingTodo.ownerKey ?? null) !== args.ownerKey) {
       return null;
     }
 
@@ -361,6 +410,7 @@ export const deleteOne = mutation({
 
 export const deleteOneByStringId = mutation({
   args: {
+    ownerKey: v.union(v.string(), v.null()),
     todoId: v.string(),
   },
   handler: async (ctx, args) => {
@@ -373,6 +423,9 @@ export const deleteOneByStringId = mutation({
     if (!existingTodo) {
       return null;
     }
+    if ((existingTodo.ownerKey ?? null) !== args.ownerKey) {
+      return null;
+    }
 
     await ctx.db.delete(normalizedTodoId);
     return normalizedTodoId;
@@ -381,6 +434,7 @@ export const deleteOneByStringId = mutation({
 
 export const updateSchedule = mutation({
   args: {
+    ownerKey: v.union(v.string(), v.null()),
     todoId: v.id("todos"),
     dueDate: v.optional(v.union(v.number(), v.null())),
     estimatedHours: v.optional(nullableNumberValidator),
@@ -389,6 +443,11 @@ export const updateSchedule = mutation({
     priority: v.optional(priorityValidator),
   },
   handler: async (ctx, args) => {
+    const existingTodo = await ctx.db.get(args.todoId);
+    if (!existingTodo || (existingTodo.ownerKey ?? null) !== args.ownerKey) {
+      return null;
+    }
+
     const patch: {
       dueDate?: number | null;
       estimatedHours?: number | null;
@@ -426,6 +485,7 @@ export const updateSchedule = mutation({
 
 export const updateFromAgent = mutation({
   args: {
+    ownerKey: v.union(v.string(), v.null()),
     todoId: v.id("todos"),
     title: v.optional(v.string()),
     notes: v.optional(v.union(v.string(), v.null())),
@@ -438,6 +498,9 @@ export const updateFromAgent = mutation({
   handler: async (ctx, args) => {
     const existingTodo = await ctx.db.get(args.todoId);
     if (!existingTodo) {
+      return null;
+    }
+    if ((existingTodo.ownerKey ?? null) !== args.ownerKey) {
       return null;
     }
 
@@ -490,12 +553,16 @@ export const updateFromAgent = mutation({
 
 export const updateTitle = mutation({
   args: {
+    ownerKey: v.union(v.string(), v.null()),
     todoId: v.id("todos"),
     title: v.string(),
   },
   handler: async (ctx, args) => {
     const existingTodo = await ctx.db.get(args.todoId);
     if (!existingTodo) {
+      return null;
+    }
+    if ((existingTodo.ownerKey ?? null) !== args.ownerKey) {
       return null;
     }
 

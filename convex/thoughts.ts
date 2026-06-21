@@ -9,26 +9,61 @@ const thoughtStatusValidator = v.union(
 );
 
 export const list = query({
-  args: {},
-  handler: async (ctx) => {
-    return await ctx.db.query("thoughts").withIndex("by_createdAt").order("desc").take(200);
+  args: {
+    ownerKey: v.union(v.string(), v.null()),
+  },
+  handler: async (ctx, args) => {
+    if (args.ownerKey !== null) {
+      return await ctx.db
+        .query("thoughts")
+        .withIndex("by_ownerKey_and_createdAt", (q) =>
+          q.eq("ownerKey", args.ownerKey),
+        )
+        .order("desc")
+        .take(200);
+    }
+
+    const thoughts = await ctx.db
+      .query("thoughts")
+      .withIndex("by_createdAt")
+      .order("desc")
+      .take(200);
+    return thoughts.filter(
+      (thought) => thought.ownerKey === null || thought.ownerKey === undefined,
+    );
   },
 });
 
 export const getByExternalId = query({
   args: {
+    ownerKey: v.union(v.string(), v.null()),
     externalId: v.string(),
   },
   handler: async (ctx, args) => {
+    if (args.ownerKey !== null) {
+      return await ctx.db
+        .query("thoughts")
+        .withIndex("by_ownerKey_and_externalId", (q) =>
+          q.eq("ownerKey", args.ownerKey).eq("externalId", args.externalId),
+        )
+        .unique();
+    }
+
     return await ctx.db
       .query("thoughts")
       .withIndex("by_externalId", (q) => q.eq("externalId", args.externalId))
-      .unique();
+      .unique()
+      .then((thought) =>
+        thought?.ownerKey === null || thought?.ownerKey === undefined
+          ? thought
+          : null,
+      );
   },
 });
 
 export const upsert = mutation({
   args: {
+    ownerKey: v.union(v.string(), v.null()),
     externalId: v.string(),
     rawText: v.string(),
     createdAt: v.number(),
@@ -37,10 +72,23 @@ export const upsert = mutation({
     aiRunId: v.union(v.string(), v.null()),
   },
   handler: async (ctx, args) => {
-    const existing = await ctx.db
-      .query("thoughts")
-      .withIndex("by_externalId", (q) => q.eq("externalId", args.externalId))
-      .unique();
+    const existing =
+      args.ownerKey === null
+        ? await ctx.db
+            .query("thoughts")
+            .withIndex("by_externalId", (q) => q.eq("externalId", args.externalId))
+            .unique()
+            .then((thought) =>
+              thought?.ownerKey === null || thought?.ownerKey === undefined
+                ? thought
+                : null,
+            )
+        : await ctx.db
+            .query("thoughts")
+            .withIndex("by_ownerKey_and_externalId", (q) =>
+              q.eq("ownerKey", args.ownerKey).eq("externalId", args.externalId),
+            )
+            .unique();
 
     if (existing) {
       await ctx.db.patch(existing._id, {
@@ -58,16 +106,30 @@ export const upsert = mutation({
 
 export const updateStatus = mutation({
   args: {
+    ownerKey: v.union(v.string(), v.null()),
     externalId: v.string(),
     status: thoughtStatusValidator,
     aiRunId: v.optional(v.union(v.string(), v.null())),
     synced: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const thought = await ctx.db
-      .query("thoughts")
-      .withIndex("by_externalId", (q) => q.eq("externalId", args.externalId))
-      .unique();
+    const thought =
+      args.ownerKey === null
+        ? await ctx.db
+            .query("thoughts")
+            .withIndex("by_externalId", (q) => q.eq("externalId", args.externalId))
+            .unique()
+            .then((candidate) =>
+              candidate?.ownerKey === null || candidate?.ownerKey === undefined
+                ? candidate
+                : null,
+            )
+        : await ctx.db
+            .query("thoughts")
+            .withIndex("by_ownerKey_and_externalId", (q) =>
+              q.eq("ownerKey", args.ownerKey).eq("externalId", args.externalId),
+            )
+            .unique();
 
     if (!thought) {
       return null;

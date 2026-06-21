@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import {
   getRouteAuth,
+  getRouteAuthOwnerKey,
   unauthorizedJson,
   validateApiKeyPermission,
 } from "@/lib/auth-server";
@@ -16,8 +17,9 @@ export async function GET(request: NextRequest) {
   if (permissionError) {
     return permissionError;
   }
+  const ownerKey = getRouteAuthOwnerKey(auth);
 
-  const thoughts = await convex.query(api.thoughts.list, {});
+  const thoughts = await convex.query(api.thoughts.list, { ownerKey });
 
   return NextResponse.json({
     thoughts: thoughts.map((thought) => ({

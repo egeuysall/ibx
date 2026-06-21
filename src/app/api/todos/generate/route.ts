@@ -7,6 +7,7 @@ import {
 } from "@/lib/ai";
 import {
   getRouteAuth,
+  getRouteAuthOwnerKey,
   unauthorizedJson,
   validateApiKeyPermission,
   validateCsrfForSessionAuth,
@@ -772,6 +773,7 @@ export async function POST(request: NextRequest) {
   if (permissionError) {
     return permissionError;
   }
+  const ownerKey = getRouteAuthOwnerKey(auth);
 
   const body = (await request.json().catch(() => null)) as
     | { text?: unknown; today?: unknown; preferences?: unknown }
@@ -805,6 +807,7 @@ export async function POST(request: NextRequest) {
   const externalId = shortcutExternalId ?? randomUUID();
   if (shortcutExternalId) {
     const existingThought = await convex.query(api.thoughts.getByExternalId, {
+      ownerKey,
       externalId: shortcutExternalId,
     });
 
@@ -823,6 +826,7 @@ export async function POST(request: NextRequest) {
 
   await withMutationRetry(() =>
     convex.mutation(api.thoughts.upsert, {
+      ownerKey,
       externalId,
       rawText: inputText,
       createdAt,
@@ -845,7 +849,10 @@ export async function POST(request: NextRequest) {
       }),
     );
 
-    const thought = await convex.query(api.thoughts.getByExternalId, { externalId });
+    const thought = await convex.query(api.thoughts.getByExternalId, {
+      ownerKey,
+      externalId,
+    });
     if (!thought) {
       return NextResponse.json({ error: "Thought was not created." }, { status: 500 });
     }
@@ -853,11 +860,12 @@ export async function POST(request: NextRequest) {
     if (todayStartUtc !== null) {
       await withMutationRetry(() =>
         convex.mutation(api.todos.enforceDueDatesAndReschedule, {
+          ownerKey,
           todayStartUtc,
         }),
       );
     }
-    const existingTodos = await convex.query(api.todos.listAll, {});
+    const existingTodos = await convex.query(api.todos.listAll, { ownerKey });
     const existingSnapshot = toExistingTodoSnapshot(existingTodos);
     const existingTodoIds = new Set(existingSnapshot.map((todo) => todo.id));
 
@@ -1117,6 +1125,7 @@ export async function POST(request: NextRequest) {
 
       const deletedTodoId = await withMutationRetry(() =>
         convex.mutation(api.todos.deleteOneByStringId, {
+          ownerKey,
           todoId: deleteId,
         }),
       );
@@ -1229,6 +1238,7 @@ export async function POST(request: NextRequest) {
       if (touched) {
         await withMutationRetry(() =>
           convex.mutation(api.todos.updateFromAgent, {
+            ownerKey,
             todoId: patch.todoId as never,
             ...(patch.title !== undefined ? { title: patch.title } : {}),
             ...(patch.notes !== undefined ? { notes: patch.notes } : {}),
@@ -1251,6 +1261,7 @@ export async function POST(request: NextRequest) {
       if (nextStatus !== undefined) {
         await withMutationRetry(() =>
           convex.mutation(api.todos.updateStatus, {
+            ownerKey,
             todoId: update.id as never,
             status: nextStatus,
           }),
@@ -1266,6 +1277,7 @@ export async function POST(request: NextRequest) {
     if (createItems.length > 0) {
       await withMutationRetry(() =>
         convex.mutation(api.todos.createMany, {
+          ownerKey,
           thoughtId: thought._id,
           thoughtExternalId: externalId,
           items: createItems.map((todo, index) => {
@@ -1298,6 +1310,7 @@ export async function POST(request: NextRequest) {
 
     await withMutationRetry(() =>
       convex.mutation(api.thoughts.updateStatus, {
+        ownerKey,
         externalId,
         status: "done",
         aiRunId,
@@ -1347,6 +1360,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     await withMutationRetry(() =>
       convex.mutation(api.thoughts.updateStatus, {
+        ownerKey,
         externalId,
         status: "failed",
         aiRunId,

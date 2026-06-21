@@ -17,6 +17,14 @@ export async function GET(request: NextRequest) {
     });
   }
 
+  if (auth.type === "clerk") {
+    return NextResponse.json({
+      authenticated: true,
+      authType: "clerk",
+      expiresAt: null,
+    });
+  }
+
   return NextResponse.json({
     authenticated: true,
     authType: "session",

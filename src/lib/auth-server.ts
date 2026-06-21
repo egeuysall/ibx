@@ -2,11 +2,14 @@ import "server-only";
 
 import { createHash } from "node:crypto";
 
+import { verifyToken } from "@clerk/backend";
+import { auth } from "@clerk/nextjs/server";
 import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { api, convex } from "@/lib/convex-server";
 import { API_KEY_PREFIX } from "@/lib/api-keys";
+import { getAuthOwnerKey } from "@/lib/auth-owner";
 import {
   LEGACY_SESSION_COOKIE_NAME,
   SESSION_COOKIE_NAME,
@@ -26,10 +29,17 @@ export type ApiKeyCheck = {
   prefix: string;
   last4: string;
   permission: "read" | "write" | "both";
+  ownerKey: string | null;
   createdAt: number;
 };
 
 export type RouteAuth =
+  | {
+      type: "clerk";
+      userId: string;
+      ownerKey: string;
+      tokenSource: "bearer" | "cookie";
+    }
   | {
       type: "session";
       session: SessionCheck;
@@ -42,6 +52,7 @@ export type RouteAuth =
 type RouteAuthOptions = {
   allowSession?: boolean;
   allowApiKey?: boolean;
+  allowClerk?: boolean;
 };
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
@@ -111,11 +122,33 @@ async function resolveApiKey(rawKey: string) {
     prefix: key.prefix,
     last4: key.last4,
     permission: key.permission ?? "both",
+    ownerKey: key.ownerKey ?? null,
     createdAt: key.createdAt,
   } satisfies ApiKeyCheck;
 }
 
-export async function getServerSession() {
+async function resolveClerkBearerToken(rawToken: string) {
+  const secretKey = process.env.CLERK_SECRET_KEY;
+  if (!secretKey) {
+    return null;
+  }
+
+  try {
+    const claims = await verifyToken(rawToken, { secretKey });
+    if (typeof claims.sub !== "string" || claims.sub.length === 0) {
+      return null;
+    }
+
+    return {
+      userId: claims.sub,
+      ownerKey: getAuthOwnerKey({ type: "clerk", userId: claims.sub }),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function getLegacyServerSession() {
   const cookieStore = await cookies();
   const token = readSessionTokenFromCookieStore(cookieStore);
 
@@ -124,6 +157,27 @@ export async function getServerSession() {
   }
 
   return resolveSession(token);
+}
+
+export async function getServerSession() {
+  const clerkAuth = await auth();
+  if (clerkAuth.isAuthenticated && clerkAuth.userId) {
+    return {
+      type: "clerk" as const,
+      userId: clerkAuth.userId,
+      ownerKey: getAuthOwnerKey({ type: "clerk", userId: clerkAuth.userId }),
+    };
+  }
+
+  const session = await getLegacyServerSession();
+  if (!session) {
+    return null;
+  }
+
+  return {
+    type: "session" as const,
+    session,
+  };
 }
 
 export async function getRouteSession(request: NextRequest) {
@@ -141,19 +195,50 @@ export async function getRouteAuth(
   options: RouteAuthOptions = {},
 ): Promise<RouteAuth | null> {
   const allowApiKey = options.allowApiKey ?? true;
+  const allowClerk = options.allowClerk ?? true;
   const allowSession = options.allowSession ?? true;
+  const bearerToken = parseBearerToken(request);
 
   if (allowApiKey) {
-    const bearerToken = parseBearerToken(request);
     if (bearerToken) {
       const apiKey = await resolveApiKey(bearerToken);
-      if (!apiKey) {
+      if (apiKey) {
+        return {
+          type: "apiKey",
+          apiKey,
+        };
+      }
+    }
+  }
+
+  if (allowClerk) {
+    if (bearerToken) {
+      const clerkBearerAuth = await resolveClerkBearerToken(bearerToken);
+      if (clerkBearerAuth?.ownerKey) {
+        return {
+          type: "clerk",
+          userId: clerkBearerAuth.userId,
+          ownerKey: clerkBearerAuth.ownerKey,
+          tokenSource: "bearer",
+        };
+      }
+    }
+
+    const clerkAuth = await auth();
+    if (clerkAuth.isAuthenticated && clerkAuth.userId) {
+      const ownerKey = getAuthOwnerKey({
+        type: "clerk",
+        userId: clerkAuth.userId,
+      });
+      if (!ownerKey) {
         return null;
       }
 
       return {
-        type: "apiKey",
-        apiKey,
+        type: "clerk",
+        userId: clerkAuth.userId,
+        ownerKey,
+        tokenSource: bearerToken ? "bearer" : "cookie",
       };
     }
   }
@@ -199,7 +284,10 @@ function sameOrigin(candidate: string, requestOrigin: string) {
 }
 
 export function validateCsrfForSessionAuth(request: NextRequest, auth: RouteAuth) {
-  if (auth.type !== "session" || SAFE_METHODS.has(request.method)) {
+  const needsCsrf =
+    auth.type === "session" ||
+    (auth.type === "clerk" && auth.tokenSource === "cookie");
+  if (!needsCsrf || SAFE_METHODS.has(request.method)) {
     return null;
   }
 
@@ -247,6 +335,18 @@ export function validateApiKeyPermission(request: NextRequest, auth: RouteAuth) 
     },
     { status: 403 },
   );
+}
+
+export function getRouteAuthOwnerKey(auth: RouteAuth) {
+  if (auth.type === "clerk") {
+    return auth.ownerKey;
+  }
+
+  if (auth.type === "apiKey") {
+    return auth.apiKey.ownerKey;
+  }
+
+  return null;
 }
 
 export function unauthorizedJson(message = "Unauthorized") {

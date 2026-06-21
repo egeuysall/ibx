@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { getRouteSession, unauthorizedJson, validateCsrfForSessionAuth } from "@/lib/auth-server";
+import {
+  getRouteAuth,
+  getRouteAuthOwnerKey,
+  unauthorizedJson,
+  validateCsrfForSessionAuth,
+} from "@/lib/auth-server";
 import { api, convex } from "@/lib/convex-server";
 
 function getKeyId(params: { keyId: string }) {
@@ -16,14 +21,15 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ keyId: string }> },
 ) {
-  const session = await getRouteSession(request);
-  if (!session) {
+  const auth = await getRouteAuth(request, { allowApiKey: false });
+  if (!auth) {
     return unauthorizedJson();
   }
-  const csrfError = validateCsrfForSessionAuth(request, { type: "session", session });
+  const csrfError = validateCsrfForSessionAuth(request, auth);
   if (csrfError) {
     return csrfError;
   }
+  const ownerKey = getRouteAuthOwnerKey(auth);
 
   const resolvedParams = await params;
   const keyId = getKeyId(resolvedParams);
@@ -32,6 +38,7 @@ export async function DELETE(
   }
 
   await convex.mutation(api.apiKeys.revoke, {
+    ownerKey,
     keyId: keyId as never,
   });
 

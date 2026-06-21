@@ -1,12 +1,12 @@
 "use client";
 
+import { useClerk } from "@clerk/nextjs";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
-import { LoginScreen } from "@/components/auth/login-screen";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,6 +37,7 @@ import {
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -50,6 +51,7 @@ import {
   SidebarRail,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
+import { SidebarAccount } from "@/components/layout/sidebar-account";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useOfflineStatus } from "@/hooks/useOfflineStatus";
 import { useTheme } from "@/hooks/useTheme";
@@ -866,7 +868,7 @@ function clearShortcutPayloadFromLocation(
   hashParams.delete("ts");
 
   if (url.pathname.startsWith("/capture/")) {
-    url.pathname = "/";
+    url.pathname = "/app";
   }
 
   if (!url.searchParams.get("view")) {
@@ -886,6 +888,7 @@ export function AppShell({
 }: AppShellProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { signOut } = useClerk();
   useTheme();
   const isOnline = useOfflineStatus();
 
@@ -1048,14 +1051,18 @@ export function AppShell({
       setQueuedPromptCount(0);
 
       const now = Date.now();
-      if (now - lastUnauthorizedToastAtRef.current < 1_500) {
-        return;
+      if (now - lastUnauthorizedToastAtRef.current >= 1_500) {
+        lastUnauthorizedToastAtRef.current = now;
+        toast.error(
+          unauthorizedEvent.detail?.message ??
+            "Session expired. Sign in again.",
+        );
       }
 
-      lastUnauthorizedToastAtRef.current = now;
-      toast.error(
-        unauthorizedEvent.detail?.message ?? "Session expired. Sign in again.",
-      );
+      void signOut({ redirectUrl: "/" }).catch(() => {
+        router.replace("/");
+        router.refresh();
+      });
     };
 
     window.addEventListener(
@@ -1067,7 +1074,7 @@ export function AppShell({
         UNAUTHORIZED_EVENT_NAME,
         onUnauthorized as EventListener,
       );
-  }, [isAuthenticated]);
+  }, [isAuthenticated, router, signOut]);
 
   const refreshTodos = useCallback(
     async (showLoading = false) => {
@@ -1474,7 +1481,7 @@ export function AppShell({
     if (normalizedView !== viewParam) {
       const params = new URLSearchParams(searchParams.toString());
       params.set("view", normalizedView);
-      router.replace(`/?${params.toString()}`, { scroll: false });
+      router.replace(`/app?${params.toString()}`, { scroll: false });
     }
   }, [hasHydratedPreferences, router, searchParams]);
 
@@ -1488,7 +1495,7 @@ export function AppShell({
       setFilter(nextFilter);
       const params = new URLSearchParams(searchParams.toString());
       params.set("view", nextFilter);
-      router.replace(`/?${params.toString()}`, { scroll: false });
+      router.replace(`/app?${params.toString()}`, { scroll: false });
     }
   }, [hasHydratedPreferences, router, searchParams]);
 
@@ -1568,7 +1575,7 @@ export function AppShell({
       setFilter(nextFilter);
       const params = new URLSearchParams(searchParams.toString());
       params.set("view", nextFilter);
-      router.replace(`/?${params.toString()}`, { scroll: false });
+      router.replace(`/app?${params.toString()}`, { scroll: false });
     },
     [router, searchParams],
   );
@@ -1626,13 +1633,6 @@ export function AppShell({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [focusPromptInputAtEnd, setActiveFilter]);
-
-  const handleAuthenticated = () => {
-    setIsAuthenticated(true);
-    router.refresh();
-    toast.message("access granted");
-    void refreshTodos();
-  };
 
   const handleGenerateTodos = async () => {
     const cleanInput = promptInput.trim();
@@ -2204,12 +2204,7 @@ export function AppShell({
   const showZenView = filter === "zen";
 
   if (!isAuthenticated) {
-    return (
-      <>
-        <LoginScreen onAuthenticated={handleAuthenticated} />
-        <Toaster position="bottom-right" />
-      </>
-    );
+    return null;
   }
 
   return (
@@ -2321,6 +2316,9 @@ export function AppShell({
               </SidebarGroupContent>
             </SidebarGroup>
           </SidebarContent>
+          <SidebarFooter className="border-t">
+            <SidebarAccount />
+          </SidebarFooter>
           <SidebarRail />
         </Sidebar>
 

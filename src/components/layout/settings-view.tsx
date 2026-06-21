@@ -1,5 +1,6 @@
 "use client";
 
+import { useClerk } from "@clerk/nextjs";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
@@ -9,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -21,6 +23,7 @@ import {
   SidebarRail,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
+import { SidebarAccount } from "@/components/layout/sidebar-account";
 import { Toaster } from "@/components/ui/sonner";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { ThemePreference } from "@/hooks/useTheme";
@@ -151,6 +154,7 @@ function readStoredCalendarFeedUrl() {
 
 export function SettingsView() {
   const router = useRouter();
+  const { signOut } = useClerk();
   const { theme, setTheme } = useTheme();
   const lastUnauthorizedToastAtRef = useRef(0);
   const [isClearing, startClearTransition] = useTransition();
@@ -316,6 +320,7 @@ export function SettingsView() {
       await clearLocalThoughts();
       await clearCachedTodos();
       toast.message("Signed out");
+      await signOut({ redirectUrl: "/" }).catch(() => undefined);
       router.replace("/");
       router.refresh();
     });
@@ -377,8 +382,10 @@ export function SettingsView() {
         lastUnauthorizedToastAtRef.current = now;
       }
 
-      router.replace("/");
-      router.refresh();
+      void signOut({ redirectUrl: "/" }).catch(() => {
+        router.replace("/");
+        router.refresh();
+      });
     };
 
     window.addEventListener(UNAUTHORIZED_EVENT_NAME, onUnauthorized as EventListener);
@@ -387,7 +394,7 @@ export function SettingsView() {
         UNAUTHORIZED_EVENT_NAME,
         onUnauthorized as EventListener,
       );
-  }, [router]);
+  }, [router, signOut]);
 
   const handleCreateApiKey = () => {
     startCreateKeyTransition(async () => {
@@ -508,7 +515,7 @@ export function SettingsView() {
                 <SidebarMenu>
                   <SidebarMenuItem>
                     <SidebarMenuButton
-                      render={<Link href="/?view=zen" prefetch={false} />}
+                      render={<Link href="/app?view=zen" prefetch={false} />}
                       className="group-data-[collapsible=icon]:justify-center"
                     >
                       <span className="group-data-[collapsible=icon]:hidden">
@@ -521,7 +528,7 @@ export function SettingsView() {
                   </SidebarMenuItem>
                   <SidebarMenuItem>
                     <SidebarMenuButton
-                      render={<Link href="/?view=today" prefetch={false} />}
+                      render={<Link href="/app?view=today" prefetch={false} />}
                       className="group-data-[collapsible=icon]:justify-center"
                     >
                       <span className="group-data-[collapsible=icon]:hidden">
@@ -534,7 +541,9 @@ export function SettingsView() {
                   </SidebarMenuItem>
                   <SidebarMenuItem>
                     <SidebarMenuButton
-                      render={<Link href="/?view=upcoming" prefetch={false} />}
+                      render={
+                        <Link href="/app?view=upcoming" prefetch={false} />
+                      }
                       className="group-data-[collapsible=icon]:justify-center"
                     >
                       <span className="group-data-[collapsible=icon]:hidden">
@@ -547,7 +556,9 @@ export function SettingsView() {
                   </SidebarMenuItem>
                   <SidebarMenuItem>
                     <SidebarMenuButton
-                      render={<Link href="/?view=archive" prefetch={false} />}
+                      render={
+                        <Link href="/app?view=archive" prefetch={false} />
+                      }
                       className="group-data-[collapsible=icon]:justify-center"
                     >
                       <span className="group-data-[collapsible=icon]:hidden">
@@ -583,6 +594,9 @@ export function SettingsView() {
               </SidebarGroupContent>
             </SidebarGroup>
           </SidebarContent>
+          <SidebarFooter className="border-t">
+            <SidebarAccount />
+          </SidebarFooter>
           <SidebarRail />
         </Sidebar>
 

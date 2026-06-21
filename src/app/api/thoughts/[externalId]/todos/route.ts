@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import {
   getRouteAuth,
+  getRouteAuthOwnerKey,
   unauthorizedJson,
   validateApiKeyPermission,
   validateCsrfForSessionAuth,
@@ -46,6 +47,7 @@ export async function GET(
   if (permissionError) {
     return permissionError;
   }
+  const ownerKey = getRouteAuthOwnerKey(auth);
 
   const resolvedParams = await params;
   const externalId = getExternalId(resolvedParams);
@@ -56,15 +58,22 @@ export async function GET(
 
   const todayStartUtc = parseTodayStartUtc(request.nextUrl.searchParams.get("today"));
   if (todayStartUtc !== null) {
-    await convex.mutation(api.todos.enforceDueDatesAndReschedule, { todayStartUtc });
+    await convex.mutation(api.todos.enforceDueDatesAndReschedule, {
+      ownerKey,
+      todayStartUtc,
+    });
   }
 
-  const thought = await convex.query(api.thoughts.getByExternalId, { externalId });
+  const thought = await convex.query(api.thoughts.getByExternalId, {
+    ownerKey,
+    externalId,
+  });
   if (!thought) {
     return NextResponse.json({ todos: [] });
   }
 
   const todos = await convex.query(api.todos.byThought, {
+    ownerKey,
     thoughtId: thought._id,
   });
 
@@ -104,6 +113,7 @@ export async function POST(
   if (permissionError) {
     return permissionError;
   }
+  const ownerKey = getRouteAuthOwnerKey(auth);
 
   const resolvedParams = await params;
   const externalId = getExternalId(resolvedParams);
@@ -174,12 +184,16 @@ export async function POST(
     return NextResponse.json({ error: "Todo title is required." }, { status: 400 });
   }
 
-  const thought = await convex.query(api.thoughts.getByExternalId, { externalId });
+  const thought = await convex.query(api.thoughts.getByExternalId, {
+    ownerKey,
+    externalId,
+  });
   if (!thought) {
     return NextResponse.json({ error: "Thought not found." }, { status: 404 });
   }
 
   await convex.mutation(api.todos.createOne, {
+    ownerKey,
     thoughtId: thought._id,
     thoughtExternalId: thought.externalId,
     title,

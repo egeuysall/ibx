@@ -4,22 +4,40 @@ import { mutation, query } from "./_generated/server";
 export const list = query({
   args: {
     includeRevoked: v.boolean(),
+    ownerKey: v.union(v.string(), v.null()),
   },
   handler: async (ctx, args) => {
-    if (args.includeRevoked) {
-      return await ctx.db.query("apiKeys").withIndex("by_createdAt").order("desc").take(200);
+    if (args.ownerKey !== null) {
+      const keys = await ctx.db
+        .query("apiKeys")
+        .withIndex("by_ownerKey_and_createdAt", (q) =>
+          q.eq("ownerKey", args.ownerKey),
+        )
+        .order("desc")
+        .take(200);
+
+      return args.includeRevoked
+        ? keys
+        : keys.filter((key) => key.revokedAt === null);
     }
 
-    return await ctx.db
+    if (args.includeRevoked) {
+      const keys = await ctx.db.query("apiKeys").withIndex("by_createdAt").order("desc").take(200);
+      return keys.filter((key) => key.ownerKey === null || key.ownerKey === undefined);
+    }
+
+    const keys = await ctx.db
       .query("apiKeys")
       .withIndex("by_revokedAt_and_createdAt", (q) => q.eq("revokedAt", null))
       .order("desc")
       .take(200);
+    return keys.filter((key) => key.ownerKey === null || key.ownerKey === undefined);
   },
 });
 
 export const create = mutation({
   args: {
+    ownerKey: v.union(v.string(), v.null()),
     name: v.string(),
     keyHash: v.string(),
     prefix: v.string(),
@@ -37,6 +55,7 @@ export const create = mutation({
     }
 
     return await ctx.db.insert("apiKeys", {
+      ownerKey: args.ownerKey,
       name: args.name,
       keyHash: args.keyHash,
       prefix: args.prefix,
@@ -51,10 +70,14 @@ export const create = mutation({
 export const revoke = mutation({
   args: {
     keyId: v.id("apiKeys"),
+    ownerKey: v.union(v.string(), v.null()),
   },
   handler: async (ctx, args) => {
     const existing = await ctx.db.get(args.keyId);
     if (!existing || existing.revokedAt !== null) {
+      return null;
+    }
+    if ((existing.ownerKey ?? null) !== args.ownerKey) {
       return null;
     }
 
@@ -77,6 +100,9 @@ export const getActiveByHash = query({
       return null;
     }
 
-    return key;
+    return {
+      ...key,
+      ownerKey: key.ownerKey ?? null,
+    };
   },
 });

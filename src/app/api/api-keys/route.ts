@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { getRouteSession, unauthorizedJson, validateCsrfForSessionAuth } from "@/lib/auth-server";
+import {
+  getRouteAuth,
+  getRouteAuthOwnerKey,
+  unauthorizedJson,
+  validateCsrfForSessionAuth,
+} from "@/lib/auth-server";
 import { createApiKey } from "@/lib/api-keys";
 import { api, convex } from "@/lib/convex-server";
 
@@ -24,12 +29,16 @@ function normalizePermission(value: unknown): ApiKeyPermission {
 }
 
 export async function GET(request: NextRequest) {
-  const session = await getRouteSession(request);
-  if (!session) {
+  const auth = await getRouteAuth(request, { allowApiKey: false });
+  if (!auth) {
     return unauthorizedJson();
   }
+  const ownerKey = getRouteAuthOwnerKey(auth);
 
-  const keys = await convex.query(api.apiKeys.list, { includeRevoked: false });
+  const keys = await convex.query(api.apiKeys.list, {
+    includeRevoked: false,
+    ownerKey,
+  });
 
   return NextResponse.json({
     keys: keys.map((key) => ({
@@ -44,14 +53,15 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const session = await getRouteSession(request);
-  if (!session) {
+  const auth = await getRouteAuth(request, { allowApiKey: false });
+  if (!auth) {
     return unauthorizedJson();
   }
-  const csrfError = validateCsrfForSessionAuth(request, { type: "session", session });
+  const csrfError = validateCsrfForSessionAuth(request, auth);
   if (csrfError) {
     return csrfError;
   }
+  const ownerKey = getRouteAuthOwnerKey(auth);
 
   const body = (await request.json().catch(() => null)) as {
     name?: unknown;
@@ -63,6 +73,7 @@ export async function POST(request: NextRequest) {
   const { rawKey, keyHash, last4, prefix } = createApiKey();
 
   const keyId = await convex.mutation(api.apiKeys.create, {
+    ownerKey,
     name,
     keyHash,
     prefix,

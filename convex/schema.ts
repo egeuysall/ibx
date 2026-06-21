@@ -11,6 +11,7 @@ export default defineSchema({
     .index("by_tokenHash", ["tokenHash"])
     .index("by_expiresAt", ["expiresAt"]),
   apiKeys: defineTable({
+    ownerKey: v.optional(v.union(v.string(), v.null())),
     name: v.string(),
     keyHash: v.string(),
     prefix: v.string(),
@@ -22,9 +23,11 @@ export default defineSchema({
     revokedAt: v.union(v.number(), v.null()),
   })
     .index("by_keyHash", ["keyHash"])
+    .index("by_ownerKey_and_createdAt", ["ownerKey", "createdAt"])
     .index("by_createdAt", ["createdAt"])
     .index("by_revokedAt_and_createdAt", ["revokedAt", "createdAt"]),
   thoughts: defineTable({
+    ownerKey: v.optional(v.union(v.string(), v.null())),
     externalId: v.string(),
     rawText: v.string(),
     createdAt: v.number(),
@@ -38,8 +41,11 @@ export default defineSchema({
     aiRunId: v.union(v.string(), v.null()),
   })
     .index("by_externalId", ["externalId"])
+    .index("by_ownerKey_and_externalId", ["ownerKey", "externalId"])
+    .index("by_ownerKey_and_createdAt", ["ownerKey", "createdAt"])
     .index("by_createdAt", ["createdAt"]),
   todos: defineTable({
+    ownerKey: v.optional(v.union(v.string(), v.null())),
     thoughtId: v.id("thoughts"),
     thoughtExternalId: v.optional(v.string()),
     title: v.string(),
@@ -60,6 +66,7 @@ export default defineSchema({
     source: v.optional(v.union(v.literal("ai"), v.literal("manual"))),
     createdAt: v.number(),
   })
+    .index("by_ownerKey_and_createdAt", ["ownerKey", "createdAt"])
     .index("by_thoughtId_and_createdAt", ["thoughtId", "createdAt"])
     .index("by_createdAt", ["createdAt"]),
   memories: defineTable({

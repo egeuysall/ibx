@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import {
   getRouteAuth,
+  getRouteAuthOwnerKey,
   unauthorizedJson,
   validateApiKeyPermission,
   validateCsrfForSessionAuth,
@@ -115,6 +116,7 @@ export async function POST(
   if (permissionError) {
     return permissionError;
   }
+  const ownerKey = getRouteAuthOwnerKey(auth);
 
   const resolvedParams = await params;
   const externalId = getExternalId(resolvedParams);
@@ -131,7 +133,10 @@ export async function POST(
   const effectiveTodayStartUtc = todayStartUtc ?? getStartOfUserDay(Date.now());
   const todayDateKey = toDateKey(effectiveTodayStartUtc);
 
-  const thought = await convex.query(api.thoughts.getByExternalId, { externalId });
+  const thought = await convex.query(api.thoughts.getByExternalId, {
+    ownerKey,
+    externalId,
+  });
   if (!thought) {
     return NextResponse.json({ error: "Thought not found." }, { status: 404 });
   }
@@ -139,6 +144,7 @@ export async function POST(
   const aiRunId = randomUUID();
 
   await convex.mutation(api.thoughts.updateStatus, {
+    ownerKey,
     externalId,
     status: "processing",
     aiRunId,
@@ -164,10 +170,11 @@ export async function POST(
 
     if (todayStartUtc !== null) {
       await convex.mutation(api.todos.enforceDueDatesAndReschedule, {
+        ownerKey,
         todayStartUtc,
       });
     }
-    const existingTodos = await convex.query(api.todos.listAll, {});
+    const existingTodos = await convex.query(api.todos.listAll, { ownerKey });
     const reconciliationPlan = planTodoReconciliation(
       generatedTodos,
       existingTodos.map((todo) => ({
@@ -194,7 +201,7 @@ export async function POST(
     if (reconciliationPlan.deleteIds.length > 0) {
       await Promise.all(
         reconciliationPlan.deleteIds.map((todoId) =>
-          convex.mutation(api.todos.deleteOneByStringId, { todoId }),
+          convex.mutation(api.todos.deleteOneByStringId, { ownerKey, todoId }),
         ),
       );
     }
@@ -203,6 +210,7 @@ export async function POST(
       await Promise.all(
         reconciliationPlan.update.map((todo) =>
           convex.mutation(api.todos.updateFromAgent, {
+            ownerKey,
             todoId: todo.id as never,
             title: todo.title,
             notes: todo.notes,
@@ -218,6 +226,7 @@ export async function POST(
 
     if (reconciliationPlan.create.length > 0) {
       await convex.mutation(api.todos.createMany, {
+        ownerKey,
         thoughtId: thought._id,
         thoughtExternalId: externalId,
         items: reconciliationPlan.create.map((todo) => ({
@@ -234,6 +243,7 @@ export async function POST(
     }
 
     await convex.mutation(api.thoughts.updateStatus, {
+      ownerKey,
       externalId,
       status: "done",
       aiRunId,
@@ -251,6 +261,7 @@ export async function POST(
     return NextResponse.json({ ok: true, created: reconciliationPlan.create.length });
   } catch (error) {
     await convex.mutation(api.thoughts.updateStatus, {
+      ownerKey,
       externalId,
       status: "failed",
       aiRunId,

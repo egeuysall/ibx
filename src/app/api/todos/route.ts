@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 
 import {
   getRouteAuth,
+  getRouteAuthOwnerKey,
   unauthorizedJson,
   validateApiKeyPermission,
   validateCsrfForSessionAuth,
@@ -34,15 +35,17 @@ export async function GET(request: NextRequest) {
   if (permissionError) {
     return permissionError;
   }
+  const ownerKey = getRouteAuthOwnerKey(auth);
 
   const todayStartUtc = parseTodayStartUtc(request.nextUrl.searchParams.get("today"));
   if (todayStartUtc !== null) {
     await convex.mutation(api.todos.enforceDueDatesAndReschedule, {
+      ownerKey,
       todayStartUtc,
     });
   }
 
-  const todos = await convex.query(api.todos.listAll, {});
+  const todos = await convex.query(api.todos.listAll, { ownerKey });
 
   return NextResponse.json({
     todos: todos.map((todo) => ({
@@ -77,6 +80,7 @@ export async function POST(request: NextRequest) {
   if (permissionError) {
     return permissionError;
   }
+  const ownerKey = getRouteAuthOwnerKey(auth);
 
   const body = (await request.json().catch(() => null)) as {
     title?: unknown;
@@ -170,6 +174,7 @@ export async function POST(request: NextRequest) {
   const externalId = `manual-${randomUUID()}`;
   const createdAt = Date.now();
   const thoughtId = await convex.mutation(api.thoughts.upsert, {
+    ownerKey,
     externalId,
     rawText: title,
     createdAt,
@@ -178,6 +183,7 @@ export async function POST(request: NextRequest) {
     aiRunId: null,
   });
   const todoId = await convex.mutation(api.todos.createOne, {
+    ownerKey,
     thoughtId,
     thoughtExternalId: externalId,
     title,
