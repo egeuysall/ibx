@@ -51,3 +51,17 @@ export type SyncThoughtInput = {
   status: ThoughtStatus;
   aiRunId: string | null;
 };
+
+export type AttachmentParentKind = "thought" | "todo";
+
+export type AttachmentRecord = {
+  id: string;
+  parentKind: AttachmentParentKind;
+  parentId: string;
+  fileName: string;
+  contentType: string;
+  size: number;
+  status: "uploaded";
+  createdAt: number;
+  updatedAt: number;
+};

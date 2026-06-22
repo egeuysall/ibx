@@ -101,6 +101,31 @@ export default defineSchema({
   })
     .index("by_ownerKey_and_opId", ["ownerKey", "opId"])
     .index("by_ownerKey_and_createdAt", ["ownerKey", "createdAt"]),
+  attachments: defineTable({
+    ownerKey: v.optional(v.union(v.string(), v.null())),
+    parentKind: v.union(v.literal("thought"), v.literal("todo")),
+    parentId: v.string(),
+    storageId: v.id("_storage"),
+    fileName: v.string(),
+    contentType: v.string(),
+    size: v.number(),
+    status: v.union(
+      v.literal("uploaded"),
+      v.literal("pendingDelete"),
+      v.literal("deleted"),
+    ),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.union(v.number(), v.null())),
+  })
+    .index("by_ownerKey_and_parentKind_and_parentId_and_createdAt", [
+      "ownerKey",
+      "parentKind",
+      "parentId",
+      "createdAt",
+    ])
+    .index("by_ownerKey_and_storageId", ["ownerKey", "storageId"])
+    .index("by_ownerKey_and_createdAt", ["ownerKey", "createdAt"]),
   memories: defineTable({
     key: v.string(),
     kind: v.union(v.literal("profile"), v.literal("run")),

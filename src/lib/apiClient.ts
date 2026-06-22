@@ -1,4 +1,6 @@
 import type {
+  AttachmentParentKind,
+  AttachmentRecord,
   GenerationPreferences,
   TodoItem,
   SyncThoughtInput,
@@ -367,6 +369,83 @@ export const apiClient = {
   async deleteTodo(todoId: string) {
     return requestJson<{ ok: true }>(`/api/todos/${todoId}`, {
       method: "DELETE",
+    });
+  },
+
+  async listAttachments(parentKind: AttachmentParentKind, parentId: string) {
+    const query = new URLSearchParams({ parentKind, parentId });
+    return requestJson<{ attachments: AttachmentRecord[] }>(
+      `/api/attachments?${query.toString()}`,
+      { method: "GET" },
+    );
+  },
+
+  async createAttachment(input: {
+    parentKind: AttachmentParentKind;
+    parentId: string;
+    storageId: string;
+    fileName: string;
+    contentType: string;
+    size: number;
+  }) {
+    return requestJson<{ ok: true; id: string }>("/api/attachments", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  },
+
+  async createAttachmentUploadUrl() {
+    return requestJson<{
+      uploadUrl: string;
+      limits: { maxBytes: number; allowedContentTypes: string[] };
+    }>("/api/attachments/upload-url", {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+  },
+
+  async getAttachmentUrl(attachmentId: string) {
+    return requestJson<{ url: string }>(`/api/attachments/${attachmentId}/url`, {
+      method: "GET",
+    });
+  },
+
+  async deleteAttachment(attachmentId: string) {
+    return requestJson<{ ok: true }>(`/api/attachments/${attachmentId}`, {
+      method: "DELETE",
+    });
+  },
+
+  async uploadAttachmentFile(input: {
+    parentKind: AttachmentParentKind;
+    parentId: string;
+    file: File;
+  }) {
+    const { uploadUrl, limits } = await this.createAttachmentUploadUrl();
+    if (input.file.size > limits.maxBytes) {
+      throw new ApiError("Attachment file is too large.", 400);
+    }
+
+    const contentType = input.file.type || "application/octet-stream";
+    const uploadResponse = await fetch(uploadUrl, {
+      method: "POST",
+      headers: { "Content-Type": contentType },
+      body: input.file,
+    });
+    const uploadJson = (await uploadResponse.json().catch(() => ({}))) as {
+      storageId?: unknown;
+    };
+    if (!uploadResponse.ok || typeof uploadJson.storageId !== "string") {
+      throw new ApiError("Attachment upload failed.", uploadResponse.status || 500);
+    }
+
+    return await this.createAttachment({
+      parentKind: input.parentKind,
+      parentId: input.parentId,
+      storageId: uploadJson.storageId,
+      fileName: input.file.name,
+      contentType,
+      size: input.file.size,
     });
   },
 };

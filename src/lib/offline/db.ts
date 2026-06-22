@@ -221,3 +221,45 @@ export async function listPendingOfflineOperations(limit = 50) {
 export async function removeOfflineOperation(id: string) {
   await getOfflineDatabase().pendingOps.delete(id);
 }
+
+export async function listOfflineAttachments(
+  parentKind: OfflineAttachment["parentKind"],
+  parentId: string,
+) {
+  return await getOfflineDatabase()
+    .attachments.where({ parentKind, parentId })
+    .toArray();
+}
+
+export async function upsertOfflineAttachment(attachment: OfflineAttachment) {
+  await getOfflineDatabase().attachments.put(attachment);
+}
+
+export async function upsertManyOfflineAttachments(
+  attachments: OfflineAttachment[],
+) {
+  if (attachments.length === 0) {
+    return;
+  }
+
+  await getOfflineDatabase().attachments.bulkPut(attachments);
+}
+
+export async function patchOfflineAttachment(
+  id: string,
+  patch: Partial<Omit<OfflineAttachment, "id">>,
+) {
+  const table = getOfflineDatabase().attachments;
+  const current = await table.get(id);
+  if (!current) {
+    return null;
+  }
+
+  const nextValue: OfflineAttachment = {
+    ...current,
+    ...patch,
+    updatedAt: Date.now(),
+  };
+  await table.put(nextValue);
+  return nextValue;
+}

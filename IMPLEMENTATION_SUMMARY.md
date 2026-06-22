@@ -24,6 +24,12 @@
   - scoped the generated Simple Editor styles so they do not override IBX globals,
   - made `SimpleEditor` reusable with value, placeholder, embedded mode, and text/JSON/HTML change output,
   - replaced textarea usage in `ThoughtComposer` and `TodosPanel` with the Tiptap editor while preserving the existing plain-text save contract.
+- Added the first Convex attachment slice:
+  - added an `attachments` table with owner, parent, storage ID, metadata, status, timestamps, and bounded indexes,
+  - added Convex storage functions for upload URL generation, metadata creation, listing, signed URL lookup, and delete,
+  - added authenticated Next routes at `/api/attachments`, `/api/attachments/upload-url`, `/api/attachments/[attachmentId]`, and `/api/attachments/[attachmentId]/url`,
+  - added client helpers for upload/list/url/delete and Dexie helpers for offline attachment metadata,
+  - enforced server-side owner checks plus file size and MIME allowlist checks before attachment metadata is accepted.
 - Verified the existing iOS offline shortcut path still builds and tests successfully.
 
 ## Verification
@@ -38,6 +44,6 @@
 ## Known Remaining Work
 
 - Tiptap Simple Editor integration for Bri is planned but not implemented in this pass.
-- Full Tiptap JSON persistence, editor/page sync, conflict recovery UI, and attachment storage endpoints are planned but not implemented in this pass.
+- Full Tiptap JSON persistence, editor/page sync, conflict recovery UI, and visible attachment UI are planned but not implemented in this pass.
 - Browser-based Clerk auth for the CLI is planned; existing API-key auth remains unchanged.
 - Bri publication from IBX is planned but not implemented in this pass.
