@@ -1,0 +1,71 @@
+.simple-editor-wrapper {
+  --tt-toolbar-height: 44px;
+  --tt-theme-text: var(--tt-gray-light-900);
+  color: var(--tt-theme-text);
+  overscroll-behavior-y: none;
+
+  .dark & {
+    --tt-theme-text: var(--tt-gray-dark-900);
+  }
+}
+
+.simple-editor-wrapper ::-webkit-scrollbar {
+  width: 0.25rem;
+}
+
+.simple-editor-wrapper * {
+  scrollbar-width: thin;
+  scrollbar-color: var(--tt-scrollbar-color) transparent;
+}
+
+.simple-editor-wrapper ::-webkit-scrollbar-thumb {
+  background-color: var(--tt-scrollbar-color);
+  border-radius: 9999px;
+}
+
+.simple-editor-wrapper ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.tiptap.ProseMirror {
+  font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.simple-editor-wrapper {
+  width: 100%;
+  min-height: 16rem;
+  overflow: auto;
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.simple-editor-content {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.simple-editor-content .tiptap.ProseMirror.simple-editor {
+  flex: 1;
+  min-height: 12rem;
+  padding: 1rem;
+  color: var(--foreground);
+  outline: none;
+}
+
+@media screen and (max-width: 480px) {
+  .simple-editor-content .tiptap.ProseMirror.simple-editor {
+    padding: 0.875rem;
+  }
+}
+
+.simple-editor-content .tiptap.ProseMirror.simple-editor p.is-editor-empty:first-child::before {
+  color: var(--muted-foreground);
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}

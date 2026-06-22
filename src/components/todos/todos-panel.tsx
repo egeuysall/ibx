@@ -19,7 +19,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
+import { SimpleEditor } from "@/components/tiptap-templates/simple/simple-editor";
 import { cn } from "@/lib/utils";
 import type { LocalThought, TodoItem } from "@/lib/types";
 
@@ -115,13 +115,14 @@ export function TodosPanel({
 
                 <Field>
                   <FieldLabel htmlFor="todo-notes">Notes (optional)</FieldLabel>
-                  <Textarea
-                    id="todo-notes"
-                    rows={3}
-                    value={notes}
-                    onChange={(event) => setNotes(event.target.value)}
-                    placeholder="Context, links, or next steps"
-                  />
+                  <div id="todo-notes">
+                    <SimpleEditor
+                      value={notes}
+                      embedded
+                      placeholder="Context, links, or next steps"
+                      onChange={({ text }) => setNotes(text)}
+                    />
+                  </div>
                 </Field>
               </FieldGroup>
             </FieldSet>

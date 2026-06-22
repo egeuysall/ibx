@@ -10,7 +10,7 @@ import {
   FieldLabel,
   FieldSet,
 } from "@/components/ui/field";
-import { Textarea } from "@/components/ui/textarea";
+import { SimpleEditor } from "@/components/tiptap-templates/simple/simple-editor";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 type ThoughtComposerProps = {
@@ -54,14 +54,14 @@ export function ThoughtComposer({ isOnline, isWorking, onSave }: ThoughtComposer
         <FieldGroup>
           <Field>
             <FieldLabel htmlFor="thought-composer">&gt; Dump your thoughts…</FieldLabel>
-            <Textarea
-              id="thought-composer"
-              value={rawText}
-              onChange={(event) => setRawText(event.target.value)}
-              placeholder="Write messy notes, ideas, context, reminders..."
-              rows={5}
-              className="min-h-28 resize-y"
-            />
+            <div id="thought-composer">
+              <SimpleEditor
+                value={rawText}
+                embedded
+                placeholder="Write messy notes, ideas, context, reminders..."
+                onChange={({ text }) => setRawText(text)}
+              />
+            </div>
             <FieldDescription>{helperText}</FieldDescription>
           </Field>
         </FieldGroup>

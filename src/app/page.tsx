@@ -1,10 +1,10 @@
 import { SignInButton, SignUpButton } from "@clerk/nextjs";
-import { auth } from "@clerk/nextjs/server";
 import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
+import { getServerSession } from "@/lib/auth-server";
 
 export const dynamic = "force-dynamic";
 
@@ -26,11 +26,11 @@ export default async function Home({
 }: {
   searchParams: Promise<{ view?: string | string[] }>;
 }) {
-  const { userId } = await auth();
+  const session = await getServerSession();
   const resolvedSearchParams = await searchParams;
   const initialFilter = normalizeFilter(resolvedSearchParams.view);
 
-  if (userId) {
+  if (session) {
     redirect(initialFilter === "today" ? "/app" : `/app?view=${initialFilter}`);
   }
 
