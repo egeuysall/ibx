@@ -65,6 +65,11 @@ import {
   setCachedTodos,
 } from "@/lib/indexedDb";
 import {
+  enqueueOfflineOperation,
+  listPendingOfflineOperations,
+  removeOfflineOperation,
+} from "@/lib/offline/db";
+import {
   getTodoLinksInputValue,
   getTodoResourceLinks,
   parseTodoLinksInput,
@@ -97,6 +102,7 @@ const DEFAULT_AVAILABILITY_NOTES =
   "Mon-Tue unavailable before 6:00 PM. Wed-Fri unavailable before 5:00 PM. Sunday avoid 11:00 AM-12:00 PM and 7:00-8:00 PM. Hard stop at 10:30 PM daily. I execute about 4x faster than average, but only use 15-30 minutes for truly quick admin tasks; deep work should usually stay 45-120 minutes.";
 const DEFAULT_EXECUTION_SPEED_MULTIPLIER = 4;
 const SHORTCUT_CAPTURE_KEY_PREFIX = "ibx:shortcut-capture:";
+const LOCAL_MANUAL_THOUGHT_ID = "local-manual";
 const NOTE_PREVIEW_LENGTH = 160;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const NOTIFICATION_PRESTART_MS = 5 * 60 * 1000;
@@ -696,6 +702,26 @@ function sortTodos(todos: TodoItem[]) {
   });
 }
 
+function createLocalManualTodo(title: string): TodoItem {
+  const now = Date.now();
+  const todayDateKey = getLocalDateKey(now);
+
+  return {
+    id: `local-${crypto.randomUUID()}`,
+    thoughtId: LOCAL_MANUAL_THOUGHT_ID,
+    title,
+    notes: null,
+    status: "open",
+    dueDate: dateKeyToTimestamp(todayDateKey),
+    estimatedHours: null,
+    timeBlockStart: null,
+    priority: 1,
+    recurrence: "none",
+    source: "manual",
+    createdAt: now,
+  };
+}
+
 function getStartOfLocalDay(timestamp: number) {
   const date = new Date(timestamp);
   return new Date(
@@ -1200,6 +1226,52 @@ export function AppShell({
     }
   }, [isAuthenticated, isOnline, refreshQueuedPromptCount, refreshTodos]);
 
+  const flushPendingOfflineOperations = useCallback(async () => {
+    if (!isAuthenticated || !isOnline) {
+      return;
+    }
+
+    const pendingOperations = await listPendingOfflineOperations(25).catch(
+      () => [],
+    );
+    if (pendingOperations.length === 0) {
+      return;
+    }
+
+    let flushedCreates = 0;
+    for (const operation of pendingOperations) {
+      if (operation.entity !== "todo" || operation.kind !== "create") {
+        continue;
+      }
+
+      const payload = operation.payload as { title?: unknown };
+      const title =
+        typeof payload.title === "string" ? payload.title.trim() : "";
+      if (!title) {
+        await removeOfflineOperation(operation.id).catch(() => undefined);
+        continue;
+      }
+
+      try {
+        await apiClient.createManualTodo(title);
+        await removeOfflineOperation(operation.id);
+        flushedCreates += 1;
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401) {
+          throw error;
+        }
+        break;
+      }
+    }
+
+    if (flushedCreates > 0) {
+      await refreshTodos();
+      toast.message(
+        `${flushedCreates} offline todo${flushedCreates === 1 ? "" : "s"} synced`,
+      );
+    }
+  }, [isAuthenticated, isOnline, refreshTodos]);
+
   useEffect(() => {
     void refreshTodos(true);
   }, [refreshTodos]);
@@ -1242,7 +1314,13 @@ export function AppShell({
     }
 
     void flushQueuedPrompts();
-  }, [flushQueuedPrompts, isAuthenticated, isOnline]);
+    void flushPendingOfflineOperations();
+  }, [
+    flushPendingOfflineOperations,
+    flushQueuedPrompts,
+    isAuthenticated,
+    isOnline,
+  ]);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -1252,10 +1330,16 @@ export function AppShell({
     const timer = window.setInterval(() => {
       void refreshTodos();
       void flushQueuedPrompts();
+      void flushPendingOfflineOperations();
     }, 20_000);
 
     return () => window.clearInterval(timer);
-  }, [flushQueuedPrompts, isAuthenticated, refreshTodos]);
+  }, [
+    flushPendingOfflineOperations,
+    flushQueuedPrompts,
+    isAuthenticated,
+    refreshTodos,
+  ]);
 
   useEffect(() => {
     if (
@@ -1669,18 +1753,49 @@ export function AppShell({
       return;
     }
 
-    if (!isOnline) {
-      toast.error("manual add needs a connection");
-      return;
-    }
-
     setIsAddingTodo(true);
     try {
+      if (!isOnline) {
+        const localTodo = createLocalManualTodo(cleanInput);
+        setTodos((previousTodos) => sortTodos([...previousTodos, localTodo]));
+        setHasLoadedTodos(true);
+        await enqueueOfflineOperation({
+          entity: "todo",
+          entityId: localTodo.id,
+          kind: "create",
+          payload: {
+            title: cleanInput,
+            localId: localTodo.id,
+          },
+        });
+        setPromptInput("");
+        toast.message("todo saved offline");
+        return;
+      }
+
       await apiClient.createManualTodo(cleanInput);
       setPromptInput("");
       toast.message("todo added");
       await refreshTodos();
     } catch (error) {
+      if (error instanceof ApiError && error.isNetworkError) {
+        const localTodo = createLocalManualTodo(cleanInput);
+        setTodos((previousTodos) => sortTodos([...previousTodos, localTodo]));
+        setHasLoadedTodos(true);
+        await enqueueOfflineOperation({
+          entity: "todo",
+          entityId: localTodo.id,
+          kind: "create",
+          payload: {
+            title: cleanInput,
+            localId: localTodo.id,
+          },
+        });
+        setPromptInput("");
+        toast.message("todo saved offline");
+        return;
+      }
+
       toastApiError(error);
     } finally {
       setIsAddingTodo(false);
