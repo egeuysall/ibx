@@ -19,6 +19,14 @@ const USER_DAY_FORMATTER = new Intl.DateTimeFormat("en-US", {
   day: "2-digit",
 });
 
+function isActiveTodo(todo: { deletedAt?: number | null }) {
+  return typeof todo.deletedAt !== "number";
+}
+
+function nextVersion(current: { version?: number }) {
+  return (current.version ?? 1) + 1;
+}
+
 function getUserDateKey(timestamp: number) {
   const parts = USER_DAY_FORMATTER.formatToParts(new Date(timestamp));
   const year = parts.find((part) => part.type === "year")?.value;
@@ -116,7 +124,9 @@ export const byThought = query({
       .withIndex("by_thoughtId_and_createdAt", (q) => q.eq("thoughtId", args.thoughtId))
       .order("desc")
       .take(300);
-    return todos.filter((todo) => (todo.ownerKey ?? null) === args.ownerKey);
+    return todos.filter(
+      (todo) => (todo.ownerKey ?? null) === args.ownerKey && isActiveTodo(todo),
+    );
   },
 });
 
@@ -132,7 +142,8 @@ export const listAll = query({
           q.eq("ownerKey", args.ownerKey),
         )
         .order("desc")
-        .take(500);
+        .take(500)
+        .then((rows) => rows.filter(isActiveTodo));
     }
 
     const todos = await ctx.db
@@ -140,7 +151,11 @@ export const listAll = query({
       .withIndex("by_createdAt")
       .order("desc")
       .take(500);
-    return todos.filter((todo) => todo.ownerKey === null || todo.ownerKey === undefined);
+    return todos.filter(
+      (todo) =>
+        (todo.ownerKey === null || todo.ownerKey === undefined) &&
+        isActiveTodo(todo),
+    );
   },
 });
 
@@ -158,7 +173,11 @@ export const enforceDueDatesAndReschedule = mutation({
             .order("desc")
             .take(500)
             .then((rows) =>
-              rows.filter((todo) => todo.ownerKey === null || todo.ownerKey === undefined),
+              rows.filter(
+                (todo) =>
+                  (todo.ownerKey === null || todo.ownerKey === undefined) &&
+                  isActiveTodo(todo),
+              ),
             )
         : await ctx.db
             .query("todos")
@@ -166,7 +185,8 @@ export const enforceDueDatesAndReschedule = mutation({
               q.eq("ownerKey", args.ownerKey),
             )
             .order("desc")
-            .take(500);
+            .take(500)
+            .then((rows) => rows.filter(isActiveTodo));
     let updated = 0;
 
     for (const todo of todos) {
@@ -174,10 +194,19 @@ export const enforceDueDatesAndReschedule = mutation({
       const nextPriority = todo.priority === 1 || todo.priority === 3 ? todo.priority : 2;
 
       if (typeof todo.dueDate !== "number") {
-        await ctx.db.patch(todo._id, { dueDate: nextDueDate, priority: nextPriority });
+        await ctx.db.patch(todo._id, {
+          dueDate: nextDueDate,
+          priority: nextPriority,
+          updatedAt: Date.now(),
+          version: nextVersion(todo),
+        });
         updated += 1;
       } else if (todo.priority !== 1 && todo.priority !== 2 && todo.priority !== 3) {
-        await ctx.db.patch(todo._id, { priority: nextPriority });
+        await ctx.db.patch(todo._id, {
+          priority: nextPriority,
+          updatedAt: Date.now(),
+          version: nextVersion(todo),
+        });
         updated += 1;
       }
 
@@ -185,7 +214,11 @@ export const enforceDueDatesAndReschedule = mutation({
 
       if (isOverdueOpen) {
         nextDueDate = args.todayStartUtc;
-        await ctx.db.patch(todo._id, { dueDate: nextDueDate });
+        await ctx.db.patch(todo._id, {
+          dueDate: nextDueDate,
+          updatedAt: Date.now(),
+          version: nextVersion(todo),
+        });
         updated += 1;
       }
 
@@ -224,7 +257,7 @@ export const createMany = mutation({
       .take(300);
     const existingOpenTitleKeys = new Set(
       existingForThought
-        .filter((todo) => todo.status === "open")
+        .filter((todo) => todo.status === "open" && isActiveTodo(todo))
         .map((todo) => normalizeTitleKey(todo.title))
         .filter((key) => key.length > 0),
     );
@@ -260,6 +293,9 @@ export const createMany = mutation({
         priority: item.priority,
         source: item.source,
         createdAt: now,
+        updatedAt: now,
+        version: 1,
+        deletedAt: null,
       });
       insertedIds.push(todoId);
       if (titleKey) {
@@ -304,13 +340,16 @@ export const createOne = mutation({
         .take(300);
       const existingMatch = existingForThought.find(
         (todo) =>
-          todo.status === "open" && normalizeTitleKey(todo.title) === titleKey,
+          todo.status === "open" &&
+          isActiveTodo(todo) &&
+          normalizeTitleKey(todo.title) === titleKey,
       );
       if (existingMatch) {
         return existingMatch._id;
       }
     }
 
+    const now = Date.now();
     return await ctx.db.insert("todos", {
       ownerKey: args.ownerKey,
       thoughtId: args.thoughtId,
@@ -324,7 +363,10 @@ export const createOne = mutation({
       recurrence: args.recurrence,
       priority: normalizedPriority,
       source: args.source,
-      createdAt: Date.now(),
+      createdAt: now,
+      updatedAt: now,
+      version: 1,
+      deletedAt: null,
     });
   },
 });
@@ -348,7 +390,12 @@ export const updateStatus = mutation({
       return args.todoId;
     }
 
-    await ctx.db.patch(args.todoId, { status: args.status });
+    const now = Date.now();
+    await ctx.db.patch(args.todoId, {
+      status: args.status,
+      updatedAt: now,
+      version: nextVersion(existingTodo),
+    });
 
     const isRecurringCompletion =
       args.status === "done" &&
@@ -358,7 +405,6 @@ export const updateStatus = mutation({
 
     if (isRecurringCompletion) {
       const recurrence = existingTodo.recurrence as "daily" | "weekly" | "monthly";
-      const now = Date.now();
       const nextDueDate = getNextRecurringDueDate(recurrence, existingTodo.dueDate, now);
 
       await ctx.db.insert("todos", {
@@ -382,6 +428,9 @@ export const updateStatus = mutation({
           existingTodo.priority === 1 || existingTodo.priority === 3 ? existingTodo.priority : 2,
         source: existingTodo.source ?? "manual",
         createdAt: now,
+        updatedAt: now,
+        version: 1,
+        deletedAt: null,
       });
     }
 
@@ -403,7 +452,11 @@ export const deleteOne = mutation({
       return null;
     }
 
-    await ctx.db.delete(args.todoId);
+    await ctx.db.patch(args.todoId, {
+      deletedAt: Date.now(),
+      updatedAt: Date.now(),
+      version: nextVersion(existingTodo),
+    });
     return args.todoId;
   },
 });
@@ -427,7 +480,11 @@ export const deleteOneByStringId = mutation({
       return null;
     }
 
-    await ctx.db.delete(normalizedTodoId);
+    await ctx.db.patch(normalizedTodoId, {
+      deletedAt: Date.now(),
+      updatedAt: Date.now(),
+      version: nextVersion(existingTodo),
+    });
     return normalizedTodoId;
   },
 });
@@ -454,6 +511,8 @@ export const updateSchedule = mutation({
       timeBlockStart?: number | null;
       recurrence?: "none" | "daily" | "weekly" | "monthly";
       priority?: 1 | 2 | 3;
+      updatedAt?: number;
+      version?: number;
     } = {};
 
     const todayStartUtc = getStartOfConfiguredDay(Date.now());
@@ -478,7 +537,11 @@ export const updateSchedule = mutation({
       patch.priority = args.priority;
     }
 
-    await ctx.db.patch(args.todoId, patch);
+    await ctx.db.patch(args.todoId, {
+      ...patch,
+      updatedAt: Date.now(),
+      version: nextVersion(existingTodo),
+    });
     return args.todoId;
   },
 });
@@ -512,6 +575,8 @@ export const updateFromAgent = mutation({
       timeBlockStart?: number | null;
       recurrence?: "none" | "daily" | "weekly" | "monthly";
       priority?: 1 | 2 | 3;
+      updatedAt?: number;
+      version?: number;
     } = {};
 
     if (args.title !== undefined) {
@@ -546,7 +611,11 @@ export const updateFromAgent = mutation({
       return args.todoId;
     }
 
-    await ctx.db.patch(args.todoId, patch);
+    await ctx.db.patch(args.todoId, {
+      ...patch,
+      updatedAt: Date.now(),
+      version: nextVersion(existingTodo),
+    });
     return args.todoId;
   },
 });
@@ -570,7 +639,11 @@ export const updateTitle = mutation({
       return args.todoId;
     }
 
-    await ctx.db.patch(args.todoId, { title: args.title });
+    await ctx.db.patch(args.todoId, {
+      title: args.title,
+      updatedAt: Date.now(),
+      version: nextVersion(existingTodo),
+    });
     return args.todoId;
   },
 });

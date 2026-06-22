@@ -31,6 +31,9 @@ export default defineSchema({
     externalId: v.string(),
     rawText: v.string(),
     createdAt: v.number(),
+    updatedAt: v.optional(v.number()),
+    version: v.optional(v.number()),
+    deletedAt: v.optional(v.union(v.number(), v.null())),
     status: v.union(
       v.literal("pending"),
       v.literal("processing"),
@@ -48,6 +51,7 @@ export default defineSchema({
     ownerKey: v.optional(v.union(v.string(), v.null())),
     thoughtId: v.id("thoughts"),
     thoughtExternalId: v.optional(v.string()),
+    externalId: v.optional(v.string()),
     title: v.string(),
     notes: v.union(v.string(), v.null()),
     status: v.union(v.literal("open"), v.literal("done")),
@@ -65,10 +69,38 @@ export default defineSchema({
     ),
     source: v.optional(v.union(v.literal("ai"), v.literal("manual"))),
     createdAt: v.number(),
+    updatedAt: v.optional(v.number()),
+    version: v.optional(v.number()),
+    deletedAt: v.optional(v.union(v.number(), v.null())),
   })
     .index("by_ownerKey_and_createdAt", ["ownerKey", "createdAt"])
+    .index("by_ownerKey_and_updatedAt", ["ownerKey", "updatedAt"])
+    .index("by_ownerKey_and_externalId", ["ownerKey", "externalId"])
     .index("by_thoughtId_and_createdAt", ["thoughtId", "createdAt"])
     .index("by_createdAt", ["createdAt"]),
+  syncOperations: defineTable({
+    ownerKey: v.optional(v.union(v.string(), v.null())),
+    opId: v.string(),
+    clientId: v.string(),
+    entityType: v.union(v.literal("todo"), v.literal("thought")),
+    entityId: v.string(),
+    operation: v.union(
+      v.literal("create"),
+      v.literal("update"),
+      v.literal("delete"),
+      v.literal("toggle"),
+    ),
+    status: v.union(
+      v.literal("accepted"),
+      v.literal("rejected"),
+      v.literal("conflict"),
+    ),
+    serverId: v.union(v.string(), v.null()),
+    message: v.union(v.string(), v.null()),
+    createdAt: v.number(),
+  })
+    .index("by_ownerKey_and_opId", ["ownerKey", "opId"])
+    .index("by_ownerKey_and_createdAt", ["ownerKey", "createdAt"]),
   memories: defineTable({
     key: v.string(),
     kind: v.union(v.literal("profile"), v.literal("run")),

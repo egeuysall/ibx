@@ -11,6 +11,7 @@
 import type * as apiKeys from "../apiKeys.js";
 import type * as memories from "../memories.js";
 import type * as sessions from "../sessions.js";
+import type * as sync from "../sync.js";
 import type * as thoughts from "../thoughts.js";
 import type * as todos from "../todos.js";
 
@@ -24,6 +25,7 @@ declare const fullApi: ApiFromModules<{
   apiKeys: typeof apiKeys;
   memories: typeof memories;
   sessions: typeof sessions;
+  sync: typeof sync;
   thoughts: typeof thoughts;
   todos: typeof todos;
 }>;

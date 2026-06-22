@@ -91,16 +91,26 @@ export const upsert = mutation({
             .unique();
 
     if (existing) {
+      const now = Date.now();
       await ctx.db.patch(existing._id, {
         rawText: args.rawText,
         status: args.status,
         synced: args.synced,
         aiRunId: args.aiRunId,
+        updatedAt: now,
+        version: (existing.version ?? 1) + 1,
+        deletedAt: existing.deletedAt ?? null,
       });
       return existing._id;
     }
 
-    return await ctx.db.insert("thoughts", args);
+    const now = Date.now();
+    return await ctx.db.insert("thoughts", {
+      ...args,
+      updatedAt: now,
+      version: 1,
+      deletedAt: null,
+    });
   },
 });
 
@@ -139,6 +149,8 @@ export const updateStatus = mutation({
       status: args.status,
       aiRunId: args.aiRunId ?? thought.aiRunId,
       synced: args.synced ?? thought.synced,
+      updatedAt: Date.now(),
+      version: (thought.version ?? 1) + 1,
     });
 
     return thought._id;

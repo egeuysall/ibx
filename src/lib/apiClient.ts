@@ -1,8 +1,8 @@
 import type {
   GenerationPreferences,
+  TodoItem,
   SyncThoughtInput,
   ThoughtRecord,
-  TodoItem,
   TodoPriority,
   TodoRecurrence,
   TodoStatus,
@@ -209,6 +209,49 @@ export const apiClient = {
   async listAllTodos() {
     const today = getLocalDateKey();
     return requestJson<{ todos: TodoItem[] }>(`/api/todos?today=${today}`, {
+      method: "GET",
+    });
+  },
+
+  async syncPush(input: {
+    clientId: string;
+    ops: Array<{
+      opId: string;
+      clientId: string;
+      entityType: "todo";
+      entityId: string;
+      operation: "create" | "update" | "delete" | "toggle";
+      baseVersion?: number | null;
+      createdAt: number;
+      payload: Record<string, unknown>;
+    }>;
+  }) {
+    return requestJson<{
+      accepted: Array<{
+        opId: string;
+        entityId: string;
+        serverId: string | null;
+        status: "accepted" | "rejected" | "conflict";
+        message: string | null;
+      }>;
+      rejected: Array<{ opId: string; entityId: string; message: string }>;
+      conflicts: Array<{
+        opId: string;
+        entityId: string;
+        serverId: string;
+        message: string;
+        serverVersion: number;
+      }>;
+      serverNow: number;
+    }>("/api/sync", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  },
+
+  async syncPull(since: number | null) {
+    const query = since === null ? "" : `?since=${encodeURIComponent(String(since))}`;
+    return requestJson<{ todos: TodoItem[]; serverNow: number }>(`/api/sync${query}`, {
       method: "GET",
     });
   },

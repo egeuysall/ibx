@@ -97,6 +97,7 @@ const FILTER_STORAGE_KEY = "ibx:active-view";
 const PROMPT_AUTOFOCUS_STORAGE_KEY = "ibx:prompt-autofocus";
 const TIME_BLOCK_NOTIFICATIONS_STORAGE_KEY = "ibx:time-block-notifications";
 const ZEN_MODE_STORAGE_KEY = "ibx:zen-mode";
+const SYNC_CLIENT_ID_STORAGE_KEY = "ibx:sync-client-id";
 const AI_AVAILABILITY_NOTES_STORAGE_KEY = "ibx:ai-availability-notes";
 const DEFAULT_AVAILABILITY_NOTES =
   "Mon-Tue unavailable before 6:00 PM. Wed-Fri unavailable before 5:00 PM. Sunday avoid 11:00 AM-12:00 PM and 7:00-8:00 PM. Hard stop at 10:30 PM daily. I execute about 4x faster than average, but only use 15-30 minutes for truly quick admin tasks; deep work should usually stay 45-120 minutes.";
@@ -381,6 +382,25 @@ function toastApiError(error: unknown) {
   }
 
   toast.error(parseErrorMessage(error));
+}
+
+function readOrCreateSyncClientId() {
+  if (typeof window === "undefined") {
+    return "server";
+  }
+
+  try {
+    const existing = window.localStorage.getItem(SYNC_CLIENT_ID_STORAGE_KEY);
+    if (existing) {
+      return existing;
+    }
+
+    const nextValue = crypto.randomUUID();
+    window.localStorage.setItem(SYNC_CLIENT_ID_STORAGE_KEY, nextValue);
+    return nextValue;
+  } catch {
+    return crypto.randomUUID();
+  }
 }
 
 function normalizeEstimatedHours(hours: number | null | undefined) {
@@ -1238,37 +1258,63 @@ export function AppShell({
       return;
     }
 
-    let flushedCreates = 0;
-    for (const operation of pendingOperations) {
-      if (operation.entity !== "todo" || operation.kind !== "create") {
-        continue;
-      }
+    const syncableOperations = pendingOperations
+      .filter((operation) => operation.entity === "todo")
+      .map((operation) => {
+        const payload =
+          operation.payload && typeof operation.payload === "object"
+            ? (operation.payload as Record<string, unknown>)
+            : {};
+        return {
+          opId: operation.id,
+          clientId: readOrCreateSyncClientId(),
+          entityType: "todo" as const,
+          entityId: operation.entityId,
+          operation: operation.kind === "toggle" ? "toggle" : operation.kind,
+          createdAt: operation.createdAt,
+          payload,
+        };
+      })
+      .filter(
+        (operation): operation is {
+          opId: string;
+          clientId: string;
+          entityType: "todo";
+          entityId: string;
+          operation: "create" | "update" | "delete" | "toggle";
+          createdAt: number;
+          payload: Record<string, unknown>;
+        } =>
+          operation.operation === "create" ||
+          operation.operation === "update" ||
+          operation.operation === "delete" ||
+          operation.operation === "toggle",
+      );
 
-      const payload = operation.payload as { title?: unknown };
-      const title =
-        typeof payload.title === "string" ? payload.title.trim() : "";
-      if (!title) {
-        await removeOfflineOperation(operation.id).catch(() => undefined);
-        continue;
-      }
+    if (syncableOperations.length === 0) {
+      return;
+    }
 
-      try {
-        await apiClient.createManualTodo(title);
-        await removeOfflineOperation(operation.id);
-        flushedCreates += 1;
-      } catch (error) {
-        if (error instanceof ApiError && error.status === 401) {
-          throw error;
-        }
-        break;
+    const result = await apiClient.syncPush({
+      clientId: readOrCreateSyncClientId(),
+      ops: syncableOperations,
+    });
+
+    for (const acceptedOperation of result.accepted) {
+      if (acceptedOperation.status === "accepted") {
+        await removeOfflineOperation(acceptedOperation.opId).catch(() => undefined);
       }
     }
 
-    if (flushedCreates > 0) {
+    if (result.accepted.length > 0) {
       await refreshTodos();
       toast.message(
-        `${flushedCreates} offline todo${flushedCreates === 1 ? "" : "s"} synced`,
+        `${result.accepted.length} offline todo${result.accepted.length === 1 ? "" : "s"} synced`,
       );
+    }
+
+    if (result.rejected.length > 0 || result.conflicts.length > 0) {
+      toast.error("Some offline changes need review.");
     }
   }, [isAuthenticated, isOnline, refreshTodos]);
 
