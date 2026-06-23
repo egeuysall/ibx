@@ -20,6 +20,8 @@ export type TodoItem = {
   thoughtId: string;
   title: string;
   notes: string | null;
+  notesJson: string | null;
+  notesHtml: string | null;
   status: TodoStatus;
   dueDate: number | null;
   estimatedHours: number | null;

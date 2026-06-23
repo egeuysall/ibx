@@ -11,6 +11,43 @@ import { api, convex } from "@/lib/convex-server";
 import type { TodoStatus } from "@/lib/types";
 
 const MAX_NOTES_LENGTH = 4_000;
+const MAX_RICH_TEXT_LENGTH = 200_000;
+
+function normalizeRichTextJson(input: unknown) {
+  if (input === undefined) {
+    return undefined;
+  }
+  if (input === null) {
+    return null;
+  }
+
+  const serialized =
+    typeof input === "string" ? input : JSON.stringify(input);
+  if (serialized.length > MAX_RICH_TEXT_LENGTH) {
+    return null;
+  }
+
+  return serialized;
+}
+
+function normalizeRichTextHtml(input: unknown) {
+  if (input === undefined) {
+    return undefined;
+  }
+  if (input === null) {
+    return null;
+  }
+  if (typeof input !== "string") {
+    return null;
+  }
+
+  const trimmed = input.trim();
+  if (trimmed.length > MAX_RICH_TEXT_LENGTH) {
+    return null;
+  }
+
+  return trimmed || null;
+}
 
 export async function PATCH(
   request: NextRequest,
@@ -46,6 +83,8 @@ export async function PATCH(
     priority?: unknown;
     title?: unknown;
     notes?: unknown;
+    notesJson?: unknown;
+    notesHtml?: unknown;
   } | null;
 
   const status = body?.status;
@@ -56,6 +95,8 @@ export async function PATCH(
   const priority = body?.priority;
   const title = body?.title;
   const notes = body?.notes;
+  const notesJson = body?.notesJson;
+  const notesHtml = body?.notesHtml;
 
   const hasStatus = status === "open" || status === "done";
   const hasSchedule =
@@ -66,8 +107,9 @@ export async function PATCH(
     priority !== undefined;
   const hasTitle = title !== undefined;
   const hasNotes = notes !== undefined;
+  const hasRichNotes = notesJson !== undefined || notesHtml !== undefined;
 
-  if (!hasStatus && !hasSchedule && !hasTitle && !hasNotes) {
+  if (!hasStatus && !hasSchedule && !hasTitle && !hasNotes && !hasRichNotes) {
     return NextResponse.json({ error: "Nothing to update." }, { status: 400 });
   }
 
@@ -180,22 +222,32 @@ export async function PATCH(
     });
   }
 
-  if (hasNotes) {
+  if (hasNotes || hasRichNotes) {
     const normalizedNotes =
       notes === null
         ? null
         : typeof notes === "string"
           ? notes.trim().slice(0, MAX_NOTES_LENGTH) || null
           : null;
+    const normalizedNotesJson = normalizeRichTextJson(notesJson);
+    const normalizedNotesHtml = normalizeRichTextHtml(notesHtml);
 
-    if (notes !== null && typeof notes !== "string") {
+    if (hasNotes && notes !== null && typeof notes !== "string") {
       return NextResponse.json({ error: "Invalid notes value." }, { status: 400 });
+    }
+    if (notesJson !== undefined && normalizedNotesJson === null && notesJson !== null) {
+      return NextResponse.json({ error: "Invalid rich notes JSON." }, { status: 400 });
+    }
+    if (notesHtml !== undefined && normalizedNotesHtml === null && notesHtml !== null) {
+      return NextResponse.json({ error: "Invalid rich notes HTML." }, { status: 400 });
     }
 
     await convex.mutation(api.todos.updateFromAgent, {
       ownerKey,
       todoId: todoId as never,
-      notes: normalizedNotes,
+      ...(hasNotes ? { notes: normalizedNotes } : {}),
+      ...(notesJson !== undefined ? { notesJson: normalizedNotesJson } : {}),
+      ...(notesHtml !== undefined ? { notesHtml: normalizedNotesHtml } : {}),
     });
   }
 

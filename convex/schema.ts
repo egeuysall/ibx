@@ -54,6 +54,8 @@ export default defineSchema({
     externalId: v.optional(v.string()),
     title: v.string(),
     notes: v.union(v.string(), v.null()),
+    notesJson: v.optional(v.union(v.string(), v.null())),
+    notesHtml: v.optional(v.union(v.string(), v.null())),
     status: v.union(v.literal("open"), v.literal("done")),
     dueDate: v.optional(v.union(v.number(), v.null())),
     estimatedHours: v.optional(v.union(v.number(), v.null())),

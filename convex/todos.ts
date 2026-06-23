@@ -413,6 +413,8 @@ export const updateStatus = mutation({
         thoughtExternalId: existingTodo.thoughtExternalId,
         title: existingTodo.title,
         notes: existingTodo.notes ?? null,
+        notesJson: existingTodo.notesJson ?? null,
+        notesHtml: existingTodo.notesHtml ?? null,
         status: "open",
         dueDate: nextDueDate,
         estimatedHours:
@@ -552,6 +554,8 @@ export const updateFromAgent = mutation({
     todoId: v.id("todos"),
     title: v.optional(v.string()),
     notes: v.optional(v.union(v.string(), v.null())),
+    notesJson: v.optional(v.union(v.string(), v.null())),
+    notesHtml: v.optional(v.union(v.string(), v.null())),
     dueDate: v.optional(v.union(v.number(), v.null())),
     estimatedHours: v.optional(nullableNumberValidator),
     timeBlockStart: v.optional(nullableNumberValidator),
@@ -570,6 +574,8 @@ export const updateFromAgent = mutation({
     const patch: {
       title?: string;
       notes?: string | null;
+      notesJson?: string | null;
+      notesHtml?: string | null;
       dueDate?: number | null;
       estimatedHours?: number | null;
       timeBlockStart?: number | null;
@@ -585,6 +591,14 @@ export const updateFromAgent = mutation({
 
     if (args.notes !== undefined) {
       patch.notes = args.notes;
+    }
+
+    if (args.notesJson !== undefined) {
+      patch.notesJson = args.notesJson;
+    }
+
+    if (args.notesHtml !== undefined) {
+      patch.notesHtml = args.notesHtml;
     }
 
     if (args.dueDate !== undefined) {

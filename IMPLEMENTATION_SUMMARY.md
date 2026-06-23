@@ -33,6 +33,7 @@
 - Added the first visible per-todo note surface:
   - expanded todo rows now include a Tiptap Simple Editor note body,
   - note saves update the todo `notes` field for compatibility,
+  - note saves also persist bounded Tiptap JSON and HTML fields for rich editor/publishing compatibility,
   - offline or DNS-failed saves remain visible locally and enqueue a todo sync operation,
   - local offline create ops now tolerate later note payloads during sync.
 - Added first visible todo attachment controls:
@@ -59,6 +60,6 @@
 ## Known Remaining Work
 
 - Tiptap Simple Editor integration for Bri is planned but not implemented in this pass.
-- Full Tiptap JSON persistence, editor/page sync, and conflict recovery UI are planned but not implemented in this pass.
+- Full page-level editor sync and conflict recovery UI are planned but not implemented in this pass.
 - Browser-based Clerk auth for the CLI is planned; existing API-key auth remains unchanged.
 - Bri publication from IBX is planned but not implemented in this pass.

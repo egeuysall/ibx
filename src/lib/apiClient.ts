@@ -373,6 +373,8 @@ export const apiClient = {
       priority?: TodoPriority;
       title?: string;
       notes?: string | null;
+      notesJson?: unknown;
+      notesHtml?: string | null;
     },
   ) {
     return requestJson<{ ok: true }>(`/api/todos/${todoId}`, {

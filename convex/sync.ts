@@ -38,6 +38,8 @@ const syncOperationValidator = v.object({
   payload: v.object({
     title: v.optional(v.string()),
     notes: v.optional(v.union(v.string(), v.null())),
+    notesJson: v.optional(v.union(v.string(), v.null())),
+    notesHtml: v.optional(v.union(v.string(), v.null())),
     status: v.optional(todoStatusValidator),
     dueDate: v.optional(nullableNumberValidator),
     estimatedHours: v.optional(nullableNumberValidator),
@@ -120,6 +122,19 @@ function normalizeNotes(input: string | null | undefined) {
   }
 
   return input.trim().slice(0, MAX_NOTES_LENGTH) || null;
+}
+
+function normalizeRichText(input: string | null | undefined) {
+  if (input === null) {
+    return null;
+  }
+
+  if (typeof input !== "string") {
+    return undefined;
+  }
+
+  const trimmed = input.trim().slice(0, 200_000);
+  return trimmed || null;
 }
 
 async function getOrCreateManualThought(
@@ -245,6 +260,8 @@ export const syncPush = mutation({
           const existingPatch: {
             title?: string;
             notes?: string | null;
+            notesJson?: string | null;
+            notesHtml?: string | null;
             updatedAt?: number;
             version?: number;
           } = {};
@@ -260,9 +277,23 @@ export const syncPush = mutation({
               existingPatch.notes = nextNotes;
             }
           }
+          if (op.payload.notesJson !== undefined) {
+            const nextNotesJson = normalizeRichText(op.payload.notesJson);
+            if (nextNotesJson !== undefined && nextNotesJson !== (existingTodo.notesJson ?? null)) {
+              existingPatch.notesJson = nextNotesJson;
+            }
+          }
+          if (op.payload.notesHtml !== undefined) {
+            const nextNotesHtml = normalizeRichText(op.payload.notesHtml);
+            if (nextNotesHtml !== undefined && nextNotesHtml !== (existingTodo.notesHtml ?? null)) {
+              existingPatch.notesHtml = nextNotesHtml;
+            }
+          }
           if (
             existingPatch.title !== undefined ||
-            existingPatch.notes !== undefined
+            existingPatch.notes !== undefined ||
+            existingPatch.notesJson !== undefined ||
+            existingPatch.notesHtml !== undefined
           ) {
             existingPatch.updatedAt = now;
             existingPatch.version = (existingTodo.version ?? 1) + 1;
@@ -295,6 +326,8 @@ export const syncPush = mutation({
           externalId,
           title,
           notes: normalizeNotes(op.payload.notes),
+          notesJson: normalizeRichText(op.payload.notesJson) ?? null,
+          notesHtml: normalizeRichText(op.payload.notesHtml) ?? null,
           status: op.payload.status ?? "open",
           dueDate: op.payload.dueDate ?? getStartOfConfiguredDay(now),
           estimatedHours:
@@ -371,6 +404,8 @@ export const syncPush = mutation({
       const patch: {
         title?: string;
         notes?: string | null;
+        notesJson?: string | null;
+        notesHtml?: string | null;
         status?: "open" | "done";
         dueDate?: number | null;
         estimatedHours?: number | null;
@@ -402,6 +437,18 @@ export const syncPush = mutation({
         patch.title = title;
       }
       if (op.payload.notes !== undefined) patch.notes = normalizeNotes(op.payload.notes);
+      if (op.payload.notesJson !== undefined) {
+        const notesJson = normalizeRichText(op.payload.notesJson);
+        if (notesJson !== undefined) {
+          patch.notesJson = notesJson;
+        }
+      }
+      if (op.payload.notesHtml !== undefined) {
+        const notesHtml = normalizeRichText(op.payload.notesHtml);
+        if (notesHtml !== undefined) {
+          patch.notesHtml = notesHtml;
+        }
+      }
       if (op.payload.status !== undefined) patch.status = op.payload.status;
       if (op.payload.dueDate !== undefined) patch.dueDate = op.payload.dueDate;
       if (op.payload.estimatedHours !== undefined) {

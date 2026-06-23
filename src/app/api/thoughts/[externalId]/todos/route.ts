@@ -83,6 +83,8 @@ export async function GET(
       thoughtId: externalId,
       title: todo.title,
       notes: todo.notes,
+      notesJson: todo.notesJson ?? null,
+      notesHtml: todo.notesHtml ?? null,
       status: todo.status,
       dueDate: todo.dueDate ?? null,
       estimatedHours:

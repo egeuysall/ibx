@@ -1,6 +1,7 @@
 "use client";
 
 import { useClerk } from "@clerk/nextjs";
+import type { JSONContent } from "@tiptap/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -658,6 +659,30 @@ type TodoDisplayMeta = {
   links: TodoResourceLink[];
   linksInputValue: string;
 };
+type TodoRichNotesInput = {
+  json: JSONContent;
+  html: string | null;
+};
+
+function parseTodoNotesJson(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(value) as JSONContent;
+  } catch {
+    return null;
+  }
+}
+
+function getTodoEditorValue(
+  todo: TodoItem,
+  richNotes: TodoRichNotesInput | null,
+  fallbackText: string,
+) {
+  return richNotes?.json ?? parseTodoNotesJson(todo.notesJson) ?? fallbackText;
+}
 
 function offlineAttachmentFromRecord(
   attachment: AttachmentRecord,
@@ -780,6 +805,8 @@ function createLocalManualTodo(title: string): TodoItem {
     thoughtId: LOCAL_MANUAL_THOUGHT_ID,
     title,
     notes: null,
+    notesJson: null,
+    notesHtml: null,
     status: "open",
     dueDate: dateKeyToTimestamp(todayDateKey),
     estimatedHours: null,
@@ -1011,6 +1038,8 @@ export function AppShell({
   const [editingTitleInput, setEditingTitleInput] = useState("");
   const [editingLinksInput, setEditingLinksInput] = useState("");
   const [editingNotesInput, setEditingNotesInput] = useState("");
+  const [editingNotesRichInput, setEditingNotesRichInput] =
+    useState<TodoRichNotesInput | null>(null);
   const [attachmentsByTodoId, setAttachmentsByTodoId] = useState<
     Record<string, AttachmentRecord[]>
   >({});
@@ -1112,6 +1141,7 @@ export function AppShell({
       setEditingTitleInput("");
       setEditingLinksInput("");
       setEditingNotesInput("");
+      setEditingNotesRichInput(null);
     };
 
     window.addEventListener("pointerdown", onPointerDown, true);
@@ -2351,7 +2381,11 @@ export function AppShell({
     }
   };
 
-  const queueTodoNoteUpdate = async (todo: TodoItem, notes: string | null) => {
+  const queueTodoNoteUpdate = async (
+    todo: TodoItem,
+    notes: string | null,
+    richNotes: TodoRichNotesInput | null,
+  ) => {
     await enqueueOfflineOperation({
       entity: "todo",
       entityId: todo.id,
@@ -2359,6 +2393,8 @@ export function AppShell({
       payload: {
         title: todo.title,
         notes,
+        notesJson: richNotes?.json ?? todo.notesJson ?? null,
+        notesHtml: richNotes?.html ?? todo.notesHtml ?? null,
         localId: todo.id,
         status: todo.status,
         dueDate: todo.dueDate,
@@ -2376,8 +2412,14 @@ export function AppShell({
     const links = getTodoResourceLinks(todo.notes).map((link) => link.url);
     const nextNotes = buildTodoNotesWithLinks(cleanDescription, links);
     const previousNotes = todo.notes;
+    const nextNotesJson = editingNotesRichInput?.json ?? null;
+    const nextNotesHtml = editingNotesRichInput?.html ?? null;
 
-    if ((nextNotes ?? null) === (previousNotes ?? null)) {
+    if (
+      (nextNotes ?? null) === (previousNotes ?? null) &&
+      JSON.stringify(nextNotesJson) === (todo.notesJson ?? "null") &&
+      (nextNotesHtml ?? null) === (todo.notesHtml ?? null)
+    ) {
       return;
     }
 
@@ -2386,28 +2428,34 @@ export function AppShell({
       sortTodos(
         previousTodos.map((item) =>
           item.id === todo.id
-            ? {
-                ...item,
-                notes: nextNotes,
-              }
-            : item,
+              ? {
+                  ...item,
+                  notes: nextNotes,
+                  notesJson: nextNotesJson ? JSON.stringify(nextNotesJson) : null,
+                  notesHtml: nextNotesHtml,
+                }
+              : item,
         ),
       ),
     );
 
     if (!isOnline || todo.id.startsWith("local-")) {
-      await queueTodoNoteUpdate(todo, nextNotes);
+      await queueTodoNoteUpdate(todo, nextNotes, editingNotesRichInput);
       toast.message("note saved offline");
       setPendingTodoId(null);
       return;
     }
 
     try {
-      await apiClient.updateTodo(todo.id, { notes: nextNotes });
+      await apiClient.updateTodo(todo.id, {
+        notes: nextNotes,
+        notesJson: nextNotesJson,
+        notesHtml: nextNotesHtml,
+      });
       await refreshTodos();
     } catch (error) {
       if (error instanceof ApiError && error.isNetworkError) {
-        await queueTodoNoteUpdate(todo, nextNotes);
+        await queueTodoNoteUpdate(todo, nextNotes, editingNotesRichInput);
         toast.message("note saved offline");
         return;
       }
@@ -2420,6 +2468,8 @@ export function AppShell({
               ? {
                   ...item,
                   notes: previousNotes,
+                  notesJson: todo.notesJson,
+                  notesHtml: todo.notesHtml,
                 }
               : item,
           ),
@@ -2465,6 +2515,8 @@ export function AppShell({
             ? {
                 ...item,
                 notes: nextNotes,
+                notesJson: null,
+                notesHtml: null,
               }
             : item,
         ),
@@ -2472,7 +2524,11 @@ export function AppShell({
     );
 
     try {
-      await apiClient.updateTodo(todo.id, { notes: nextNotes });
+      await apiClient.updateTodo(todo.id, {
+        notes: nextNotes,
+        notesJson: null,
+        notesHtml: null,
+      });
       await refreshTodos();
 
       if (parsed.invalidCount > 0) {
@@ -2487,6 +2543,8 @@ export function AppShell({
               ? {
                   ...item,
                   notes: previousNotes,
+                  notesJson: todo.notesJson,
+                  notesHtml: todo.notesHtml,
                 }
               : item,
           ),
@@ -3121,6 +3179,30 @@ export function AppShell({
                                   ? ""
                                   : (todoMeta.description ?? ""),
                               );
+                              setEditingNotesRichInput(
+                                isClosing
+                                  ? null
+                                  : {
+                                      json:
+                                        parseTodoNotesJson(todo.notesJson) ?? {
+                                          type: "doc",
+                                          content: todoMeta.description
+                                            ? [
+                                                {
+                                                  type: "paragraph",
+                                                  content: [
+                                                    {
+                                                      type: "text",
+                                                      text: todoMeta.description,
+                                                    },
+                                                  ],
+                                                },
+                                              ]
+                                            : [],
+                                        },
+                                      html: todo.notesHtml,
+                                    },
+                              );
                               if (!isClosing) {
                                 void loadTodoAttachments(todo.id);
                               }
@@ -3395,12 +3477,20 @@ export function AppShell({
                               >
                                 <div className="rounded-md border border-border bg-background/80 p-2">
                                   <SimpleEditor
-                                    value={editingNotesInput}
+                                    value={getTodoEditorValue(
+                                      todo,
+                                      editingNotesRichInput,
+                                      editingNotesInput,
+                                    )}
                                     embedded
                                     placeholder="write notes, context, links, next steps..."
-                                    onChange={({ text }) =>
-                                      setEditingNotesInput(text)
-                                    }
+                                    onChange={({ text, json, html }) => {
+                                      setEditingNotesInput(text);
+                                      setEditingNotesRichInput({
+                                        json,
+                                        html,
+                                      });
+                                    }}
                                   />
                                 </div>
                                 <div className="flex flex-wrap items-center gap-2">

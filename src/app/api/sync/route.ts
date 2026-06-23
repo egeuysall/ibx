@@ -10,6 +10,7 @@ import {
 import { api, convex } from "@/lib/convex-server";
 
 const MAX_SYNC_OPS = 50;
+const MAX_RICH_TEXT_LENGTH = 200_000;
 
 type NormalizedSyncOperation = {
   opId: string;
@@ -22,6 +23,8 @@ type NormalizedSyncOperation = {
   payload: {
     title?: string;
     notes?: string | null;
+    notesJson?: string | null;
+    notesHtml?: string | null;
     status?: "open" | "done";
     dueDate?: number | null;
     estimatedHours?: number | null;
@@ -31,6 +34,42 @@ type NormalizedSyncOperation = {
     source?: "ai" | "manual";
   };
 };
+
+function normalizeRichTextJson(input: unknown) {
+  if (input === undefined) {
+    return undefined;
+  }
+  if (input === null) {
+    return null;
+  }
+
+  const serialized =
+    typeof input === "string" ? input : JSON.stringify(input);
+  if (serialized.length > MAX_RICH_TEXT_LENGTH) {
+    return undefined;
+  }
+
+  return serialized;
+}
+
+function normalizeRichTextHtml(input: unknown) {
+  if (input === undefined) {
+    return undefined;
+  }
+  if (input === null) {
+    return null;
+  }
+  if (typeof input !== "string") {
+    return undefined;
+  }
+
+  const trimmed = input.trim();
+  if (trimmed.length > MAX_RICH_TEXT_LENGTH) {
+    return undefined;
+  }
+
+  return trimmed || null;
+}
 
 function normalizeSyncOperation(input: unknown): NormalizedSyncOperation | null {
   if (!input || typeof input !== "object") {
@@ -91,6 +130,8 @@ function normalizeSyncOperation(input: unknown): NormalizedSyncOperation | null 
         typeof payload.notes === "string" || payload.notes === null
           ? payload.notes
           : undefined,
+      notesJson: normalizeRichTextJson(payload.notesJson),
+      notesHtml: normalizeRichTextHtml(payload.notesHtml),
       status:
         payload.status === "open" || payload.status === "done"
           ? payload.status
@@ -134,6 +175,8 @@ function mapTodo(todo: {
   thoughtId: string;
   title: string;
   notes: string | null;
+  notesJson?: string | null;
+  notesHtml?: string | null;
   status: "open" | "done";
   dueDate?: number | null;
   estimatedHours?: number | null;
@@ -151,6 +194,8 @@ function mapTodo(todo: {
     thoughtId: todo.thoughtExternalId ?? String(todo.thoughtId),
     title: todo.title,
     notes: todo.notes,
+    notesJson: todo.notesJson ?? null,
+    notesHtml: todo.notesHtml ?? null,
     status: todo.status,
     dueDate: todo.dueDate ?? null,
     estimatedHours:
