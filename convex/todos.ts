@@ -159,6 +159,26 @@ export const listAll = query({
   },
 });
 
+export const getByStringId = query({
+  args: {
+    ownerKey: v.union(v.string(), v.null()),
+    todoId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const normalizedTodoId = ctx.db.normalizeId("todos", args.todoId);
+    if (!normalizedTodoId) {
+      return null;
+    }
+
+    const todo = await ctx.db.get(normalizedTodoId);
+    if (!todo || (todo.ownerKey ?? null) !== args.ownerKey || !isActiveTodo(todo)) {
+      return null;
+    }
+
+    return todo;
+  },
+});
+
 export const enforceDueDatesAndReschedule = mutation({
   args: {
     ownerKey: v.union(v.string(), v.null()),

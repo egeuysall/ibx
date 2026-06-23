@@ -88,6 +88,7 @@ import {
   stripTodoLinksFromNotes,
   type TodoResourceLink,
 } from "@/lib/todo-links";
+import { getTodoPageHref } from "@/lib/todo-slug";
 import { cn } from "@/lib/utils";
 import type {
   AttachmentRecord,
@@ -3166,48 +3167,7 @@ export function AppShell({
                               return;
                             }
 
-                            setEditingTodoId((currentTodoId) => {
-                              const isClosing = currentTodoId === todo.id;
-                              setEditingTitleInput(isClosing ? "" : todo.title);
-                              setEditingLinksInput(
-                                isClosing
-                                  ? ""
-                                  : todoMeta.linksInputValue,
-                              );
-                              setEditingNotesInput(
-                                isClosing
-                                  ? ""
-                                  : (todoMeta.description ?? ""),
-                              );
-                              setEditingNotesRichInput(
-                                isClosing
-                                  ? null
-                                  : {
-                                      json:
-                                        parseTodoNotesJson(todo.notesJson) ?? {
-                                          type: "doc",
-                                          content: todoMeta.description
-                                            ? [
-                                                {
-                                                  type: "paragraph",
-                                                  content: [
-                                                    {
-                                                      type: "text",
-                                                      text: todoMeta.description,
-                                                    },
-                                                  ],
-                                                },
-                                              ]
-                                            : [],
-                                        },
-                                      html: todo.notesHtml,
-                                    },
-                              );
-                              if (!isClosing) {
-                                void loadTodoAttachments(todo.id);
-                              }
-                              return isClosing ? null : todo.id;
-                            });
+                            router.push(getTodoPageHref(todo));
                           }}
                           onPointerDown={(event) => {
                             if (

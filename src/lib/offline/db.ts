@@ -89,6 +89,17 @@ class IbxOfflineDatabase extends Dexie {
         "id, parentKind, parentId, [parentKind+parentId], status, createdAt, updatedAt",
       syncMeta: "key, updatedAt",
     });
+
+    this.version(6).stores({
+      localThoughts: "externalId, createdAt",
+      queuedPrompts: "id, createdAt, status",
+      cachedTodos: "id, updatedAt",
+      pendingOps:
+        "id, entity, entityId, [entity+entityId], createdAt, updatedAt",
+      attachments:
+        "id, parentKind, parentId, [parentKind+parentId], status, createdAt, updatedAt",
+      syncMeta: "key, updatedAt",
+    });
   }
 }
 
@@ -266,7 +277,8 @@ export async function listOfflineAttachments(
   parentId: string,
 ) {
   return await getOfflineDatabase()
-    .attachments.where({ parentKind, parentId })
+    .attachments.where("[parentKind+parentId]")
+    .equals([parentKind, parentId])
     .toArray();
 }
 

@@ -230,6 +230,12 @@ export const apiClient = {
     });
   },
 
+  async getTodo(todoId: string) {
+    return requestJson<{ todo: TodoItem }>(`/api/todos/${todoId}`, {
+      method: "GET",
+    });
+  },
+
   async syncPush(input: {
     clientId: string;
     ops: Array<{

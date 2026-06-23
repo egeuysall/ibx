@@ -13,6 +13,43 @@ import type { TodoStatus } from "@/lib/types";
 const MAX_NOTES_LENGTH = 4_000;
 const MAX_RICH_TEXT_LENGTH = 200_000;
 
+function serializeTodo(todo: {
+  _id: string;
+  thoughtExternalId?: string;
+  thoughtId: unknown;
+  title: string;
+  notes: string | null;
+  notesJson?: string | null;
+  notesHtml?: string | null;
+  status: TodoStatus;
+  dueDate?: number | null;
+  estimatedHours?: number | null;
+  timeBlockStart?: number | null;
+  priority?: 1 | 2 | 3;
+  recurrence?: "none" | "daily" | "weekly" | "monthly";
+  source?: "ai" | "manual";
+  createdAt: number;
+}) {
+  return {
+    id: todo._id,
+    thoughtId: todo.thoughtExternalId ?? String(todo.thoughtId),
+    title: todo.title,
+    notes: todo.notes,
+    notesJson: todo.notesJson ?? null,
+    notesHtml: todo.notesHtml ?? null,
+    status: todo.status,
+    dueDate: todo.dueDate ?? null,
+    estimatedHours:
+      typeof todo.estimatedHours === "number" ? todo.estimatedHours : null,
+    timeBlockStart:
+      typeof todo.timeBlockStart === "number" ? todo.timeBlockStart : null,
+    priority: todo.priority ?? 2,
+    recurrence: todo.recurrence ?? "none",
+    source: todo.source ?? "manual",
+    createdAt: todo.createdAt,
+  };
+}
+
 function normalizeRichTextJson(input: unknown) {
   if (input === undefined) {
     return undefined;
@@ -47,6 +84,38 @@ function normalizeRichTextHtml(input: unknown) {
   }
 
   return trimmed || null;
+}
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ todoId: string }> },
+) {
+  const auth = await getRouteAuth(request);
+  if (!auth) {
+    return unauthorizedJson();
+  }
+  const permissionError = validateApiKeyPermission(request, auth);
+  if (permissionError) {
+    return permissionError;
+  }
+  const ownerKey = getRouteAuthOwnerKey(auth);
+
+  const resolvedParams = await params;
+  const todoId = resolvedParams.todoId?.trim();
+
+  if (!todoId || todoId.length > 64) {
+    return NextResponse.json({ error: "Invalid todo id." }, { status: 400 });
+  }
+
+  const todo = await convex.query(api.todos.getByStringId, {
+    ownerKey,
+    todoId,
+  });
+  if (!todo) {
+    return NextResponse.json({ error: "Todo not found." }, { status: 404 });
+  }
+
+  return NextResponse.json({ todo: serializeTodo(todo) });
 }
 
 export async function PATCH(

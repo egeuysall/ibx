@@ -189,7 +189,7 @@ export const listAttachments = query({
         ? Math.floor(args.limit)
         : 50;
 
-    return await ctx.db
+    const attachments = await ctx.db
       .query("attachments")
       .withIndex("by_ownerKey_and_parentKind_and_parentId_and_createdAt", (q) =>
         q
@@ -198,13 +198,13 @@ export const listAttachments = query({
           .eq("parentId", args.parentId),
       )
       .order("desc")
-      .take(limit)
-      .then((attachments) =>
-        attachments.filter(
-          (attachment) =>
-            isActive(attachment) && attachment.status === "uploaded",
-        ),
-      );
+      .take(limit);
+
+    return attachments.filter(
+      (attachment) =>
+        isActive(attachment) &&
+        attachment.status === "uploaded",
+    );
   },
 });
 
