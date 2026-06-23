@@ -75,6 +75,7 @@ import {
   removeOfflineAttachment,
   removeOfflineOperation,
   upsertManyOfflineAttachments,
+  upsertOfflineConflictRecovery,
   type OfflineAttachment,
 } from "@/lib/offline/db";
 import {
@@ -1469,6 +1470,9 @@ export function AppShell({
       clientId: readOrCreateSyncClientId(),
       ops: syncableOperations,
     });
+    const operationById = new Map(
+      pendingOperations.map((operation) => [operation.id, operation]),
+    );
 
     for (const acceptedOperation of result.accepted) {
       if (acceptedOperation.status === "accepted") {
@@ -1492,8 +1496,40 @@ export function AppShell({
       );
     }
 
-    if (result.rejected.length > 0 || result.conflicts.length > 0) {
-      toast.error("Some offline changes need review.");
+    const recoverableIssues = [
+      ...result.rejected.map((issue) => ({
+        ...issue,
+        serverId: null,
+        serverVersion: null,
+      })),
+      ...result.conflicts.map((issue) => ({
+        ...issue,
+        serverVersion: issue.serverVersion ?? null,
+      })),
+    ];
+
+    for (const issue of recoverableIssues) {
+      const operation = operationById.get(issue.opId);
+      if (!operation) {
+        continue;
+      }
+
+      await upsertOfflineConflictRecovery({
+        opId: operation.id,
+        entity: operation.entity,
+        entityId: operation.entityId,
+        kind: operation.kind,
+        payload: operation.payload,
+        message: issue.message,
+        serverId: issue.serverId,
+        serverVersion: issue.serverVersion,
+        createdAt: operation.createdAt,
+      }).catch(() => undefined);
+      await removeOfflineOperation(operation.id).catch(() => undefined);
+    }
+
+    if (recoverableIssues.length > 0) {
+      toast.error("Some offline changes need review in settings.");
     }
 
     const attachmentResult = await flushPendingAttachmentOperations();

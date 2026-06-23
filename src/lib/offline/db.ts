@@ -39,6 +39,20 @@ export type OfflineAttachment = {
   lastError: string | null;
 };
 
+export type OfflineConflictRecovery = {
+  id: string;
+  opId: string;
+  entity: PendingOfflineOperation["entity"];
+  entityId: string;
+  kind: PendingOfflineOperation["kind"];
+  payload: unknown;
+  message: string;
+  serverId: string | null;
+  serverVersion: number | null;
+  createdAt: number;
+  updatedAt: number;
+};
+
 type CachedTodosRecord = {
   id: string;
   todos: TodoItem[];
@@ -59,6 +73,7 @@ class IbxOfflineDatabase extends Dexie {
   cachedTodos!: Table<CachedTodosRecord, string>;
   pendingOps!: Table<PendingOfflineOperation, string>;
   attachments!: Table<OfflineAttachment, string>;
+  conflictRecoveries!: Table<OfflineConflictRecovery, string>;
   syncMeta!: Table<SyncMetaRecord, string>;
 
   constructor() {
@@ -98,6 +113,19 @@ class IbxOfflineDatabase extends Dexie {
         "id, entity, entityId, [entity+entityId], createdAt, updatedAt",
       attachments:
         "id, parentKind, parentId, [parentKind+parentId], status, createdAt, updatedAt",
+      syncMeta: "key, updatedAt",
+    });
+
+    this.version(7).stores({
+      localThoughts: "externalId, createdAt",
+      queuedPrompts: "id, createdAt, status",
+      cachedTodos: "id, updatedAt",
+      pendingOps:
+        "id, entity, entityId, [entity+entityId], createdAt, updatedAt",
+      attachments:
+        "id, parentKind, parentId, [parentKind+parentId], status, createdAt, updatedAt",
+      conflictRecoveries:
+        "id, opId, entity, entityId, [entity+entityId], createdAt, updatedAt",
       syncMeta: "key, updatedAt",
     });
   }
@@ -252,6 +280,40 @@ export async function removeOfflineOperationsByEntity(
     .pendingOps.where("[entity+entityId]")
     .equals([entity, entityId])
     .delete();
+}
+
+export async function listOfflineConflictRecoveries(limit = 50) {
+  return await getOfflineDatabase()
+    .conflictRecoveries.orderBy("createdAt")
+    .reverse()
+    .limit(limit)
+    .toArray();
+}
+
+export async function upsertOfflineConflictRecovery(
+  input: Omit<OfflineConflictRecovery, "id" | "createdAt" | "updatedAt"> & {
+    id?: string;
+    createdAt?: number;
+  },
+) {
+  const now = Date.now();
+  const recovery: OfflineConflictRecovery = {
+    ...input,
+    id: input.id ?? input.opId,
+    createdAt: input.createdAt ?? now,
+    updatedAt: now,
+  };
+
+  await getOfflineDatabase().conflictRecoveries.put(recovery);
+  return recovery;
+}
+
+export async function removeOfflineConflictRecovery(id: string) {
+  await getOfflineDatabase().conflictRecoveries.delete(id);
+}
+
+export async function clearOfflineConflictRecoveries() {
+  await getOfflineDatabase().conflictRecoveries.clear();
 }
 
 export async function patchOfflineOperation(

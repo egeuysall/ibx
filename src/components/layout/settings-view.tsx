@@ -30,6 +30,12 @@ import type { ThemePreference } from "@/hooks/useTheme";
 import { useTheme } from "@/hooks/useTheme";
 import { UNAUTHORIZED_EVENT_NAME, apiClient } from "@/lib/apiClient";
 import { clearCachedTodos, clearLocalThoughts } from "@/lib/indexedDb";
+import {
+  clearOfflineConflictRecoveries,
+  listOfflineConflictRecoveries,
+  removeOfflineConflictRecovery,
+  type OfflineConflictRecovery,
+} from "@/lib/offline/db";
 
 const FILTER_STORAGE_KEY = "ibx:active-view";
 const PROMPT_AUTOFOCUS_STORAGE_KEY = "ibx:prompt-autofocus";
@@ -176,6 +182,9 @@ export function SettingsView() {
     null,
   );
   const [calendarFeedUrl, setCalendarFeedUrl] = useState<string | null>(null);
+  const [conflictRecoveries, setConflictRecoveries] = useState<
+    OfflineConflictRecovery[]
+  >([]);
   const [isLoadingKeys, setIsLoadingKeys] = useState(true);
   const [isCreatingKey, startCreateKeyTransition] = useTransition();
   const [isRotatingCalendarFeed, startRotateCalendarFeedTransition] =
@@ -211,6 +220,11 @@ export function SettingsView() {
       // Ignore localStorage failures (private mode, blocked storage)
     }
     toast.message(`startup view set to ${nextView}`);
+  };
+
+  const refreshConflictRecoveries = async () => {
+    const recoveries = await listOfflineConflictRecoveries(25).catch(() => []);
+    setConflictRecoveries(recoveries);
   };
 
   const setTimeBlockNotificationsFromGroup = (values: string[]) => {
@@ -310,6 +324,8 @@ export function SettingsView() {
   const handleClearQueue = () => {
     startClearTransition(async () => {
       await clearLocalThoughts();
+      await clearOfflineConflictRecoveries();
+      setConflictRecoveries([]);
       toast.message("Local queue cleared");
     });
   };
@@ -372,6 +388,7 @@ export function SettingsView() {
   useEffect(() => {
     void refreshApiKeys();
     void refreshCalendarFeedStatus();
+    void refreshConflictRecoveries();
   }, []);
 
   useEffect(() => {
@@ -448,6 +465,19 @@ export function SettingsView() {
     } catch {
       toast.error("Could not copy to clipboard");
     }
+  };
+
+  const copyConflictPayload = async (recovery: OfflineConflictRecovery) => {
+    await copyToClipboard(
+      JSON.stringify(recovery.payload, null, 2),
+      "offline change copied",
+    );
+  };
+
+  const dismissConflictRecovery = async (id: string) => {
+    await removeOfflineConflictRecovery(id);
+    await refreshConflictRecoveries();
+    toast.message("offline change dismissed");
   };
 
   const refreshCalendarFeedStatus = async () => {
@@ -1054,6 +1084,62 @@ export function SettingsView() {
                     </Button>
                   </div>
                 </div>
+              </div>
+            </section>
+
+            <section className="border-b px-4 py-4 md:px-6">
+              <p className="text-sm">offline recovery</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                rejected offline edits are saved here so local content is not silently lost.
+              </p>
+
+              <div className="mt-3 flex max-w-xl flex-col gap-1.5">
+                {conflictRecoveries.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    no offline changes need review
+                  </p>
+                ) : (
+                  conflictRecoveries.map((recovery) => (
+                    <div
+                      key={recovery.id}
+                      className="rounded-md border border-input p-2 text-xs"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p>
+                            {recovery.entity} / {recovery.kind}
+                          </p>
+                          <p className="break-words text-muted-foreground">
+                            {recovery.message}
+                          </p>
+                          <p className="mt-1 truncate text-[11px] text-muted-foreground">
+                            {recovery.entityId}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 gap-1.5">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-auto"
+                            onClick={() => void copyConflictPayload(recovery)}
+                          >
+                            copy
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-auto"
+                            onClick={() =>
+                              void dismissConflictRecovery(recovery.id)
+                            }
+                          >
+                            dismiss
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </section>
 

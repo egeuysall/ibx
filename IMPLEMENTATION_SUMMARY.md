@@ -64,6 +64,10 @@
   - `useOfflineStatus` listens to that event instead of trusting `navigator.onLine` alone,
   - queued AI prompts pause on network failure instead of marking every queued item failed.
 - Fixed stale browser shell behavior by stopping the service worker from caching auth-sensitive navigation HTML, which prevents old landing/app pages from causing redirect loops after auth state changes.
+- Added offline conflict recovery:
+  - rejected or conflicted offline todo operations are copied into a Dexie recovery table before leaving the retry queue,
+  - settings now shows an offline recovery panel with copy and dismiss actions,
+  - local payloads remain recoverable instead of being silently lost or retried forever.
 - Added browser-based Clerk login for the CLI:
   - `ibx auth login` now opens a browser approval flow by default,
   - the browser flow uses loopback redirect, state, PKCE-style verifier/challenge, and short-lived one-time Convex auth codes,
@@ -87,6 +91,5 @@
 
 ## Known Remaining Work
 
-- Conflict recovery UI for page edits remains planned.
 - CLI credentials now prefer the macOS Keychain and fall back to the existing local config file when Keychain is unavailable.
 - Bri publication now has a first server-side bridge, but per-user Bri account connection and offline queued publish operations remain planned.
