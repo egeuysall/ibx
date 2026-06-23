@@ -53,6 +53,11 @@
   - converts Tiptap JSON to Markdown before sending to Bri so public pages keep using Bri's markdown renderer,
   - added publish/update/open/copy/unpublish controls to each todo page,
   - documents `BRI_BASE_URL` and server-only `BRI_INTERNAL_API_KEY`.
+- Added Bri Tiptap note editing in `/Users/egeuysal/Developer/bri`:
+  - added Tiptap runtime dependencies to Bri,
+  - replaced dashboard note create/edit textareas with a styled Tiptap editor,
+  - kept Bri's existing Markdown API/storage contract by converting Tiptap JSON back to Markdown,
+  - added a focused Markdown compatibility test.
 - Fixed browser DNS/offline failure behavior:
   - network failures emit an app-level offline event,
   - `useOfflineStatus` listens to that event instead of trusting `navigator.onLine` alone,
@@ -75,10 +80,12 @@
 - `bunx convex run --prod attachments:listAttachments '{"ownerKey":"clerk:user_3FSuDOl29us0znM4RCdO66m9gM4","parentKind":"todo","parentId":"jd78dbtg8ykcvan6ns6znsmkvs89379d","limit":50}'` returned `[]` without the previous index error.
 - `xcodebuild test -project ios/IBX/IBX.xcodeproj -scheme IBX -destination 'platform=iOS Simulator,name=iPhone 17 Pro'` passed.
 - Browser smoke used a temporary local editor route and confirmed the editor rendered with no missing-image error. The temporary route was removed before commit so it is not public.
+- Bri `bun test src/lib/tiptap-markdown.test.ts` passed.
+- Bri `bun run build` passed after rebasing on remote `master`.
+- Bri browser smoke at `http://localhost:3001/` rendered without framework overlay; authenticated dashboard visual testing was not available in the signed-out browser session.
 
 ## Known Remaining Work
 
-- Tiptap Simple Editor integration for Bri is planned but not implemented in this pass.
 - Conflict recovery UI for page edits remains planned.
 - CLI credentials still store in the existing local config file; platform keychain storage remains planned.
 - Bri publication now has a first server-side bridge, but per-user Bri account connection and offline queued publish operations remain planned.
