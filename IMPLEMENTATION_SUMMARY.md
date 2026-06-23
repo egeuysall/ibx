@@ -46,7 +46,8 @@
 - Fixed attachment listing for production:
   - added the exact `attachments.by_parentKind_and_parentId` Convex index,
   - attachment reads still validate ownership server-side before returning files,
-  - deployed the Convex schema/function change to production.
+  - deployed the Convex schema/function change to production,
+  - removed remaining Dexie object-form attachment/pending-op queries so browser offline migration uses explicit compound indexes.
 - Added the first IBX to Bri publishing slice:
   - added owner-scoped `publications` metadata in Convex,
   - added `/api/publications/bri` to publish, update, read status, and unpublish Bri pages through Bri's existing API,
@@ -78,7 +79,7 @@
 - `bunx convex codegen` passed.
 - `bunx convex deploy --yes` deployed the attachment index to production.
 - `bunx convex run --prod attachments:listAttachments '{"ownerKey":"clerk:user_3FSuDOl29us0znM4RCdO66m9gM4","parentKind":"todo","parentId":"jd78dbtg8ykcvan6ns6znsmkvs89379d","limit":50}'` returned `[]` without the previous index error.
-- `xcodebuild test -project ios/IBX/IBX.xcodeproj -scheme IBX -destination 'platform=iOS Simulator,name=iPhone 17 Pro'` passed.
+- XcodeBuildMCP `test_sim` passed on `ios/IBX/IBX.xcodeproj`, scheme `IBX`, `iPhone 17 Pro`: 6 passed, 0 failed.
 - Browser smoke used a temporary local editor route and confirmed the editor rendered with no missing-image error. The temporary route was removed before commit so it is not public.
 - Bri `bun test src/lib/tiptap-markdown.test.ts` passed.
 - Bri `bun run build` passed after rebasing on remote `master`.

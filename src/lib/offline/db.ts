@@ -248,7 +248,10 @@ export async function removeOfflineOperationsByEntity(
   entity: PendingOfflineOperation["entity"],
   entityId: string,
 ) {
-  await getOfflineDatabase().pendingOps.where({ entity, entityId }).delete();
+  await getOfflineDatabase()
+    .pendingOps.where("[entity+entityId]")
+    .equals([entity, entityId])
+    .delete();
 }
 
 export async function patchOfflineOperation(
@@ -335,7 +338,8 @@ export async function migrateOfflineTodoReferences(
     database.pendingOps,
     async () => {
       const attachments = await database.attachments
-        .where({ parentKind: "todo", parentId: localTodoId })
+        .where("[parentKind+parentId]")
+        .equals(["todo", localTodoId])
         .toArray();
       for (const attachment of attachments) {
         await database.attachments.put({
