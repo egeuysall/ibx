@@ -128,6 +128,19 @@ class IbxOfflineDatabase extends Dexie {
         "id, opId, entity, entityId, [entity+entityId], createdAt, updatedAt",
       syncMeta: "key, updatedAt",
     });
+
+    this.version(8).stores({
+      localThoughts: "externalId, createdAt",
+      queuedPrompts: "id, createdAt, status",
+      cachedTodos: "id, updatedAt",
+      pendingOps:
+        "id, entity, entityId, [entity+entityId], createdAt, updatedAt",
+      attachments:
+        "id, parentKind, parentId, [parentKind+parentId], status, createdAt, updatedAt",
+      conflictRecoveries:
+        "id, opId, entity, entityId, [entity+entityId], createdAt, updatedAt",
+      syncMeta: "key, updatedAt",
+    });
   }
 }
 
@@ -341,10 +354,26 @@ export async function listOfflineAttachments(
   parentKind: OfflineAttachment["parentKind"],
   parentId: string,
 ) {
-  return await getOfflineDatabase()
-    .attachments.where("[parentKind+parentId]")
-    .equals([parentKind, parentId])
-    .toArray();
+  const attachments = getOfflineDatabase().attachments;
+  try {
+    return await attachments
+      .where("[parentKind+parentId]")
+      .equals([parentKind, parentId])
+      .toArray();
+  } catch (error) {
+    if (!(error instanceof Dexie.SchemaError)) {
+      throw error;
+    }
+
+    // Some users opened a prior v7 schema before the compound index existed.
+    // Keep attachments working until Dexie reopens and applies the v8 migration.
+    return await attachments
+      .filter(
+        (attachment) =>
+          attachment.parentKind === parentKind && attachment.parentId === parentId,
+      )
+      .toArray();
+  }
 }
 
 export async function getOfflineAttachment(id: string) {
@@ -400,8 +429,11 @@ export async function migrateOfflineTodoReferences(
     database.pendingOps,
     async () => {
       const attachments = await database.attachments
-        .where("[parentKind+parentId]")
-        .equals(["todo", localTodoId])
+        .filter(
+          (attachment) =>
+            attachment.parentKind === "todo" &&
+            attachment.parentId === localTodoId,
+        )
         .toArray();
       for (const attachment of attachments) {
         await database.attachments.put({
