@@ -30,6 +30,19 @@
   - added authenticated Next routes at `/api/attachments`, `/api/attachments/upload-url`, `/api/attachments/[attachmentId]`, and `/api/attachments/[attachmentId]/url`,
   - added client helpers for upload/list/url/delete and Dexie helpers for offline attachment metadata,
   - enforced server-side owner checks plus file size and MIME allowlist checks before attachment metadata is accepted.
+- Added the first visible per-todo note surface:
+  - expanded todo rows now include a Tiptap Simple Editor note body,
+  - note saves update the todo `notes` field for compatibility,
+  - offline or DNS-failed saves remain visible locally and enqueue a todo sync operation,
+  - local offline create ops now tolerate later note payloads during sync.
+- Added first visible todo attachment controls:
+  - expanded todo rows can attach files,
+  - online files upload through Convex storage,
+  - offline files are stored as local Dexie metadata/blob rows and queued as pending uploads.
+- Fixed browser DNS/offline failure behavior:
+  - network failures emit an app-level offline event,
+  - `useOfflineStatus` listens to that event instead of trusting `navigator.onLine` alone,
+  - queued AI prompts pause on network failure instead of marking every queued item failed.
 - Verified the existing iOS offline shortcut path still builds and tests successfully.
 
 ## Verification
@@ -44,6 +57,6 @@
 ## Known Remaining Work
 
 - Tiptap Simple Editor integration for Bri is planned but not implemented in this pass.
-- Full Tiptap JSON persistence, editor/page sync, conflict recovery UI, and visible attachment UI are planned but not implemented in this pass.
+- Full Tiptap JSON persistence, editor/page sync, conflict recovery UI, and automatic queued attachment upload replay are planned but not implemented in this pass.
 - Browser-based Clerk auth for the CLI is planned; existing API-key auth remains unchanged.
 - Bri publication from IBX is planned but not implemented in this pass.

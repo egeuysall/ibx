@@ -45,6 +45,7 @@ const syncOperationValidator = v.object({
     recurrence: v.optional(recurrenceValidator),
     priority: v.optional(priorityValidator),
     source: v.optional(v.union(v.literal("ai"), v.literal("manual"))),
+    localId: v.optional(v.string()),
   }),
 });
 
@@ -241,6 +242,32 @@ export const syncPush = mutation({
           .unique();
 
         if (existingTodo) {
+          const existingPatch: {
+            title?: string;
+            notes?: string | null;
+            updatedAt?: number;
+            version?: number;
+          } = {};
+          if (op.payload.title !== undefined) {
+            const nextTitle = normalizeTitle(op.payload.title);
+            if (nextTitle && nextTitle !== existingTodo.title) {
+              existingPatch.title = nextTitle;
+            }
+          }
+          if (op.payload.notes !== undefined) {
+            const nextNotes = normalizeNotes(op.payload.notes);
+            if (nextNotes !== existingTodo.notes) {
+              existingPatch.notes = nextNotes;
+            }
+          }
+          if (
+            existingPatch.title !== undefined ||
+            existingPatch.notes !== undefined
+          ) {
+            existingPatch.updatedAt = now;
+            existingPatch.version = (existingTodo.version ?? 1) + 1;
+            await ctx.db.patch(existingTodo._id, existingPatch);
+          }
           await recordOperation("accepted", String(existingTodo._id), null);
           accepted.push({
             opId: op.opId,

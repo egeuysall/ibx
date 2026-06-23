@@ -17,6 +17,7 @@ type RequestJsonOptions = {
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
 export const UNAUTHORIZED_EVENT_NAME = "ibx:unauthorized";
+export const NETWORK_STATUS_EVENT_NAME = "ibx:network-status";
 
 function parseRetryAfterSeconds(retryAfterHeader: string | null) {
   if (!retryAfterHeader) {
@@ -47,6 +48,18 @@ function emitUnauthorizedEvent(message?: string) {
       detail: {
         message,
       },
+    }),
+  );
+}
+
+function emitNetworkStatusEvent(online: boolean) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.dispatchEvent(
+    new CustomEvent(NETWORK_STATUS_EVENT_NAME, {
+      detail: { online },
     }),
   );
 }
@@ -106,6 +119,7 @@ async function requestJson<T>(
       },
     });
   } catch {
+    emitNetworkStatusEvent(false);
     const timedOut = timeoutController.signal.aborted;
     if (timedOut) {
       throw new ApiError("Request timed out. Please try again.", 0, {
@@ -126,6 +140,7 @@ async function requestJson<T>(
   const retryAfterSeconds = parseRetryAfterSeconds(
     response.headers.get("retry-after"),
   );
+  emitNetworkStatusEvent(true);
   const json = (await response.json().catch(() => ({}))) as T & ApiErrorPayload;
 
   if (!response.ok) {
