@@ -88,5 +88,5 @@
 ## Known Remaining Work
 
 - Conflict recovery UI for page edits remains planned.
-- CLI credentials still store in the existing local config file; platform keychain storage remains planned.
+- CLI credentials now prefer the macOS Keychain and fall back to the existing local config file when Keychain is unavailable.
 - Bri publication now has a first server-side bridge, but per-user Bri account connection and offline queued publish operations remain planned.

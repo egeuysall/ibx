@@ -22,6 +22,7 @@ export type CliConfig = {
   baseUrl: string;
   apiKey: string;
   createdAt: string;
+  credentialStore?: "keychain" | "config-file";
 };
 
 export type CliVersionManifest = {

@@ -138,6 +138,7 @@ export async function runAuthCommand(parsed: ParsedArgs) {
           permission: verification.permission ?? "both",
           baseUrl: config.baseUrl,
           keyHint: `${API_KEY_PREFIX}...${config.apiKey.slice(-4)}`,
+          credentialStore: config.credentialStore ?? "config-file",
         });
         return;
       }
@@ -145,6 +146,9 @@ export async function runAuthCommand(parsed: ParsedArgs) {
       printOk(`authenticated (${verification.authType ?? "apiKey"})`);
       print(`${color.gray("server:")} ${config.baseUrl}`);
       print(`${color.gray("permission:")} ${verification.permission ?? "both"}`);
+      print(
+        `${color.gray("credential store:")} ${config.credentialStore ?? "config-file"}`,
+      );
       print(
         `${color.gray("key:")} ${API_KEY_PREFIX}...${config.apiKey.slice(-4)}`,
       );
