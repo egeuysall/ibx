@@ -22,7 +22,7 @@ import {
   type OfflineAttachment,
 } from "@/lib/offline/db";
 import { getTodoPageHref } from "@/lib/todo-slug";
-import type { AttachmentRecord, TodoItem } from "@/lib/types";
+import type { AttachmentRecord, PublicationRecord, TodoItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
@@ -132,9 +132,11 @@ export function TodoPageEditor({ todoId }: TodoPageEditorProps) {
   const [title, setTitle] = useState("");
   const [editorValue, setEditorValue] = useState<EditorValue | null>(null);
   const [attachments, setAttachments] = useState<AttachmentRecord[]>([]);
+  const [publication, setPublication] = useState<PublicationRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
 
   const resolvedEditorValue = useMemo(() => {
     if (editorValue?.json) {
@@ -233,6 +235,21 @@ export function TodoPageEditor({ todoId }: TodoPageEditorProps) {
   useEffect(() => {
     void loadAttachments();
   }, [loadAttachments]);
+
+  useEffect(() => {
+    if (!isOnline || todoId.startsWith("local-")) {
+      return;
+    }
+
+    void apiClient
+      .getPublication("todo", todoId)
+      .then(({ publication: nextPublication }) =>
+        setPublication(
+          nextPublication?.status === "published" ? nextPublication : null,
+        ),
+      )
+      .catch(() => undefined);
+  }, [isOnline, todoId]);
 
   const savePage = async () => {
     if (!todo) {
@@ -394,6 +411,68 @@ export function TodoPageEditor({ todoId }: TodoPageEditorProps) {
     }
   };
 
+  const publishPage = async () => {
+    if (!todo) {
+      return;
+    }
+    if (!isOnline || todo.id.startsWith("local-")) {
+      toast.error("publish needs a network connection");
+      return;
+    }
+
+    setIsPublishing(true);
+    try {
+      const { publication: nextPublication } = await apiClient.publishToBri({
+        sourceKind: "todo",
+        sourceId: todo.id,
+        title: title.trim() || todo.title,
+        notes: editorValue?.text ?? todo.notes,
+        notesJson: editorValue?.json ?? todo.notesJson,
+        visibility: "public",
+      });
+      setPublication(nextPublication);
+      toast.message(publication ? "Bri page updated" : "published to Bri");
+    } catch (error) {
+      toast.error(parseErrorMessage(error));
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
+  const unpublishPage = async () => {
+    if (!todo || !publication) {
+      return;
+    }
+    if (!isOnline) {
+      toast.error("unpublish needs a network connection");
+      return;
+    }
+
+    setIsPublishing(true);
+    try {
+      await apiClient.unpublishFromBri("todo", todo.id);
+      setPublication(null);
+      toast.message("unpublished from Bri");
+    } catch (error) {
+      toast.error(parseErrorMessage(error));
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
+  const copyPublicationUrl = async () => {
+    if (!publication) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(publication.url);
+      toast.message("Bri link copied");
+    } catch {
+      toast.error("could not copy link");
+    }
+  };
+
   const openAttachment = async (attachment: AttachmentRecord) => {
     if (attachment.id.startsWith("local-attachment-")) {
       const localAttachment = await listOfflineAttachments(
@@ -501,6 +580,44 @@ export function TodoPageEditor({ todoId }: TodoPageEditorProps) {
                 >
                   {isUploading ? "attaching..." : "attach"}
                 </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={isPublishing || !isOnline}
+                  onClick={() => void publishPage()}
+                >
+                  {isPublishing
+                    ? "publishing..."
+                    : publication
+                      ? "update Bri"
+                      : "publish to Bri"}
+                </Button>
+                {publication ? (
+                  <>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => window.open(publication.url, "_blank", "noopener")}
+                    >
+                      open Bri
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => void copyPublicationUrl()}
+                    >
+                      copy link
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      disabled={isPublishing || !isOnline}
+                      onClick={() => void unpublishPage()}
+                    >
+                      unpublish
+                    </Button>
+                  </>
+                ) : null}
                 <input
                   ref={attachmentInputRef}
                   type="file"
@@ -511,6 +628,24 @@ export function TodoPageEditor({ todoId }: TodoPageEditorProps) {
                   }
                 />
               </div>
+
+              {publication ? (
+                <p className="text-xs text-muted-foreground">
+                  published to{" "}
+                  <a
+                    href={publication.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-foreground underline-offset-2 hover:underline"
+                  >
+                    Bri
+                  </a>
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  not published to Bri
+                </p>
+              )}
 
               {attachments.length > 0 ? (
                 <div className="flex flex-wrap gap-2 text-xs">

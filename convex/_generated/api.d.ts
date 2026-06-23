@@ -12,6 +12,7 @@ import type * as apiKeys from "../apiKeys.js";
 import type * as attachments from "../attachments.js";
 import type * as cliAuth from "../cliAuth.js";
 import type * as memories from "../memories.js";
+import type * as publications from "../publications.js";
 import type * as sessions from "../sessions.js";
 import type * as sync from "../sync.js";
 import type * as thoughts from "../thoughts.js";
@@ -28,6 +29,7 @@ declare const fullApi: ApiFromModules<{
   attachments: typeof attachments;
   cliAuth: typeof cliAuth;
   memories: typeof memories;
+  publications: typeof publications;
   sessions: typeof sessions;
   sync: typeof sync;
   thoughts: typeof thoughts;

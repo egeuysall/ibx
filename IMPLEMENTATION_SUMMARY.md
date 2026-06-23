@@ -41,6 +41,12 @@
   - online files upload through Convex storage,
   - offline files are stored as local Dexie metadata/blob rows and queued as pending uploads,
   - queued attachment uploads replay after reconnect, including attachments added to local-only todos before their server ID exists.
+- Added the first IBX to Bri publishing slice:
+  - added owner-scoped `publications` metadata in Convex,
+  - added `/api/publications/bri` to publish, update, read status, and unpublish Bri pages through Bri's existing API,
+  - converts Tiptap JSON to Markdown before sending to Bri so public pages keep using Bri's markdown renderer,
+  - added publish/update/open/copy/unpublish controls to each todo page,
+  - documents `BRI_BASE_URL` and server-only `BRI_INTERNAL_API_KEY`.
 - Fixed browser DNS/offline failure behavior:
   - network failures emit an app-level offline event,
   - `useOfflineStatus` listens to that event instead of trusting `navigator.onLine` alone,
@@ -67,4 +73,4 @@
 - Tiptap Simple Editor integration for Bri is planned but not implemented in this pass.
 - Full page-level editor sync and conflict recovery UI are planned but not implemented in this pass.
 - CLI credentials still store in the existing local config file; platform keychain storage remains planned.
-- Bri publication from IBX is planned but not implemented in this pass.
+- Bri publication now has a first server-side bridge, but per-user Bri account connection and offline queued publish operations remain planned.

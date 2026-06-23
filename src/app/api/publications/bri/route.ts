@@ -1,0 +1,403 @@
+import { NextRequest, NextResponse } from "next/server";
+
+import {
+  getRouteAuth,
+  getRouteAuthOwnerKey,
+  unauthorizedJson,
+  validateApiKeyPermission,
+  validateCsrfForSessionAuth,
+} from "@/lib/auth-server";
+import { api, convex } from "@/lib/convex-server";
+import { tiptapJsonToMarkdown } from "@/lib/tiptap-markdown";
+
+const MAX_TITLE_LENGTH = 120;
+const MAX_MARKDOWN_LENGTH = 200_000;
+
+type BriNoteResponse = {
+  data?: {
+    id?: unknown;
+    username?: unknown;
+    slug?: unknown;
+    title?: unknown;
+  };
+  error?: unknown;
+};
+
+function normalizeSourceKind(input: unknown) {
+  return input === "todo" || input === "thought" ? input : null;
+}
+
+function normalizeSourceId(input: unknown) {
+  const value = typeof input === "string" ? input.trim() : "";
+  if (!value || value.length > 128) {
+    return null;
+  }
+
+  return value;
+}
+
+function normalizeTitle(input: unknown) {
+  return typeof input === "string"
+    ? input.trim().replace(/\s+/g, " ").slice(0, MAX_TITLE_LENGTH)
+    : "";
+}
+
+function normalizeVisibility(input: unknown) {
+  return input === "private" ? "private" : "public";
+}
+
+function readBriConfig() {
+  const baseUrl = process.env.BRI_BASE_URL?.trim() || "https://bri.fyi";
+  const apiKey = process.env.BRI_INTERNAL_API_KEY?.trim();
+  if (!apiKey) {
+    return null;
+  }
+
+  try {
+    const url = new URL(baseUrl);
+    if (url.protocol !== "https:" && process.env.NODE_ENV === "production") {
+      return null;
+    }
+
+    return {
+      baseUrl: url.origin,
+      apiKey,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function serializePublication(publication: {
+  _id: string;
+  sourceKind: "todo" | "thought";
+  sourceId: string;
+  target: "bri";
+  remoteId: string;
+  username: string;
+  slug: string;
+  title: string;
+  url: string;
+  visibility: "public" | "private";
+  status: "published" | "deleted";
+  createdAt: number;
+  updatedAt: number;
+  lastPublishedAt: number;
+  deletedAt?: number | null;
+}) {
+  return {
+    id: publication._id,
+    sourceKind: publication.sourceKind,
+    sourceId: publication.sourceId,
+    target: publication.target,
+    remoteId: publication.remoteId,
+    username: publication.username,
+    slug: publication.slug,
+    title: publication.title,
+    url: publication.url,
+    visibility: publication.visibility,
+    status: publication.status,
+    createdAt: publication.createdAt,
+    updatedAt: publication.updatedAt,
+    lastPublishedAt: publication.lastPublishedAt,
+    deletedAt: publication.deletedAt ?? null,
+  };
+}
+
+async function readBriJson(response: Response) {
+  return (await response.json().catch(() => ({}))) as BriNoteResponse;
+}
+
+async function sendBriRequest(input: {
+  method: "POST" | "PATCH";
+  path: string;
+  apiKey: string;
+  title: string;
+  content: string;
+  visibility: "public" | "private";
+}) {
+  const response = await fetch(input.path, {
+    method: input.method,
+    headers: {
+      Authorization: `Bearer ${input.apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      title: input.title,
+      content: input.content,
+      visibility: input.visibility,
+      expiresInDays: null,
+    }),
+  });
+  const json = await readBriJson(response);
+  if (!response.ok) {
+    const message =
+      typeof json.error === "string" ? json.error : "Bri publication failed.";
+    throw new Error(message);
+  }
+
+  const remoteId = typeof json.data?.id === "string" ? json.data.id : null;
+  const username =
+    typeof json.data?.username === "string" ? json.data.username : null;
+  const slug = typeof json.data?.slug === "string" ? json.data.slug : null;
+  const title =
+    typeof json.data?.title === "string" ? json.data.title : input.title;
+  if (!remoteId || !username || !slug) {
+    throw new Error("Bri returned incomplete publication metadata.");
+  }
+
+  return { remoteId, username, slug, title };
+}
+
+export async function GET(request: NextRequest) {
+  const auth = await getRouteAuth(request);
+  if (!auth) {
+    return unauthorizedJson();
+  }
+  const permissionError = validateApiKeyPermission(request, auth);
+  if (permissionError) {
+    return permissionError;
+  }
+
+  const sourceKind = normalizeSourceKind(
+    request.nextUrl.searchParams.get("sourceKind"),
+  );
+  const sourceId = normalizeSourceId(request.nextUrl.searchParams.get("sourceId"));
+  if (!sourceKind || !sourceId) {
+    return NextResponse.json(
+      { error: "sourceKind and sourceId are required." },
+      { status: 400 },
+    );
+  }
+
+  const ownerKey = getRouteAuthOwnerKey(auth);
+  const publication = await convex.query(api.publications.getBySource, {
+    ownerKey,
+    sourceKind,
+    sourceId,
+  });
+
+  return NextResponse.json({
+    publication: publication ? serializePublication(publication) : null,
+  });
+}
+
+export async function POST(request: NextRequest) {
+  const auth = await getRouteAuth(request);
+  if (!auth) {
+    return unauthorizedJson();
+  }
+  const csrfError = validateCsrfForSessionAuth(request, auth);
+  if (csrfError) {
+    return csrfError;
+  }
+  const permissionError = validateApiKeyPermission(request, auth);
+  if (permissionError) {
+    return permissionError;
+  }
+
+  const config = readBriConfig();
+  if (!config) {
+    return NextResponse.json(
+      { error: "Bri publishing is not configured." },
+      { status: 503 },
+    );
+  }
+
+  const body = (await request.json().catch(() => null)) as {
+    sourceKind?: unknown;
+    sourceId?: unknown;
+    title?: unknown;
+    notes?: unknown;
+    notesJson?: unknown;
+    visibility?: unknown;
+  } | null;
+
+  const sourceKind = normalizeSourceKind(body?.sourceKind);
+  const sourceId = normalizeSourceId(body?.sourceId);
+  const title = normalizeTitle(body?.title);
+  const visibility = normalizeVisibility(body?.visibility);
+  const fallbackNotes = typeof body?.notes === "string" ? body.notes : null;
+  let parsedJson: unknown = body?.notesJson;
+  if (typeof body?.notesJson === "string") {
+    try {
+      parsedJson = JSON.parse(body.notesJson || "null");
+    } catch {
+      parsedJson = null;
+    }
+  }
+  const markdown = tiptapJsonToMarkdown(parsedJson, fallbackNotes).slice(
+    0,
+    MAX_MARKDOWN_LENGTH,
+  );
+
+  if (!sourceKind || !sourceId) {
+    return NextResponse.json(
+      { error: "sourceKind and sourceId are required." },
+      { status: 400 },
+    );
+  }
+  if (sourceKind !== "todo") {
+    return NextResponse.json(
+      { error: "Only todo publishing is supported." },
+      { status: 400 },
+    );
+  }
+  if (!title) {
+    return NextResponse.json({ error: "Title is required." }, { status: 400 });
+  }
+  if (!markdown.trim()) {
+    return NextResponse.json(
+      { error: "Published content cannot be empty." },
+      { status: 400 },
+    );
+  }
+
+  const ownerKey = getRouteAuthOwnerKey(auth);
+  const sourceTodo = await convex.query(api.todos.getByStringId, {
+    ownerKey,
+    todoId: sourceId,
+  });
+  if (!sourceTodo) {
+    return NextResponse.json({ error: "Todo not found." }, { status: 404 });
+  }
+
+  const existing = await convex.query(api.publications.getBySource, {
+    ownerKey,
+    sourceKind,
+    sourceId,
+  });
+
+  try {
+    const briResult =
+      existing?.status === "published" && existing.remoteId
+        ? await sendBriRequest({
+            method: "PATCH",
+            path: `${config.baseUrl}/api/notes/by-id/${existing.remoteId}`,
+            apiKey: config.apiKey,
+            title,
+            content: markdown,
+            visibility,
+          })
+        : await sendBriRequest({
+            method: "POST",
+            path: `${config.baseUrl}/api/notes`,
+            apiKey: config.apiKey,
+            title,
+            content: markdown,
+            visibility,
+          });
+
+    const url = `${config.baseUrl}/${briResult.username}/${briResult.slug}`;
+    await convex.mutation(api.publications.upsertBriPublication, {
+      ownerKey,
+      sourceKind,
+      sourceId,
+      remoteId: briResult.remoteId,
+      username: briResult.username,
+      slug: briResult.slug,
+      title: briResult.title,
+      url,
+      visibility,
+    });
+
+    const publication = await convex.query(api.publications.getBySource, {
+      ownerKey,
+      sourceKind,
+      sourceId,
+    });
+
+    if (!publication) {
+      return NextResponse.json(
+        { error: "Publication metadata was not saved." },
+        { status: 500 },
+      );
+    }
+
+    return NextResponse.json({
+      ok: true,
+      publication: serializePublication(publication),
+    });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : "Bri publication failed.",
+      },
+      { status: 502 },
+    );
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  const auth = await getRouteAuth(request);
+  if (!auth) {
+    return unauthorizedJson();
+  }
+  const csrfError = validateCsrfForSessionAuth(request, auth);
+  if (csrfError) {
+    return csrfError;
+  }
+  const permissionError = validateApiKeyPermission(request, auth);
+  if (permissionError) {
+    return permissionError;
+  }
+
+  const config = readBriConfig();
+  if (!config) {
+    return NextResponse.json(
+      { error: "Bri publishing is not configured." },
+      { status: 503 },
+    );
+  }
+
+  const sourceKind = normalizeSourceKind(
+    request.nextUrl.searchParams.get("sourceKind"),
+  );
+  const sourceId = normalizeSourceId(request.nextUrl.searchParams.get("sourceId"));
+  if (!sourceKind || !sourceId) {
+    return NextResponse.json(
+      { error: "sourceKind and sourceId are required." },
+      { status: 400 },
+    );
+  }
+
+  const ownerKey = getRouteAuthOwnerKey(auth);
+  const existing = await convex.query(api.publications.getBySource, {
+    ownerKey,
+    sourceKind,
+    sourceId,
+  });
+  if (!existing || existing.status !== "published") {
+    return NextResponse.json({ ok: true });
+  }
+
+  const response = await fetch(
+    `${config.baseUrl}/api/notes/by-id/${existing.remoteId}`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${config.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ action: "softDelete" }),
+    },
+  );
+  if (!response.ok) {
+    const json = await readBriJson(response);
+    return NextResponse.json(
+      {
+        error:
+          typeof json.error === "string" ? json.error : "Bri unpublish failed.",
+      },
+      { status: 502 },
+    );
+  }
+
+  await convex.mutation(api.publications.markDeleted, {
+    ownerKey,
+    sourceKind,
+    sourceId,
+  });
+
+  return NextResponse.json({ ok: true });
+}

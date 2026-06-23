@@ -2,6 +2,7 @@ import type {
   AttachmentParentKind,
   AttachmentRecord,
   GenerationPreferences,
+  PublicationRecord,
   TodoItem,
   SyncThoughtInput,
   ThoughtRecord,
@@ -470,5 +471,38 @@ export const apiClient = {
       contentType,
       size: input.file.size,
     });
+  },
+
+  async getPublication(sourceKind: "todo" | "thought", sourceId: string) {
+    const query = new URLSearchParams({ sourceKind, sourceId });
+    return requestJson<{ publication: PublicationRecord | null }>(
+      `/api/publications/bri?${query.toString()}`,
+      { method: "GET" },
+    );
+  },
+
+  async publishToBri(input: {
+    sourceKind: "todo" | "thought";
+    sourceId: string;
+    title: string;
+    notes: string | null;
+    notesJson?: unknown;
+    visibility?: "public" | "private";
+  }) {
+    return requestJson<{
+      ok: true;
+      publication: PublicationRecord;
+    }>("/api/publications/bri", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  },
+
+  async unpublishFromBri(sourceKind: "todo" | "thought", sourceId: string) {
+    const query = new URLSearchParams({ sourceKind, sourceId });
+    return requestJson<{ ok: true }>(
+      `/api/publications/bri?${query.toString()}`,
+      { method: "DELETE" },
+    );
   },
 };

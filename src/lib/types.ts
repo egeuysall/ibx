@@ -67,3 +67,21 @@ export type AttachmentRecord = {
   createdAt: number;
   updatedAt: number;
 };
+
+export type PublicationRecord = {
+  id: string;
+  sourceKind: "todo" | "thought";
+  sourceId: string;
+  target: "bri";
+  remoteId: string;
+  username: string;
+  slug: string;
+  title: string;
+  url: string;
+  visibility: "public" | "private";
+  status: "published" | "deleted";
+  createdAt: number;
+  updatedAt: number;
+  lastPublishedAt: number;
+  deletedAt: number | null;
+};

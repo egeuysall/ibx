@@ -145,6 +145,29 @@ export default defineSchema({
     ])
     .index("by_ownerKey_and_storageId", ["ownerKey", "storageId"])
     .index("by_ownerKey_and_createdAt", ["ownerKey", "createdAt"]),
+  publications: defineTable({
+    ownerKey: v.optional(v.union(v.string(), v.null())),
+    sourceKind: v.union(v.literal("todo"), v.literal("thought")),
+    sourceId: v.string(),
+    target: v.literal("bri"),
+    remoteId: v.string(),
+    username: v.string(),
+    slug: v.string(),
+    title: v.string(),
+    url: v.string(),
+    visibility: v.union(v.literal("public"), v.literal("private")),
+    status: v.union(v.literal("published"), v.literal("deleted")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    lastPublishedAt: v.number(),
+    deletedAt: v.optional(v.union(v.number(), v.null())),
+  })
+    .index("by_ownerKey_and_sourceKind_and_sourceId", [
+      "ownerKey",
+      "sourceKind",
+      "sourceId",
+    ])
+    .index("by_ownerKey_and_updatedAt", ["ownerKey", "updatedAt"]),
   memories: defineTable({
     key: v.string(),
     kind: v.union(v.literal("profile"), v.literal("run")),
