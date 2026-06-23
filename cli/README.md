@@ -1,6 +1,7 @@
 # ibx CLI
 
-`ibx` is a TypeScript CLI for ibx with API-key auth (`iak_...`) and Bearer requests.
+`ibx` is a TypeScript CLI for ibx with browser Clerk login, API-key fallback
+(`iak_...`), and Bearer requests.
 
 ## install (no npm publish needed)
 
@@ -11,7 +12,7 @@ curl -fsSL https://ibx.egeuysal.com/install.sh | bash
 ## quick start
 
 ```bash
-ibx auth login --api-key iak_xxx
+ibx auth login
 ibx add "finish landing page and email two leads" --auto-schedule
 ibx todos add "email Pat"
 ibx todos list --view today
@@ -21,8 +22,10 @@ ibx td
 ## commands
 
 - `ibx auth login [--api-key iak_...] [--url https://ibx.egeuysal.com]`
+- `ibx login [--url https://ibx.egeuysal.com]`
 - `ibx a l [--api-key iak_...] [--url https://ibx.egeuysal.com]` (short)
-- `ibx auth status`
+- `ibx auth status` / `ibx auth whoami`
+- `ibx whoami`
 - `ibx a s` (short)
 - `ibx auth logout`
 - `ibx a o` (short)
@@ -30,6 +33,9 @@ ibx td
 - `ibx n [--input "..."]` (short)
 - `ibx todos list [--view today|upcoming|archive|all] [--json]`
 - `ibx t l [--view today|upcoming|archive|all] [--json]` (short)
+
+Default login opens a browser for Clerk approval and stores the generated CLI
+API key locally. Use `--api-key` for automation or pre-generated keys.
 - `ibx todos add "title" [--notes "..."] [--due YYYY-MM-DD] [--hours 1.5|90m|1h] [--start HH:mm|HH:mm am/pm] [--priority 1|2|3, defaults to 1] [--recurrence none|daily|weekly|monthly] [--json]`
 - `ibx t a "title" [same flags]` (short)
 - `ibx td` (today's completed tasks in `America/Chicago`, override with `IBX_TIMEZONE`)

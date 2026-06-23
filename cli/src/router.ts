@@ -15,7 +15,9 @@ import { renderHelpUi } from "./ui/pastel.js";
 function normalizeTopLevelCommand(parsed: ParsedArgs) {
   const first = parsed.positionals[0];
   const normalizedFirst =
-    first === "a"
+    first === "login" || first === "logout" || first === "whoami"
+      ? "auth"
+      : first === "a"
       ? "auth"
       : first === "n"
         ? "add"
@@ -27,7 +29,17 @@ function normalizeTopLevelCommand(parsed: ParsedArgs) {
               ? "todos"
               : first;
   const normalizedParsed: ParsedArgs =
-    first === "td"
+    first === "login" || first === "logout"
+      ? {
+          ...parsed,
+          positionals: ["auth", first, ...parsed.positionals.slice(1)],
+        }
+      : first === "whoami"
+        ? {
+            ...parsed,
+            positionals: ["auth", "status", ...parsed.positionals.slice(1)],
+          }
+        : first === "td"
       ? {
           ...parsed,
           positionals: ["todos", "today-done", ...parsed.positionals.slice(1)],

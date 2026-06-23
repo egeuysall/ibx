@@ -237,7 +237,7 @@ curl -fsSL https://ibx.egeuysal.com/install.sh | bash
 Auth and basic flow:
 
 ```bash
-ibx auth login --api-key iak_...
+ibx auth login
 ibx add "finish landing page and email two leads"
 ibx todos list --view today
 ibx td
@@ -246,8 +246,10 @@ ibx td
 Available commands:
 
 - `ibx auth login [--api-key iak_...] [--url https://ibx.egeuysal.com]`
+- `ibx login [--url https://ibx.egeuysal.com]`
 - `ibx a l [--api-key iak_...] [--url https://ibx.egeuysal.com]` (short)
-- `ibx auth status`
+- `ibx auth status` / `ibx auth whoami`
+- `ibx whoami`
 - `ibx a s` (short)
 - `ibx auth logout`
 - `ibx a o` (short)
@@ -271,6 +273,10 @@ Build CLI artifacts:
 bun run cli:build
 bun run cli:bundle
 ```
+
+`ibx auth login` opens Clerk in your browser and creates a scoped CLI API key
+after approval. `--api-key iak_...` remains available for automation and
+manual key workflows.
 
 ## Apple Shortcut
 

@@ -11,7 +11,7 @@ export function normalizeAuthSubcommand(value: string | null) {
     return "logout";
   }
 
-  if (value === "status" || value === "s" || value === "st") {
+  if (value === "status" || value === "s" || value === "st" || value === "whoami" || value === "me") {
     return "status";
   }
 

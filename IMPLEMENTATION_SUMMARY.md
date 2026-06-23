@@ -46,6 +46,11 @@
   - `useOfflineStatus` listens to that event instead of trusting `navigator.onLine` alone,
   - queued AI prompts pause on network failure instead of marking every queued item failed.
 - Fixed stale browser shell behavior by stopping the service worker from caching auth-sensitive navigation HTML, which prevents old landing/app pages from causing redirect loops after auth state changes.
+- Added browser-based Clerk login for the CLI:
+  - `ibx auth login` now opens a browser approval flow by default,
+  - the browser flow uses loopback redirect, state, PKCE-style verifier/challenge, and short-lived one-time Convex auth codes,
+  - the server mints the same scoped API-key format after approval so existing CLI requests and scripts still work,
+  - `--api-key iak_...` remains supported for automation/manual key workflows.
 - Verified the existing iOS offline shortcut path still builds and tests successfully.
 
 ## Verification
@@ -61,5 +66,5 @@
 
 - Tiptap Simple Editor integration for Bri is planned but not implemented in this pass.
 - Full page-level editor sync and conflict recovery UI are planned but not implemented in this pass.
-- Browser-based Clerk auth for the CLI is planned; existing API-key auth remains unchanged.
+- CLI credentials still store in the existing local config file; platform keychain storage remains planned.
 - Bri publication from IBX is planned but not implemented in this pass.

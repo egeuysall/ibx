@@ -2,6 +2,7 @@ import process from "node:process";
 
 import { API_KEY_PREFIX, DEFAULT_BASE_URL, EXIT_CODE } from "../core/constants.js";
 import { getStringOption, hasFlag } from "../core/args.js";
+import { runBrowserAuthLogin } from "../core/browser-auth.js";
 import { clearConfig, loadConfig, saveConfig } from "../core/config.js";
 import { CliError } from "../core/errors.js";
 import { verifyAuth } from "../core/http.js";
@@ -21,40 +22,80 @@ export async function runAuthCommand(parsed: ParsedArgs) {
       null;
     const baseUrlInput = getStringOption(parsed, "url") ?? DEFAULT_BASE_URL;
 
-    if (!apiKey || !apiKey.startsWith(API_KEY_PREFIX)) {
-      throw new CliError(
-        "Provide a valid API key with --api-key (must start with iak_).\nexample: ibx auth login --api-key iak_... ",
-        { exitCode: EXIT_CODE.VALIDATION, code: "API_KEY_INVALID" },
-      );
+    const baseUrl = normalizeBaseUrl(baseUrlInput);
+
+    if (apiKey) {
+      if (!apiKey.startsWith(API_KEY_PREFIX)) {
+        throw new CliError(
+          "Provide a valid API key with --api-key (must start with iak_).\nexample: ibx auth login --api-key iak_... ",
+          { exitCode: EXIT_CODE.VALIDATION, code: "API_KEY_INVALID" },
+        );
+      }
+
+      logEvent("info", "auth.login.start", { baseUrl, mode: "apiKey" });
+      const verification = await verifyAuth(baseUrl, apiKey);
+
+      const config: CliConfig = {
+        baseUrl,
+        apiKey,
+        createdAt: new Date().toISOString(),
+      };
+
+      await saveConfig(config);
+
+      if (outputJson) {
+        printJson({
+          ok: true,
+          baseUrl,
+          authType: verification.authType ?? "apiKey",
+          permission: verification.permission ?? "both",
+        });
+        return;
+      }
+
+      printOk(`connected to ${baseUrl}`);
+      printInfo(`auth: ${verification.authType ?? "apiKey"}`);
+      printInfo(`permission: ${verification.permission ?? "both"}`);
+      logEvent("info", "auth.login.done", {
+        baseUrl,
+        permission: verification.permission ?? "both",
+      });
+      return;
     }
 
-    const baseUrl = normalizeBaseUrl(baseUrlInput);
-    logEvent("info", "auth.login.start", { baseUrl });
-    const verification = await verifyAuth(baseUrl, apiKey);
-
+    logEvent("info", "auth.login.start", { baseUrl, mode: "browser" });
+    if (!outputJson) {
+      printInfo("opening browser for Clerk sign in...");
+    }
+    const browserAuth = await runBrowserAuthLogin(baseUrl, (url) => {
+      if (!outputJson) {
+        print(`${color.gray("login url:")} ${url}`);
+      }
+    });
     const config: CliConfig = {
       baseUrl,
-      apiKey,
+      apiKey: browserAuth.apiKey,
       createdAt: new Date().toISOString(),
     };
-
     await saveConfig(config);
+    const verification = await verifyAuth(baseUrl, browserAuth.apiKey);
 
     if (outputJson) {
       printJson({
         ok: true,
         baseUrl,
-        authType: verification.authType ?? "apiKey",
+        authType: browserAuth.authType,
         permission: verification.permission ?? "both",
       });
       return;
     }
 
     printOk(`connected to ${baseUrl}`);
-    printInfo(`auth: ${verification.authType ?? "apiKey"}`);
+    printInfo(`auth: ${browserAuth.authType}`);
     printInfo(`permission: ${verification.permission ?? "both"}`);
     logEvent("info", "auth.login.done", {
       baseUrl,
+      mode: "browser",
       permission: verification.permission ?? "both",
     });
     return;
@@ -82,7 +123,8 @@ export async function runAuthCommand(parsed: ParsedArgs) {
       }
 
       printWarn("not authenticated");
-      print(color.gray("run: ibx auth login --api-key iak_..."));
+      print(color.gray("run: ibx auth login"));
+      print(color.gray("advanced: ibx auth login --api-key iak_..."));
       logEvent("warn", "auth.status", { authenticated: false });
       return;
     }

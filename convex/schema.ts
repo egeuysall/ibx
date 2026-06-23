@@ -26,6 +26,18 @@ export default defineSchema({
     .index("by_ownerKey_and_createdAt", ["ownerKey", "createdAt"])
     .index("by_createdAt", ["createdAt"])
     .index("by_revokedAt_and_createdAt", ["revokedAt", "createdAt"]),
+  cliAuthCodes: defineTable({
+    ownerKey: v.union(v.string(), v.null()),
+    codeHash: v.string(),
+    codeChallenge: v.string(),
+    redirectUri: v.string(),
+    state: v.string(),
+    createdAt: v.number(),
+    expiresAt: v.number(),
+    consumedAt: v.union(v.number(), v.null()),
+  })
+    .index("by_codeHash", ["codeHash"])
+    .index("by_expiresAt", ["expiresAt"]),
   thoughts: defineTable({
     ownerKey: v.optional(v.union(v.string(), v.null())),
     externalId: v.string(),
