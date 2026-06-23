@@ -16,6 +16,8 @@ ibx auth login
 ibx add "finish landing page and email two leads" --auto-schedule
 ibx todos add "email Pat"
 ibx todos list --view today
+ibx page create "write launch notes"
+ibx publish <todoId>
 ibx td
 ```
 
@@ -31,6 +33,11 @@ ibx td
 - `ibx a o` (short)
 - `ibx add [--input "..."] [--auto-schedule|--no-auto-schedule] [--include-links|--no-include-links] [--require-descriptions|--no-require-descriptions] [--availability-notes "..."]`
 - `ibx n [--input "..."]` (short)
+- `ibx sync [--since <unix-ms>] [--json]`
+- `ibx page create "title" [same flags as todos add]`
+- `ibx publish [publish] <todoId|prefix> [--title "..."] [--private] [--json]`
+- `ibx publish unpublish <todoId|prefix> [--json]`
+- `ibx attach <todoId|prefix> <file> [--json]`
 - `ibx todos list [--view today|upcoming|archive|all] [--json]`
 - `ibx t l [--view today|upcoming|archive|all] [--json]` (short)
 

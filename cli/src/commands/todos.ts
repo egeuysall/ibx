@@ -12,7 +12,7 @@ import { parseEstimatedHours, parsePriority, parseRecurrence, parseTimeBlockStar
 import { runAddCommand } from "./add.js";
 import { normalizeTodosSubcommand } from "./normalize.js";
 
-async function resolveTodoId(
+export async function resolveTodoId(
   config: Pick<CliConfig, "baseUrl" | "apiKey">,
   idOrPrefix: string,
 ) {

@@ -77,6 +77,11 @@
   - the browser flow uses loopback redirect, state, PKCE-style verifier/challenge, and short-lived one-time Convex auth codes,
   - the server mints the same scoped API-key format after approval so existing CLI requests and scripts still work,
   - `--api-key iak_...` remains supported for automation/manual key workflows.
+- Expanded the CLI surface required by the offline/publishing workflow:
+  - added `ibx sync` to pull current server sync state,
+  - added `ibx page create` as the todo-backed page creation command,
+  - added `ibx publish` / `ibx publish unpublish` for Bri publication control,
+  - added `ibx attach` for uploading supported files to todo pages through Convex storage.
 - Verified the existing iOS offline shortcut path still builds and tests successfully.
 
 ## Verification

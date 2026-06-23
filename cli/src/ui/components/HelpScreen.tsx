@@ -44,6 +44,10 @@ const sections: CommandSection[] = [
       { command: "ibx td --json", description: `Done today (${APP_TIMEZONE})` },
       { command: "ibx t x --id <todoId>", description: "Mark task done" },
       { command: "ibx t s --id <todoId> --start 14:00", description: "Edit task fields" },
+      { command: 'ibx page create "launch notes"', description: "Create task page" },
+      { command: "ibx sync", description: "Pull latest sync state" },
+      { command: "ibx attach <todoId> ./file.pdf", description: "Attach file" },
+      { command: "ibx publish <todoId>", description: "Publish page to Bri" },
     ],
   },
   {
