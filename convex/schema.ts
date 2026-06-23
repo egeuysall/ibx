@@ -132,6 +132,7 @@ export default defineSchema({
     updatedAt: v.number(),
     deletedAt: v.optional(v.union(v.number(), v.null())),
   })
+    .index("by_parentKind_and_parentId", ["parentKind", "parentId"])
     .index("by_parentKind_and_parentId_and_createdAt", [
       "parentKind",
       "parentId",

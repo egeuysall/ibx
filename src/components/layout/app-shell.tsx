@@ -1,7 +1,6 @@
 "use client";
 
 import { useClerk } from "@clerk/nextjs";
-import type { JSONContent } from "@tiptap/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -53,7 +52,6 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { SidebarAccount } from "@/components/layout/sidebar-account";
-import { SimpleEditor } from "@/components/tiptap-templates/simple/simple-editor";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useOfflineStatus } from "@/hooks/useOfflineStatus";
 import { useTheme } from "@/hooks/useTheme";
@@ -76,9 +74,7 @@ import {
   patchOfflineOperation,
   removeOfflineAttachment,
   removeOfflineOperation,
-  removeOfflineOperationsByEntity,
   upsertManyOfflineAttachments,
-  upsertOfflineAttachment,
   type OfflineAttachment,
 } from "@/lib/offline/db";
 import {
@@ -126,9 +122,6 @@ const HOLD_PROGRESS_DELAY_MS = 160;
 const HOLD_PROGRESS_SWEEP_MS = 300;
 const HOLD_TO_TOGGLE_MS = HOLD_PROGRESS_DELAY_MS + HOLD_PROGRESS_SWEEP_MS;
 const HOLD_MOVE_CANCEL_PX = 24;
-const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
-const ATTACHMENT_ACCEPT =
-  "image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain,text/markdown";
 const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const UTC_LONG_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -660,30 +653,6 @@ type TodoDisplayMeta = {
   links: TodoResourceLink[];
   linksInputValue: string;
 };
-type TodoRichNotesInput = {
-  json: JSONContent;
-  html: string | null;
-};
-
-function parseTodoNotesJson(value: string | null | undefined) {
-  if (!value) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(value) as JSONContent;
-  } catch {
-    return null;
-  }
-}
-
-function getTodoEditorValue(
-  todo: TodoItem,
-  richNotes: TodoRichNotesInput | null,
-  fallbackText: string,
-) {
-  return richNotes?.json ?? parseTodoNotesJson(todo.notesJson) ?? fallbackText;
-}
 
 function offlineAttachmentFromRecord(
   attachment: AttachmentRecord,
@@ -700,22 +669,6 @@ function offlineAttachmentFromRecord(
     createdAt: attachment.createdAt,
     updatedAt: attachment.updatedAt,
     lastError: null,
-  };
-}
-
-function attachmentRecordFromOffline(
-  attachment: OfflineAttachment,
-): AttachmentRecord {
-  return {
-    id: attachment.id,
-    parentKind: attachment.parentKind,
-    parentId: attachment.parentId,
-    fileName: attachment.fileName,
-    contentType: attachment.contentType,
-    size: attachment.size,
-    status: "uploaded",
-    createdAt: attachment.createdAt,
-    updatedAt: attachment.updatedAt,
   };
 }
 
@@ -1038,15 +991,6 @@ export function AppShell({
   const [editingTodoId, setEditingTodoId] = useState<string | null>(null);
   const [editingTitleInput, setEditingTitleInput] = useState("");
   const [editingLinksInput, setEditingLinksInput] = useState("");
-  const [editingNotesInput, setEditingNotesInput] = useState("");
-  const [editingNotesRichInput, setEditingNotesRichInput] =
-    useState<TodoRichNotesInput | null>(null);
-  const [attachmentsByTodoId, setAttachmentsByTodoId] = useState<
-    Record<string, AttachmentRecord[]>
-  >({});
-  const [attachmentUploadTodoId, setAttachmentUploadTodoId] = useState<
-    string | null
-  >(null);
   const [holdingTodoId, setHoldingTodoId] = useState<string | null>(null);
   const [todoPendingDelete, setTodoPendingDelete] = useState<TodoItem | null>(
     null,
@@ -1056,7 +1000,6 @@ export function AppShell({
     Record<string, boolean>
   >({});
   const promptInputRef = useRef<HTMLInputElement | null>(null);
-  const attachmentInputRef = useRef<HTMLInputElement | null>(null);
   const hasAppliedInitialAutofocus = useRef(false);
   const isQueueFlushRunning = useRef(false);
   const holdTimerRef = useRef<number | null>(null);
@@ -1141,8 +1084,6 @@ export function AppShell({
       setEditingTodoId(null);
       setEditingTitleInput("");
       setEditingLinksInput("");
-      setEditingNotesInput("");
-      setEditingNotesRichInput(null);
     };
 
     window.addEventListener("pointerdown", onPointerDown, true);
@@ -1251,15 +1192,7 @@ export function AppShell({
 
   const loadTodoAttachments = useCallback(
     async (todoId: string) => {
-      const cachedAttachments = await listOfflineAttachments("todo", todoId).catch(
-        () => [],
-      );
-      if (cachedAttachments.length > 0) {
-        setAttachmentsByTodoId((current) => ({
-          ...current,
-          [todoId]: cachedAttachments.map(attachmentRecordFromOffline),
-        }));
-      }
+      await listOfflineAttachments("todo", todoId).catch(() => []);
 
       if (!isAuthenticated || !isOnline || todoId.startsWith("local-")) {
         return;
@@ -1267,10 +1200,6 @@ export function AppShell({
 
       try {
         const { attachments } = await apiClient.listAttachments("todo", todoId);
-        setAttachmentsByTodoId((current) => ({
-          ...current,
-          [todoId]: attachments,
-        }));
         await upsertManyOfflineAttachments(
           attachments.map(offlineAttachmentFromRecord),
         );
@@ -2382,106 +2311,6 @@ export function AppShell({
     }
   };
 
-  const queueTodoNoteUpdate = async (
-    todo: TodoItem,
-    notes: string | null,
-    richNotes: TodoRichNotesInput | null,
-  ) => {
-    await enqueueOfflineOperation({
-      entity: "todo",
-      entityId: todo.id,
-      kind: todo.id.startsWith("local-") ? "create" : "update",
-      payload: {
-        title: todo.title,
-        notes,
-        notesJson: richNotes?.json ?? todo.notesJson ?? null,
-        notesHtml: richNotes?.html ?? todo.notesHtml ?? null,
-        localId: todo.id,
-        status: todo.status,
-        dueDate: todo.dueDate,
-        estimatedHours: todo.estimatedHours,
-        timeBlockStart: todo.timeBlockStart,
-        recurrence: todo.recurrence,
-        priority: todo.priority,
-        source: todo.source,
-      },
-    });
-  };
-
-  const updateTodoNotes = async (todo: TodoItem) => {
-    const cleanDescription = editingNotesInput.trim().slice(0, 4_000) || null;
-    const links = getTodoResourceLinks(todo.notes).map((link) => link.url);
-    const nextNotes = buildTodoNotesWithLinks(cleanDescription, links);
-    const previousNotes = todo.notes;
-    const nextNotesJson = editingNotesRichInput?.json ?? null;
-    const nextNotesHtml = editingNotesRichInput?.html ?? null;
-
-    if (
-      (nextNotes ?? null) === (previousNotes ?? null) &&
-      JSON.stringify(nextNotesJson) === (todo.notesJson ?? "null") &&
-      (nextNotesHtml ?? null) === (todo.notesHtml ?? null)
-    ) {
-      return;
-    }
-
-    setPendingTodoId(todo.id);
-    setTodos((previousTodos) =>
-      sortTodos(
-        previousTodos.map((item) =>
-          item.id === todo.id
-              ? {
-                  ...item,
-                  notes: nextNotes,
-                  notesJson: nextNotesJson ? JSON.stringify(nextNotesJson) : null,
-                  notesHtml: nextNotesHtml,
-                }
-              : item,
-        ),
-      ),
-    );
-
-    if (!isOnline || todo.id.startsWith("local-")) {
-      await queueTodoNoteUpdate(todo, nextNotes, editingNotesRichInput);
-      toast.message("note saved offline");
-      setPendingTodoId(null);
-      return;
-    }
-
-    try {
-      await apiClient.updateTodo(todo.id, {
-        notes: nextNotes,
-        notesJson: nextNotesJson,
-        notesHtml: nextNotesHtml,
-      });
-      await refreshTodos();
-    } catch (error) {
-      if (error instanceof ApiError && error.isNetworkError) {
-        await queueTodoNoteUpdate(todo, nextNotes, editingNotesRichInput);
-        toast.message("note saved offline");
-        return;
-      }
-
-      toastApiError(error);
-      setTodos((previousTodos) =>
-        sortTodos(
-          previousTodos.map((item) =>
-            item.id === todo.id
-              ? {
-                  ...item,
-                  notes: previousNotes,
-                  notesJson: todo.notesJson,
-                  notesHtml: todo.notesHtml,
-                }
-              : item,
-          ),
-        ),
-      );
-      setEditingNotesInput(stripTodoLinksFromNotes(previousNotes) ?? "");
-    } finally {
-      setPendingTodoId(null);
-    }
-  };
-
   const updateTodoLinks = async (todo: TodoItem) => {
     const parsed = parseTodoLinksInput(editingLinksInput);
     const currentLinks = getTodoResourceLinks(todo.notes).map(
@@ -2554,181 +2383,6 @@ export function AppShell({
       setEditingLinksInput(getTodoLinksInputValue(previousNotes));
     } finally {
       setPendingTodoId(null);
-    }
-  };
-
-  const handleAttachmentSelected = async (
-    todo: TodoItem,
-    files: FileList | null,
-  ) => {
-    const file = files?.item(0);
-    if (!file) {
-      return;
-    }
-
-    if (file.size > MAX_ATTACHMENT_BYTES) {
-      toast.error("attachment must be 10 MB or smaller");
-      return;
-    }
-
-    setAttachmentUploadTodoId(todo.id);
-    const now = Date.now();
-
-    if (!isOnline || todo.id.startsWith("local-")) {
-      const localAttachment: OfflineAttachment = {
-        id: `local-attachment-${crypto.randomUUID()}`,
-        parentKind: "todo",
-        parentId: todo.id,
-        fileName: file.name || "attachment",
-        contentType: file.type || "application/octet-stream",
-        size: file.size,
-        blob: file,
-        storageId: null,
-        status: "local",
-        createdAt: now,
-        updatedAt: now,
-        lastError: null,
-      };
-      await upsertOfflineAttachment(localAttachment);
-      await enqueueOfflineOperation({
-        entity: "attachment",
-        entityId: localAttachment.id,
-        kind: "upload",
-        payload: {
-          parentKind: "todo",
-          parentId: todo.id,
-          fileName: localAttachment.fileName,
-          contentType: localAttachment.contentType,
-          size: localAttachment.size,
-        },
-      });
-      setAttachmentsByTodoId((current) => ({
-        ...current,
-        [todo.id]: [
-          ...(current[todo.id] ?? []),
-          attachmentRecordFromOffline(localAttachment),
-        ],
-      }));
-      toast.message("attachment saved offline");
-      setAttachmentUploadTodoId(null);
-      return;
-    }
-
-    try {
-      const { id } = await apiClient.uploadAttachmentFile({
-        parentKind: "todo",
-        parentId: todo.id,
-        file,
-      });
-      toast.message("attachment uploaded");
-      await loadTodoAttachments(todo.id);
-      setAttachmentsByTodoId((current) => ({
-        ...current,
-        [todo.id]: current[todo.id] ?? [
-          {
-            id,
-            parentKind: "todo",
-            parentId: todo.id,
-            fileName: file.name || "attachment",
-            contentType: file.type || "application/octet-stream",
-            size: file.size,
-            status: "uploaded",
-            createdAt: now,
-            updatedAt: now,
-          },
-        ],
-      }));
-    } catch (error) {
-      if (error instanceof ApiError && error.isNetworkError) {
-        const localAttachment: OfflineAttachment = {
-          id: `local-attachment-${crypto.randomUUID()}`,
-          parentKind: "todo",
-          parentId: todo.id,
-          fileName: file.name || "attachment",
-          contentType: file.type || "application/octet-stream",
-          size: file.size,
-          blob: file,
-          storageId: null,
-          status: "local",
-          createdAt: now,
-          updatedAt: now,
-          lastError: null,
-        };
-        await upsertOfflineAttachment(localAttachment);
-        await enqueueOfflineOperation({
-          entity: "attachment",
-          entityId: localAttachment.id,
-          kind: "upload",
-          payload: {
-            parentKind: "todo",
-            parentId: todo.id,
-            fileName: localAttachment.fileName,
-            contentType: localAttachment.contentType,
-            size: localAttachment.size,
-          },
-        });
-        setAttachmentsByTodoId((current) => ({
-          ...current,
-          [todo.id]: [
-            ...(current[todo.id] ?? []),
-            attachmentRecordFromOffline(localAttachment),
-          ],
-        }));
-        toast.message("attachment saved offline");
-        return;
-      }
-
-      toastApiError(error);
-    } finally {
-      setAttachmentUploadTodoId(null);
-      if (attachmentInputRef.current) {
-        attachmentInputRef.current.value = "";
-      }
-    }
-  };
-
-  const openAttachment = async (attachment: AttachmentRecord) => {
-    if (attachment.id.startsWith("local-attachment-")) {
-      toast.message("offline attachment will open after upload support syncs");
-      return;
-    }
-
-    try {
-      const { url } = await apiClient.getAttachmentUrl(attachment.id);
-      window.open(url, "_blank", "noopener,noreferrer");
-    } catch (error) {
-      toastApiError(error);
-    }
-  };
-
-  const deleteAttachment = async (todo: TodoItem, attachment: AttachmentRecord) => {
-    if (attachment.id.startsWith("local-attachment-")) {
-      await removeOfflineAttachment(attachment.id).catch(() => undefined);
-      await removeOfflineOperationsByEntity(
-        "attachment",
-        attachment.id,
-      ).catch(() => undefined);
-      setAttachmentsByTodoId((current) => ({
-        ...current,
-        [todo.id]: (current[todo.id] ?? []).filter(
-          (item) => item.id !== attachment.id,
-        ),
-      }));
-      toast.message("offline attachment removed locally");
-      return;
-    }
-
-    try {
-      await apiClient.deleteAttachment(attachment.id);
-      setAttachmentsByTodoId((current) => ({
-        ...current,
-        [todo.id]: (current[todo.id] ?? []).filter(
-          (item) => item.id !== attachment.id,
-        ),
-      }));
-      toast.message("attachment deleted");
-    } catch (error) {
-      toastApiError(error);
     }
   };
 
@@ -3435,92 +3089,28 @@ export function AppShell({
                                   event.stopPropagation()
                                 }
                               >
-                                <div className="rounded-md border border-border bg-background/80 p-2">
-                                  <SimpleEditor
-                                    value={getTodoEditorValue(
-                                      todo,
-                                      editingNotesRichInput,
-                                      editingNotesInput,
-                                    )}
-                                    embedded
-                                    placeholder="write notes, context, links, next steps..."
-                                    onChange={({ text, json, html }) => {
-                                      setEditingNotesInput(text);
-                                      setEditingNotesRichInput({
-                                        json,
-                                        html,
-                                      });
-                                    }}
-                                  />
+                                <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-background/80 p-2">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    render={<Link href={getTodoPageHref(todo)} />}
+                                  >
+                                    open page
+                                  </Button>
+                                  <span className="text-xs text-muted-foreground">
+                                    notes and attachments live on the todo page
+                                  </span>
                                 </div>
                                 <div className="flex flex-wrap items-center gap-2">
                                   <Button
                                     type="button"
                                     size="sm"
                                     disabled={pendingTodoId === todo.id}
-                                    onClick={() => void updateTodoNotes(todo)}
+                                    render={<Link href={getTodoPageHref(todo)} />}
                                   >
-                                    save note
+                                    edit note
                                   </Button>
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    disabled={attachmentUploadTodoId === todo.id}
-                                    onClick={() => attachmentInputRef.current?.click()}
-                                  >
-                                    {attachmentUploadTodoId === todo.id
-                                      ? "attaching..."
-                                      : "attach"}
-                                  </Button>
-                                  <input
-                                    ref={attachmentInputRef}
-                                    type="file"
-                                    className="hidden"
-                                    accept={ATTACHMENT_ACCEPT}
-                                    onChange={(event) =>
-                                      void handleAttachmentSelected(
-                                        todo,
-                                        event.currentTarget.files,
-                                      )
-                                    }
-                                  />
                                 </div>
-                                {(attachmentsByTodoId[todo.id] ?? []).length > 0 ? (
-                                  <div className="flex flex-wrap gap-2 text-xs">
-                                    {(attachmentsByTodoId[todo.id] ?? []).map(
-                                      (attachment) => (
-                                        <span
-                                          key={attachment.id}
-                                          className="inline-flex items-center gap-2 rounded-md border border-border px-2 py-1 text-muted-foreground"
-                                        >
-                                          <button
-                                            type="button"
-                                            className="max-w-48 truncate text-left hover:text-foreground hover:underline"
-                                            onClick={() =>
-                                              void openAttachment(attachment)
-                                            }
-                                          >
-                                            {attachment.fileName}
-                                          </button>
-                                          <button
-                                            type="button"
-                                            className="text-muted-foreground hover:text-foreground"
-                                            onClick={() =>
-                                              void deleteAttachment(
-                                                todo,
-                                                attachment,
-                                              )
-                                            }
-                                            aria-label={`Delete ${attachment.fileName}`}
-                                          >
-                                            x
-                                          </button>
-                                        </span>
-                                      ),
-                                    )}
-                                  </div>
-                                ) : null}
                                 <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                                 <Input
                                   type="text"

@@ -30,17 +30,23 @@
   - added authenticated Next routes at `/api/attachments`, `/api/attachments/upload-url`, `/api/attachments/[attachmentId]`, and `/api/attachments/[attachmentId]/url`,
   - added client helpers for upload/list/url/delete and Dexie helpers for offline attachment metadata,
   - enforced server-side owner checks plus file size and MIME allowlist checks before attachment metadata is accepted.
-- Added the first visible per-todo note surface:
-  - expanded todo rows now include a Tiptap Simple Editor note body,
+- Added dedicated per-todo note pages:
+  - every todo can open at `/app/todos/[todo-slug]`,
+  - the todo page is the single rich note and attachment surface,
+  - the main list no longer mounts an inline Tiptap/attachment editor panel,
   - note saves update the todo `notes` field for compatibility,
   - note saves also persist bounded Tiptap JSON and HTML fields for rich editor/publishing compatibility,
   - offline or DNS-failed saves remain visible locally and enqueue a todo sync operation,
   - local offline create ops now tolerate later note payloads during sync.
 - Added first visible todo attachment controls:
-  - expanded todo rows can attach files,
+  - todo pages can attach files,
   - online files upload through Convex storage,
   - offline files are stored as local Dexie metadata/blob rows and queued as pending uploads,
   - queued attachment uploads replay after reconnect, including attachments added to local-only todos before their server ID exists.
+- Fixed attachment listing for production:
+  - added the exact `attachments.by_parentKind_and_parentId` Convex index,
+  - attachment reads still validate ownership server-side before returning files,
+  - deployed the Convex schema/function change to production.
 - Added the first IBX to Bri publishing slice:
   - added owner-scoped `publications` metadata in Convex,
   - added `/api/publications/bri` to publish, update, read status, and unpublish Bri pages through Bri's existing API,
@@ -65,12 +71,14 @@
 - `bun run cli:build` passed.
 - `bun run build` passed.
 - `bunx convex codegen` passed.
+- `bunx convex deploy --yes` deployed the attachment index to production.
+- `bunx convex run --prod attachments:listAttachments '{"ownerKey":"clerk:user_3FSuDOl29us0znM4RCdO66m9gM4","parentKind":"todo","parentId":"jd78dbtg8ykcvan6ns6znsmkvs89379d","limit":50}'` returned `[]` without the previous index error.
 - `xcodebuild test -project ios/IBX/IBX.xcodeproj -scheme IBX -destination 'platform=iOS Simulator,name=iPhone 17 Pro'` passed.
 - Browser smoke used a temporary local editor route and confirmed the editor rendered with no missing-image error. The temporary route was removed before commit so it is not public.
 
 ## Known Remaining Work
 
 - Tiptap Simple Editor integration for Bri is planned but not implemented in this pass.
-- Full page-level editor sync and conflict recovery UI are planned but not implemented in this pass.
+- Conflict recovery UI for page edits remains planned.
 - CLI credentials still store in the existing local config file; platform keychain storage remains planned.
 - Bri publication now has a first server-side bridge, but per-user Bri account connection and offline queued publish operations remain planned.

@@ -191,20 +191,19 @@ export const listAttachments = query({
 
     const attachments = await ctx.db
       .query("attachments")
-      .withIndex("by_ownerKey_and_parentKind_and_parentId_and_createdAt", (q) =>
-        q
-          .eq("ownerKey", args.ownerKey)
-          .eq("parentKind", args.parentKind)
-          .eq("parentId", args.parentId),
+      .withIndex("by_parentKind_and_parentId", (q) =>
+        q.eq("parentKind", args.parentKind).eq("parentId", args.parentId),
       )
-      .order("desc")
       .take(limit);
 
-    return attachments.filter(
-      (attachment) =>
-        isActive(attachment) &&
-        attachment.status === "uploaded",
-    );
+    return attachments
+      .filter(
+        (attachment) =>
+          ownerMatches(attachment, args.ownerKey) &&
+          isActive(attachment) &&
+          attachment.status === "uploaded",
+      )
+      .sort((a, b) => b.createdAt - a.createdAt);
   },
 });
 
