@@ -88,4 +88,33 @@ final class IBXTests: XCTestCase {
 
         try? FileManager.default.removeItem(at: fileURL)
     }
+
+    func testOfflineShortcutTodoPersistsRichFields() async throws {
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ibx-offline-rich-\(UUID().uuidString).json")
+        let storage = OfflineTaskStorage(fileURL: fileURL)
+        let dueDate = Date(timeIntervalSince1970: 1782000000)
+
+        let todo = try await storage.addShortcutTodo(
+            title: "write launch note",
+            notes: "include screenshots",
+            dueDate: dueDate,
+            estimatedHours: 1.5,
+            priority: 3
+        )
+        let snapshot = try await storage.loadSnapshot()
+        let payload = snapshot.pendingOperations.first?.payload
+
+        XCTAssertEqual(snapshot.todos, [todo])
+        XCTAssertEqual(todo.notes, "include screenshots")
+        XCTAssertEqual(todo.dueDateKey, "2026-06-21")
+        XCTAssertEqual(todo.estimatedHours, 1.5)
+        XCTAssertEqual(todo.priority, 3)
+        XCTAssertEqual(payload?.notes, "include screenshots")
+        XCTAssertEqual(payload?.dueDate, "2026-06-21")
+        XCTAssertEqual(payload?.estimatedHours, 1.5)
+        XCTAssertEqual(payload?.priority, 3)
+
+        try? FileManager.default.removeItem(at: fileURL)
+    }
 }

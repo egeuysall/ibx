@@ -83,6 +83,10 @@
   - added `ibx publish` / `ibx publish unpublish` for Bri publication control,
   - added `ibx attach` for uploading supported files to todo pages through Convex storage.
 - Verified the existing iOS offline shortcut path still builds and tests successfully.
+- Expanded the iOS offline Shortcut path:
+  - the App Shortcut can now capture optional notes, due date, estimated hours, and priority offline,
+  - the offline snapshot stores those fields in the local todo and pending create payload,
+  - iOS settings now shows queued offline changes so Shortcut-created work is visible before sync.
 
 ## Verification
 
@@ -92,7 +96,7 @@
 - `bunx convex codegen` passed.
 - `bunx convex deploy --yes` deployed the attachment index to production.
 - `bunx convex run --prod attachments:listAttachments '{"ownerKey":"clerk:user_3FSuDOl29us0znM4RCdO66m9gM4","parentKind":"todo","parentId":"jd78dbtg8ykcvan6ns6znsmkvs89379d","limit":50}'` returned `[]` without the previous index error.
-- XcodeBuildMCP `test_sim` passed on `ios/IBX/IBX.xcodeproj`, scheme `IBX`, `iPhone 17 Pro`: 6 passed, 0 failed.
+- XcodeBuildMCP `test_sim` passed on `ios/IBX/IBX.xcodeproj`, scheme `IBX`, `iPhone 17 Pro`: 7 passed, 0 failed.
 - Browser smoke used a temporary local editor route and confirmed the editor rendered with no missing-image error. The temporary route was removed before commit so it is not public.
 - Bri `bun test src/lib/tiptap-markdown.test.ts` passed.
 - Bri `bun run build` passed after rebasing on remote `master`.

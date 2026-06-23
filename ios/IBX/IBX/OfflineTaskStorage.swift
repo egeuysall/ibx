@@ -121,8 +121,21 @@ actor OfflineTaskStorage {
     }
 
     @discardableResult
-    func addShortcutTodo(title: String) throws -> TodoItem {
-        let todo = Self.localTodo(title: title, source: .manual)
+    func addShortcutTodo(
+        title: String,
+        notes: String? = nil,
+        dueDate: Date? = nil,
+        estimatedHours: Double? = nil,
+        priority: Int = 1
+    ) throws -> TodoItem {
+        let todo = Self.localTodo(
+            title: title,
+            notes: notes,
+            dueDate: dueDate,
+            estimatedHours: estimatedHours,
+            priority: priority,
+            source: .manual
+        )
         var snapshot = try loadSnapshot()
         snapshot.todos.removeAll { $0.id == todo.id }
         snapshot.todos.append(todo)
@@ -138,19 +151,26 @@ actor OfflineTaskStorage {
         return todo
     }
 
-    static func localTodo(title: String, source: TodoSource) -> TodoItem {
+    static func localTodo(
+        title: String,
+        notes: String? = nil,
+        dueDate: Date? = Date(),
+        estimatedHours: Double? = 2,
+        priority: Int = 1,
+        source: TodoSource
+    ) -> TodoItem {
         let now = Date()
         let id = "local-\(UUID().uuidString)"
         return TodoItem(
             id: id,
             thoughtId: id,
             title: title,
-            notes: nil,
+            notes: notes,
             status: .open,
-            dueDate: now.millisecondsSince1970,
-            estimatedHours: 2,
+            dueDate: dueDate?.millisecondsSince1970,
+            estimatedHours: estimatedHours,
             timeBlockStart: nil,
-            priority: 1,
+            priority: TodoItem.normalizedPriority(priority),
             recurrence: .none,
             source: source,
             createdAt: now.millisecondsSince1970

@@ -27,6 +27,7 @@ Production defaults to `https://ibx.egeuysal.com`. Non-HTTPS URLs are rejected e
 - Toggle done/open
 - Edit title, notes, due date, estimated hours, time block, recurrence, and priority
 - Delete todos
+- Apple Shortcuts action for offline todo capture with optional notes, due date, estimated hours, and priority
 - Dark, light, and system appearance modes
 - Silent foreground auto-refresh
 - Local notifications five minutes before open tasks with time blocks

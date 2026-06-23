@@ -317,6 +317,12 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                Section("Offline") {
+                    LabeledContent("Queued changes", value: "\(store.pendingOfflineCount)")
+                    Text("Shortcuts and in-app edits save locally first. Queued changes sync when Clerk is signed in and the network is available.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 Section {
                     Button(store.isSavingSettings ? "Syncing..." : "Sync Now") {
                         Task {
