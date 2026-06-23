@@ -169,6 +169,39 @@ export default defineSchema({
       "sourceId",
     ])
     .index("by_ownerKey_and_updatedAt", ["ownerKey", "updatedAt"]),
+  reminders: defineTable({
+    ownerKey: v.optional(v.union(v.string(), v.null())),
+    todoId: v.string(),
+    kind: v.literal("timeBlockPrestart"),
+    channel: v.literal("server"),
+    title: v.string(),
+    scheduledFor: v.number(),
+    timeBlockStart: v.number(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("sent"),
+      v.literal("cancelled"),
+      v.literal("failed"),
+    ),
+    schedulerId: v.optional(v.union(v.id("_scheduled_functions"), v.null())),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deliveredAt: v.optional(v.union(v.number(), v.null())),
+    cancelledAt: v.optional(v.union(v.number(), v.null())),
+    lastError: v.optional(v.union(v.string(), v.null())),
+  })
+    .index("by_ownerKey_and_todoId_and_kind_and_status", [
+      "ownerKey",
+      "todoId",
+      "kind",
+      "status",
+    ])
+    .index("by_status_and_scheduledFor", ["status", "scheduledFor"])
+    .index("by_ownerKey_and_status_and_scheduledFor", [
+      "ownerKey",
+      "status",
+      "scheduledFor",
+    ]),
   memories: defineTable({
     key: v.string(),
     kind: v.union(v.literal("profile"), v.literal("run")),

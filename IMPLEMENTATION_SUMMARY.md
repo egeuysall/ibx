@@ -87,6 +87,11 @@
   - the App Shortcut can now capture optional notes, due date, estimated hours, and priority offline,
   - the offline snapshot stores those fields in the local todo and pending create payload,
   - iOS settings now shows queued offline changes so Shortcut-created work is visible before sync.
+- Added the first Convex reminder/background-job slice:
+  - added an owner-scoped `reminders` table with bounded indexes,
+  - todo creates/updates schedule one time-block prestart reminder through `ctx.scheduler.runAt`,
+  - todo deletion, completion, missing time blocks, and reschedules cancel pending reminder jobs,
+  - no frequent Convex cron or global user scan is used.
 
 ## Verification
 
@@ -95,6 +100,7 @@
 - `bun run build` passed.
 - `bunx convex codegen` passed.
 - `bunx convex deploy --yes` deployed the attachment index to production.
+- `bunx convex deploy --yes` deployed the reminder table/functions to production with no deleted indexes.
 - `bunx convex run --prod attachments:listAttachments '{"ownerKey":"clerk:user_3FSuDOl29us0znM4RCdO66m9gM4","parentKind":"todo","parentId":"jd78dbtg8ykcvan6ns6znsmkvs89379d","limit":50}'` returned `[]` without the previous index error.
 - XcodeBuildMCP `test_sim` passed on `ios/IBX/IBX.xcodeproj`, scheme `IBX`, `iPhone 17 Pro`: 7 passed, 0 failed.
 - Browser smoke used a temporary local editor route and confirmed the editor rendered with no missing-image error. The temporary route was removed before commit so it is not public.
@@ -106,3 +112,4 @@
 
 - CLI credentials now prefer the macOS Keychain and fall back to the existing local config file when Keychain is unavailable.
 - Bri publication now has a first server-side bridge, but per-user Bri account connection remains planned.
+- Convex reminder jobs currently record due reminders as sent; email/push transport is intentionally not enabled until sender credentials or APNs setup exist.

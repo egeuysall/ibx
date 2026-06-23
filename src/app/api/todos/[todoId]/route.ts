@@ -86,6 +86,28 @@ function normalizeRichTextHtml(input: unknown) {
   return trimmed || null;
 }
 
+async function syncTimeBlockReminder(ownerKey: string | null, todoId: string) {
+  const todo = await convex.query(api.todos.getByStringId, {
+    ownerKey,
+    todoId,
+  });
+  if (!todo || todo.status !== "open") {
+    await convex.mutation(api.reminders.cancelTodoReminder, {
+      ownerKey,
+      todoId,
+    });
+    return;
+  }
+
+  await convex.mutation(api.reminders.scheduleTimeBlockReminder, {
+    ownerKey,
+    todoId,
+    title: todo.title,
+    timeBlockStart:
+      typeof todo.timeBlockStart === "number" ? todo.timeBlockStart : null,
+  });
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ todoId: string }> },
@@ -320,6 +342,8 @@ export async function PATCH(
     });
   }
 
+  await syncTimeBlockReminder(ownerKey, todoId);
+
   return NextResponse.json({ ok: true });
 }
 
@@ -349,6 +373,10 @@ export async function DELETE(
   }
 
   await convex.mutation(api.todos.deleteOneByStringId, {
+    ownerKey,
+    todoId,
+  });
+  await convex.mutation(api.reminders.cancelTodoReminder, {
     ownerKey,
     todoId,
   });

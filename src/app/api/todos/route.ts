@@ -197,6 +197,12 @@ export async function POST(request: NextRequest) {
     priority,
     source: "manual",
   });
+  await convex.mutation(api.reminders.scheduleTimeBlockReminder, {
+    ownerKey,
+    todoId: String(todoId),
+    title,
+    timeBlockStart,
+  });
 
   return NextResponse.json({ ok: true, id: todoId, thoughtId: externalId });
 }
