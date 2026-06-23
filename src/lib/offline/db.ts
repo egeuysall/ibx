@@ -434,6 +434,31 @@ export async function migrateOfflineTodoReferences(
           });
         }
       }
+
+      const pendingPublicationOps = await database.pendingOps
+        .where("entity")
+        .equals("publication")
+        .toArray();
+      for (const operation of pendingPublicationOps) {
+        const payload =
+          operation.payload && typeof operation.payload === "object"
+            ? (operation.payload as Record<string, unknown>)
+            : null;
+        if (payload?.sourceKind === "todo" && payload.sourceId === localTodoId) {
+          await database.pendingOps.put({
+            ...operation,
+            entityId:
+              operation.entityId === localTodoId
+                ? serverTodoId
+                : operation.entityId,
+            payload: {
+              ...payload,
+              sourceId: serverTodoId,
+            },
+            updatedAt: Date.now(),
+          });
+        }
+      }
     },
   );
 }

@@ -78,6 +78,7 @@ import {
   upsertOfflineConflictRecovery,
   type OfflineAttachment,
 } from "@/lib/offline/db";
+import { flushPendingPublicationOperations } from "@/lib/offline/publication-sync";
 import {
   getTodoLinksInputValue,
   getTodoResourceLinks,
@@ -1458,10 +1459,14 @@ export function AppShell({
 
     if (syncableOperations.length === 0) {
       const attachmentResult = await flushPendingAttachmentOperations();
+      const publicationResult = await flushPendingPublicationOperations();
       if (attachmentResult.uploaded > 0) {
         toast.message(
           `${attachmentResult.uploaded} attachment${attachmentResult.uploaded === 1 ? "" : "s"} uploaded`,
         );
+      }
+      if (publicationResult.published > 0 || publicationResult.unpublished > 0) {
+        toast.message("queued Bri publication changes synced");
       }
       return;
     }
@@ -1533,10 +1538,14 @@ export function AppShell({
     }
 
     const attachmentResult = await flushPendingAttachmentOperations();
+    const publicationResult = await flushPendingPublicationOperations();
     if (attachmentResult.uploaded > 0) {
       toast.message(
         `${attachmentResult.uploaded} attachment${attachmentResult.uploaded === 1 ? "" : "s"} uploaded`,
       );
+    }
+    if (publicationResult.published > 0 || publicationResult.unpublished > 0) {
+      toast.message("queued Bri publication changes synced");
     }
   }, [
     flushPendingAttachmentOperations,

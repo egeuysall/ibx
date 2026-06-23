@@ -17,10 +17,12 @@ import {
   enqueueOfflineOperation,
   listOfflineAttachments,
   removeOfflineAttachment,
+  removeOfflineOperationsByEntity,
   upsertManyOfflineAttachments,
   upsertOfflineAttachment,
   type OfflineAttachment,
 } from "@/lib/offline/db";
+import { flushPendingPublicationOperations } from "@/lib/offline/publication-sync";
 import { getTodoPageHref } from "@/lib/todo-slug";
 import type { AttachmentRecord, PublicationRecord, TodoItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -241,14 +243,17 @@ export function TodoPageEditor({ todoId }: TodoPageEditorProps) {
       return;
     }
 
-    void apiClient
-      .getPublication("todo", todoId)
-      .then(({ publication: nextPublication }) =>
-        setPublication(
-          nextPublication?.status === "published" ? nextPublication : null,
-        ),
-      )
-      .catch(() => undefined);
+    void (async () => {
+      await flushPendingPublicationOperations().catch(() => undefined);
+      await apiClient
+        .getPublication("todo", todoId)
+        .then(({ publication: nextPublication }) =>
+          setPublication(
+            nextPublication?.status === "published" ? nextPublication : null,
+          ),
+        )
+        .catch(() => undefined);
+    })();
   }, [isOnline, todoId]);
 
   const savePage = async () => {
@@ -415,24 +420,49 @@ export function TodoPageEditor({ todoId }: TodoPageEditorProps) {
     if (!todo) {
       return;
     }
-    if (!isOnline || todo.id.startsWith("local-")) {
-      toast.error("publish needs a network connection");
-      return;
-    }
 
     setIsPublishing(true);
-    try {
-      const { publication: nextPublication } = await apiClient.publishToBri({
-        sourceKind: "todo",
-        sourceId: todo.id,
-        title: title.trim() || todo.title,
-        notes: editorValue?.text ?? todo.notes,
-        notesJson: editorValue?.json ?? todo.notesJson,
-        visibility: "public",
+    const payload = {
+      sourceKind: "todo" as const,
+      sourceId: todo.id,
+      title: title.trim() || todo.title,
+      notes: editorValue?.text ?? todo.notes,
+      notesJson: editorValue?.json ?? todo.notesJson,
+      visibility: "public" as const,
+    };
+    const queuePublish = async () => {
+      await removeOfflineOperationsByEntity("publication", todo.id).catch(
+        () => undefined,
+      );
+      await enqueueOfflineOperation({
+        entity: "publication",
+        entityId: todo.id,
+        kind: "publish",
+        payload,
       });
+      toast.message(
+        todo.id.startsWith("local-")
+          ? "Bri publish queued until todo syncs"
+          : "Bri publish queued offline",
+      );
+    };
+
+    try {
+      if (!isOnline || todo.id.startsWith("local-")) {
+        await queuePublish();
+        return;
+      }
+
+      const { publication: nextPublication } =
+        await apiClient.publishToBri(payload);
       setPublication(nextPublication);
       toast.message(publication ? "Bri page updated" : "published to Bri");
     } catch (error) {
+      if (error instanceof ApiError && error.isNetworkError) {
+        await queuePublish();
+        return;
+      }
+
       toast.error(parseErrorMessage(error));
     } finally {
       setIsPublishing(false);
@@ -443,17 +473,40 @@ export function TodoPageEditor({ todoId }: TodoPageEditorProps) {
     if (!todo || !publication) {
       return;
     }
-    if (!isOnline) {
-      toast.error("unpublish needs a network connection");
-      return;
-    }
 
     setIsPublishing(true);
+    const queueUnpublish = async () => {
+      await removeOfflineOperationsByEntity("publication", todo.id).catch(
+        () => undefined,
+      );
+      await enqueueOfflineOperation({
+        entity: "publication",
+        entityId: todo.id,
+        kind: "delete",
+        payload: {
+          sourceKind: "todo",
+          sourceId: todo.id,
+        },
+      });
+      setPublication(null);
+      toast.message("Bri unpublish queued offline");
+    };
+
     try {
+      if (!isOnline) {
+        await queueUnpublish();
+        return;
+      }
+
       await apiClient.unpublishFromBri("todo", todo.id);
       setPublication(null);
       toast.message("unpublished from Bri");
     } catch (error) {
+      if (error instanceof ApiError && error.isNetworkError) {
+        await queueUnpublish();
+        return;
+      }
+
       toast.error(parseErrorMessage(error));
     } finally {
       setIsPublishing(false);
@@ -583,7 +636,7 @@ export function TodoPageEditor({ todoId }: TodoPageEditorProps) {
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={isPublishing || !isOnline}
+                  disabled={isPublishing}
                   onClick={() => void publishPage()}
                 >
                   {isPublishing
@@ -611,7 +664,7 @@ export function TodoPageEditor({ todoId }: TodoPageEditorProps) {
                     <Button
                       type="button"
                       variant="destructive"
-                      disabled={isPublishing || !isOnline}
+                      disabled={isPublishing}
                       onClick={() => void unpublishPage()}
                     >
                       unpublish

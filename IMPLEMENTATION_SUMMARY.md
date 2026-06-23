@@ -68,6 +68,10 @@
   - rejected or conflicted offline todo operations are copied into a Dexie recovery table before leaving the retry queue,
   - settings now shows an offline recovery panel with copy and dismiss actions,
   - local payloads remain recoverable instead of being silently lost or retried forever.
+- Added offline Bri publication queueing:
+  - todo page publish/update and unpublish actions can be queued while offline,
+  - queued publication changes replay on reconnect from the app shell and todo page,
+  - queued publish operations attached to local-only todos are remapped after the todo receives its server ID.
 - Added browser-based Clerk login for the CLI:
   - `ibx auth login` now opens a browser approval flow by default,
   - the browser flow uses loopback redirect, state, PKCE-style verifier/challenge, and short-lived one-time Convex auth codes,
@@ -92,4 +96,4 @@
 ## Known Remaining Work
 
 - CLI credentials now prefer the macOS Keychain and fall back to the existing local config file when Keychain is unavailable.
-- Bri publication now has a first server-side bridge, but per-user Bri account connection and offline queued publish operations remain planned.
+- Bri publication now has a first server-side bridge, but per-user Bri account connection remains planned.
