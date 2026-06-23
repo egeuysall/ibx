@@ -1,5 +1,5 @@
-const CACHE_VERSION = "ibx-shell-v5";
-const SHELL_FILES = ["/", "/manifest.webmanifest", "/favicon.ico"];
+const CACHE_VERSION = "ibx-shell-v6";
+const SHELL_FILES = ["/manifest.webmanifest", "/favicon.ico"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -40,26 +40,14 @@ self.addEventListener("fetch", (event) => {
   if (request.mode === "navigate") {
     event.respondWith(
       fetch(request)
-        .then((response) => {
-          const responseCopy = response.clone();
-          void caches.open(CACHE_VERSION).then((cache) => {
-            cache.put(request, responseCopy);
-            if (url.pathname === "/") {
-              return;
-            }
-            return cache.put("/", response.clone());
-          });
-          return response;
-        })
-        .catch(async () => {
-          const cache = await caches.open(CACHE_VERSION);
-          const cachedPage = await cache.match(request);
-          if (cachedPage) {
-            return cachedPage;
-          }
-          const cachedShell = await cache.match("/");
-          return cachedShell || new Response("Offline", { status: 503 });
-        }),
+        .then((response) => response)
+        .catch(
+          () =>
+            new Response("Offline. Reopen ibx when your connection is back.", {
+              status: 503,
+              headers: { "Content-Type": "text/plain; charset=utf-8" },
+            }),
+        ),
     );
     return;
   }

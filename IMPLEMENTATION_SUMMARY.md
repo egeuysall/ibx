@@ -38,11 +38,13 @@
 - Added first visible todo attachment controls:
   - expanded todo rows can attach files,
   - online files upload through Convex storage,
-  - offline files are stored as local Dexie metadata/blob rows and queued as pending uploads.
+  - offline files are stored as local Dexie metadata/blob rows and queued as pending uploads,
+  - queued attachment uploads replay after reconnect, including attachments added to local-only todos before their server ID exists.
 - Fixed browser DNS/offline failure behavior:
   - network failures emit an app-level offline event,
   - `useOfflineStatus` listens to that event instead of trusting `navigator.onLine` alone,
   - queued AI prompts pause on network failure instead of marking every queued item failed.
+- Fixed stale browser shell behavior by stopping the service worker from caching auth-sensitive navigation HTML, which prevents old landing/app pages from causing redirect loops after auth state changes.
 - Verified the existing iOS offline shortcut path still builds and tests successfully.
 
 ## Verification
@@ -57,6 +59,6 @@
 ## Known Remaining Work
 
 - Tiptap Simple Editor integration for Bri is planned but not implemented in this pass.
-- Full Tiptap JSON persistence, editor/page sync, conflict recovery UI, and automatic queued attachment upload replay are planned but not implemented in this pass.
+- Full Tiptap JSON persistence, editor/page sync, and conflict recovery UI are planned but not implemented in this pass.
 - Browser-based Clerk auth for the CLI is planned; existing API-key auth remains unchanged.
 - Bri publication from IBX is planned but not implemented in this pass.

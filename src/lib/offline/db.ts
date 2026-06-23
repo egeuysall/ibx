@@ -78,6 +78,17 @@ class IbxOfflineDatabase extends Dexie {
       attachments: "id, parentKind, parentId, status, createdAt, updatedAt",
       syncMeta: "key, updatedAt",
     });
+
+    this.version(5).stores({
+      localThoughts: "externalId, createdAt",
+      queuedPrompts: "id, createdAt, status",
+      cachedTodos: "id, updatedAt",
+      pendingOps:
+        "id, entity, entityId, [entity+entityId], createdAt, updatedAt",
+      attachments:
+        "id, parentKind, parentId, [parentKind+parentId], status, createdAt, updatedAt",
+      syncMeta: "key, updatedAt",
+    });
   }
 }
 
@@ -222,6 +233,34 @@ export async function removeOfflineOperation(id: string) {
   await getOfflineDatabase().pendingOps.delete(id);
 }
 
+export async function removeOfflineOperationsByEntity(
+  entity: PendingOfflineOperation["entity"],
+  entityId: string,
+) {
+  await getOfflineDatabase().pendingOps.where({ entity, entityId }).delete();
+}
+
+export async function patchOfflineOperation(
+  id: string,
+  patch: Partial<
+    Pick<PendingOfflineOperation, "attempts" | "lastError" | "payload">
+  >,
+) {
+  const table = getOfflineDatabase().pendingOps;
+  const current = await table.get(id);
+  if (!current) {
+    return null;
+  }
+
+  const nextValue: PendingOfflineOperation = {
+    ...current,
+    ...patch,
+    updatedAt: Date.now(),
+  };
+  await table.put(nextValue);
+  return nextValue;
+}
+
 export async function listOfflineAttachments(
   parentKind: OfflineAttachment["parentKind"],
   parentId: string,
@@ -231,8 +270,16 @@ export async function listOfflineAttachments(
     .toArray();
 }
 
+export async function getOfflineAttachment(id: string) {
+  return await getOfflineDatabase().attachments.get(id);
+}
+
 export async function upsertOfflineAttachment(attachment: OfflineAttachment) {
   await getOfflineDatabase().attachments.put(attachment);
+}
+
+export async function removeOfflineAttachment(id: string) {
+  await getOfflineDatabase().attachments.delete(id);
 }
 
 export async function upsertManyOfflineAttachments(
@@ -262,4 +309,53 @@ export async function patchOfflineAttachment(
   };
   await table.put(nextValue);
   return nextValue;
+}
+
+export async function migrateOfflineTodoReferences(
+  localTodoId: string,
+  serverTodoId: string,
+) {
+  const database = getOfflineDatabase();
+
+  await database.transaction(
+    "rw",
+    database.attachments,
+    database.pendingOps,
+    async () => {
+      const attachments = await database.attachments
+        .where({ parentKind: "todo", parentId: localTodoId })
+        .toArray();
+      for (const attachment of attachments) {
+        await database.attachments.put({
+          ...attachment,
+          parentId: serverTodoId,
+          updatedAt: Date.now(),
+        });
+      }
+
+      const pendingAttachmentOps = await database.pendingOps
+        .where("entity")
+        .equals("attachment")
+        .toArray();
+      for (const operation of pendingAttachmentOps) {
+        const payload =
+          operation.payload && typeof operation.payload === "object"
+            ? (operation.payload as Record<string, unknown>)
+            : null;
+        if (
+          payload?.parentKind === "todo" &&
+          payload.parentId === localTodoId
+        ) {
+          await database.pendingOps.put({
+            ...operation,
+            payload: {
+              ...payload,
+              parentId: serverTodoId,
+            },
+            updatedAt: Date.now(),
+          });
+        }
+      }
+    },
+  );
 }

@@ -67,9 +67,15 @@ import {
 } from "@/lib/indexedDb";
 import {
   enqueueOfflineOperation,
+  getOfflineAttachment,
   listOfflineAttachments,
   listPendingOfflineOperations,
+  migrateOfflineTodoReferences,
+  patchOfflineAttachment,
+  patchOfflineOperation,
+  removeOfflineAttachment,
   removeOfflineOperation,
+  removeOfflineOperationsByEntity,
   upsertManyOfflineAttachments,
   upsertOfflineAttachment,
   type OfflineAttachment,
@@ -1345,6 +1351,105 @@ export function AppShell({
     }
   }, [isAuthenticated, isOnline, refreshQueuedPromptCount, refreshTodos]);
 
+  const flushPendingAttachmentOperations = useCallback(async () => {
+    if (!isAuthenticated || !isOnline) {
+      return { uploaded: 0, paused: false };
+    }
+
+    const pendingOperations = await listPendingOfflineOperations(50).catch(
+      () => [],
+    );
+    const attachmentOperations = pendingOperations.filter(
+      (operation) =>
+        operation.entity === "attachment" && operation.kind === "upload",
+    );
+
+    let uploaded = 0;
+    let paused = false;
+
+    for (const operation of attachmentOperations) {
+      const payload =
+        operation.payload && typeof operation.payload === "object"
+          ? (operation.payload as Record<string, unknown>)
+          : {};
+      const parentKind =
+        payload.parentKind === "todo" || payload.parentKind === "thought"
+          ? payload.parentKind
+          : null;
+      const parentId =
+        typeof payload.parentId === "string" ? payload.parentId : null;
+
+      if (!parentKind || !parentId || parentId.startsWith("local-")) {
+        continue;
+      }
+
+      const attachment = await getOfflineAttachment(operation.entityId).catch(
+        () => null,
+      );
+      if (!attachment?.blob) {
+        await patchOfflineOperation(operation.id, {
+          attempts: operation.attempts + 1,
+          lastError: "Missing offline file blob.",
+        }).catch(() => undefined);
+        await patchOfflineAttachment(operation.entityId, {
+          status: "error",
+          lastError: "Missing offline file blob.",
+        }).catch(() => undefined);
+        continue;
+      }
+
+      await patchOfflineAttachment(operation.entityId, {
+        status: "uploading",
+        lastError: null,
+      }).catch(() => undefined);
+
+      try {
+        const file =
+          attachment.blob instanceof File
+            ? attachment.blob
+            : new File([attachment.blob], attachment.fileName, {
+                type: attachment.contentType,
+              });
+        const { id } = await apiClient.uploadAttachmentFile({
+          parentKind,
+          parentId,
+          file,
+        });
+        await patchOfflineAttachment(operation.entityId, {
+          storageId: id,
+          status: "uploaded",
+          blob: undefined,
+          lastError: null,
+        });
+        await removeOfflineAttachment(operation.entityId);
+        await removeOfflineOperation(operation.id);
+        await loadTodoAttachments(parentId);
+        uploaded += 1;
+      } catch (error) {
+        if (error instanceof ApiError && error.isNetworkError) {
+          paused = true;
+          await patchOfflineAttachment(operation.entityId, {
+            status: "local",
+            lastError: parseErrorMessage(error),
+          }).catch(() => undefined);
+          break;
+        }
+
+        const message = parseErrorMessage(error);
+        await patchOfflineOperation(operation.id, {
+          attempts: operation.attempts + 1,
+          lastError: message,
+        }).catch(() => undefined);
+        await patchOfflineAttachment(operation.entityId, {
+          status: "error",
+          lastError: message,
+        }).catch(() => undefined);
+      }
+    }
+
+    return { uploaded, paused };
+  }, [isAuthenticated, isOnline, loadTodoAttachments]);
+
   const flushPendingOfflineOperations = useCallback(async () => {
     if (!isAuthenticated || !isOnline) {
       return;
@@ -1391,6 +1496,12 @@ export function AppShell({
       );
 
     if (syncableOperations.length === 0) {
+      const attachmentResult = await flushPendingAttachmentOperations();
+      if (attachmentResult.uploaded > 0) {
+        toast.message(
+          `${attachmentResult.uploaded} attachment${attachmentResult.uploaded === 1 ? "" : "s"} uploaded`,
+        );
+      }
       return;
     }
 
@@ -1401,6 +1512,15 @@ export function AppShell({
 
     for (const acceptedOperation of result.accepted) {
       if (acceptedOperation.status === "accepted") {
+        if (
+          acceptedOperation.serverId &&
+          acceptedOperation.entityId.startsWith("local-")
+        ) {
+          await migrateOfflineTodoReferences(
+            acceptedOperation.entityId,
+            acceptedOperation.serverId,
+          ).catch(() => undefined);
+        }
         await removeOfflineOperation(acceptedOperation.opId).catch(() => undefined);
       }
     }
@@ -1415,7 +1535,19 @@ export function AppShell({
     if (result.rejected.length > 0 || result.conflicts.length > 0) {
       toast.error("Some offline changes need review.");
     }
-  }, [isAuthenticated, isOnline, refreshTodos]);
+
+    const attachmentResult = await flushPendingAttachmentOperations();
+    if (attachmentResult.uploaded > 0) {
+      toast.message(
+        `${attachmentResult.uploaded} attachment${attachmentResult.uploaded === 1 ? "" : "s"} uploaded`,
+      );
+    }
+  }, [
+    flushPendingAttachmentOperations,
+    isAuthenticated,
+    isOnline,
+    refreshTodos,
+  ]);
 
   useEffect(() => {
     void refreshTodos(true);
@@ -2512,6 +2644,11 @@ export function AppShell({
 
   const deleteAttachment = async (todo: TodoItem, attachment: AttachmentRecord) => {
     if (attachment.id.startsWith("local-attachment-")) {
+      await removeOfflineAttachment(attachment.id).catch(() => undefined);
+      await removeOfflineOperationsByEntity(
+        "attachment",
+        attachment.id,
+      ).catch(() => undefined);
       setAttachmentsByTodoId((current) => ({
         ...current,
         [todo.id]: (current[todo.id] ?? []).filter(
