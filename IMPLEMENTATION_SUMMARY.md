@@ -97,6 +97,9 @@
   - todo creates/updates schedule one time-block prestart reminder through `ctx.scheduler.runAt`,
   - todo deletion, completion, missing time blocks, and reschedules cancel pending reminder jobs,
   - no frequent Convex cron or global user scan is used.
+- Aligned offline sync with recurring-task behavior:
+  - completing a recurring open todo through `/api/sync` now creates the next open recurring instance,
+  - sync idempotency still prevents duplicate recurring instances when a pending op is retried.
 - Completed the browser offline delete path:
   - deleting an existing todo while offline removes it locally and queues a sync `delete` operation,
   - deleting a local-only todo removes its pending create operation instead of sending a bogus server delete,
@@ -109,6 +112,7 @@
 - `bun run build` passed.
 - `node cli/dist/index.js --version && node cli/dist/index.js auth --json` verified the rebuilt CLI entrypoint and auth status JSON path without printing secrets.
 - `bunx convex codegen` passed.
+- `bunx convex deploy --yes` deployed recurring-task sync parity to production.
 - `bunx convex deploy --yes` deployed the attachment index to production.
 - `bunx convex deploy --yes` deployed the reminder table/functions to production with no deleted indexes.
 - `bunx convex run --prod attachments:listAttachments '{"ownerKey":"clerk:user_3FSuDOl29us0znM4RCdO66m9gM4","parentKind":"todo","parentId":"jd78dbtg8ykcvan6ns6znsmkvs89379d","limit":50}'` returned `[]` without the previous index error.

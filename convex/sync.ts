@@ -1,10 +1,12 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 
 const MAX_SYNC_OPS = 50;
 const MAX_TITLE_LENGTH = 140;
 const MAX_NOTES_LENGTH = 4_000;
+const DAY_MS = 24 * 60 * 60 * 1000;
 const USER_TIMEZONE = "America/Chicago";
 const USER_DAY_FORMATTER = new Intl.DateTimeFormat("en-US", {
   timeZone: USER_TIMEZONE,
@@ -70,6 +72,25 @@ function getUserDateKey(timestamp: number) {
 
 function getStartOfConfiguredDay(timestamp: number) {
   return Date.parse(`${getUserDateKey(timestamp)}T00:00:00.000Z`);
+}
+
+function getNextRecurringDueDate(
+  recurrence: "daily" | "weekly" | "monthly",
+  now: number,
+) {
+  const baseDueDate = getStartOfConfiguredDay(now);
+
+  if (recurrence === "daily") {
+    return baseDueDate + DAY_MS;
+  }
+
+  if (recurrence === "weekly") {
+    return baseDueDate + 7 * DAY_MS;
+  }
+
+  const date = new Date(baseDueDate);
+  date.setUTCMonth(date.getUTCMonth() + 1);
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
 }
 
 function normalizeEstimatedHours(input: number | null | undefined) {
@@ -177,6 +198,64 @@ async function getOrCreateManualThought(
     status: "done",
     synced: true,
     aiRunId: null,
+  });
+}
+
+function normalizedPriority(priority: 1 | 2 | 3 | undefined) {
+  return priority === 1 || priority === 3 ? priority : 2;
+}
+
+async function maybeCreateNextRecurringTodo(
+  ctx: MutationCtx,
+  existingTodo: {
+    ownerKey?: string | null;
+    thoughtId: Id<"thoughts">;
+    thoughtExternalId?: string;
+    title: string;
+    notes: string | null;
+    notesJson?: string | null;
+    notesHtml?: string | null;
+    status: "open" | "done";
+    estimatedHours?: number | null;
+    recurrence?: "none" | "daily" | "weekly" | "monthly";
+    priority?: 1 | 2 | 3;
+    source?: "ai" | "manual";
+  },
+  nextStatus: "open" | "done" | undefined,
+  now: number,
+) {
+  if (
+    nextStatus !== "done" ||
+    existingTodo.status !== "open" ||
+    !existingTodo.recurrence ||
+    existingTodo.recurrence === "none"
+  ) {
+    return null;
+  }
+
+  const recurrence = existingTodo.recurrence;
+  const priority = normalizedPriority(existingTodo.priority);
+  return await ctx.db.insert("todos", {
+    ownerKey: existingTodo.ownerKey,
+    thoughtId: existingTodo.thoughtId,
+    thoughtExternalId: existingTodo.thoughtExternalId,
+    title: existingTodo.title,
+    notes: existingTodo.notes ?? null,
+    notesJson: existingTodo.notesJson ?? null,
+    notesHtml: existingTodo.notesHtml ?? null,
+    status: "open",
+    dueDate: getNextRecurringDueDate(recurrence, now),
+    estimatedHours:
+      normalizeEstimatedHours(existingTodo.estimatedHours) ??
+      defaultEstimatedHoursForPriority(priority),
+    timeBlockStart: null,
+    recurrence,
+    priority,
+    source: existingTodo.source ?? "manual",
+    createdAt: now,
+    updatedAt: now,
+    version: 1,
+    deletedAt: null,
   });
 }
 
@@ -461,6 +540,7 @@ export const syncPush = mutation({
       if (op.payload.priority !== undefined) patch.priority = op.payload.priority;
 
       await ctx.db.patch(todoId, patch);
+      await maybeCreateNextRecurringTodo(ctx, existingTodo, patch.status, now);
       await recordOperation("accepted", String(todoId), null);
       accepted.push({
         opId: op.opId,
