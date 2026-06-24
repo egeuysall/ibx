@@ -11,6 +11,16 @@ import type { CliConfig, ParsedArgs } from "../core/types.js";
 import { normalizeBaseUrl } from "../core/url.js";
 import { normalizeAuthSubcommand } from "./normalize.js";
 
+function printCredentialStoreFallbackWarning(credentialStore: string) {
+  if (credentialStore !== "config-file") {
+    return;
+  }
+
+  printWarn(
+    "secure OS credential storage unavailable; saved credential in the local ibx config file with 0600 permissions.",
+  );
+}
+
 export async function runAuthCommand(parsed: ParsedArgs) {
   const subcommand = normalizeAuthSubcommand(parsed.positionals[1] ?? "status");
   const outputJson = hasFlag(parsed, "json");
@@ -41,7 +51,7 @@ export async function runAuthCommand(parsed: ParsedArgs) {
         createdAt: new Date().toISOString(),
       };
 
-      await saveConfig(config);
+      const credentialStore = await saveConfig(config);
 
       if (outputJson) {
         printJson({
@@ -49,6 +59,7 @@ export async function runAuthCommand(parsed: ParsedArgs) {
           baseUrl,
           authType: verification.authType ?? "apiKey",
           permission: verification.permission ?? "both",
+          credentialStore,
         });
         return;
       }
@@ -56,9 +67,12 @@ export async function runAuthCommand(parsed: ParsedArgs) {
       printOk(`connected to ${baseUrl}`);
       printInfo(`auth: ${verification.authType ?? "apiKey"}`);
       printInfo(`permission: ${verification.permission ?? "both"}`);
+      printInfo(`credential store: ${credentialStore}`);
+      printCredentialStoreFallbackWarning(credentialStore);
       logEvent("info", "auth.login.done", {
         baseUrl,
         permission: verification.permission ?? "both",
+        credentialStore,
       });
       return;
     }
@@ -77,7 +91,7 @@ export async function runAuthCommand(parsed: ParsedArgs) {
       apiKey: browserAuth.apiKey,
       createdAt: new Date().toISOString(),
     };
-    await saveConfig(config);
+    const credentialStore = await saveConfig(config);
     const verification = await verifyAuth(baseUrl, browserAuth.apiKey);
 
     if (outputJson) {
@@ -86,6 +100,7 @@ export async function runAuthCommand(parsed: ParsedArgs) {
         baseUrl,
         authType: browserAuth.authType,
         permission: verification.permission ?? "both",
+        credentialStore,
       });
       return;
     }
@@ -93,10 +108,13 @@ export async function runAuthCommand(parsed: ParsedArgs) {
     printOk(`connected to ${baseUrl}`);
     printInfo(`auth: ${browserAuth.authType}`);
     printInfo(`permission: ${verification.permission ?? "both"}`);
+    printInfo(`credential store: ${credentialStore}`);
+    printCredentialStoreFallbackWarning(credentialStore);
     logEvent("info", "auth.login.done", {
       baseUrl,
       mode: "browser",
       permission: verification.permission ?? "both",
+      credentialStore,
     });
     return;
   }

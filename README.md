@@ -275,8 +275,10 @@ bun run cli:bundle
 ```
 
 `ibx auth login` opens Clerk in your browser and creates a scoped CLI API key
-after approval. `--api-key iak_...` remains available for automation and
-manual key workflows.
+after approval. The CLI stores credentials in macOS Keychain, Windows
+Credential Manager, or Linux Secret Service when available; otherwise it falls
+back to the local config file with `0600` permissions and prints a warning.
+`--api-key iak_...` remains available for automation and manual key workflows.
 
 ## Apple Shortcut
 

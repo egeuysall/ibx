@@ -22,7 +22,11 @@ export type CliConfig = {
   baseUrl: string;
   apiKey: string;
   createdAt: string;
-  credentialStore?: "keychain" | "config-file";
+  credentialStore?:
+    | "keychain"
+    | "windows-credential-manager"
+    | "linux-secret-service"
+    | "config-file";
 };
 
 export type CliVersionManifest = {

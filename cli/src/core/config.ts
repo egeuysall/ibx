@@ -6,7 +6,7 @@ import { safeJsonStringify } from "flags";
 import { API_KEY_PREFIX, CONFIG_FILE, EXIT_CODE } from "./constants.js";
 import {
   deleteStoredApiKey,
-  readStoredApiKey,
+  readStoredCredential,
   writeStoredApiKey,
   type CredentialStore,
 } from "./credentials.js";
@@ -37,10 +37,10 @@ export async function loadConfig(): Promise<CliConfig | null> {
     return null;
   }
 
-  const keychainApiKey = await readStoredApiKey();
+  const storedCredential = await readStoredCredential();
   const configApiKey =
     typeof parsed.apiKey === "string" ? parsed.apiKey.trim() : "";
-  const apiKey = keychainApiKey ?? configApiKey;
+  const apiKey = storedCredential?.apiKey ?? configApiKey;
   if (!apiKey.startsWith(API_KEY_PREFIX)) {
     return null;
   }
@@ -50,19 +50,16 @@ export async function loadConfig(): Promise<CliConfig | null> {
       baseUrl: normalizeBaseUrl(parsed.baseUrl),
       apiKey,
       createdAt: parsed.createdAt,
-      credentialStore: keychainApiKey ? "keychain" : "config-file",
+      credentialStore: storedCredential?.credentialStore ?? "config-file",
     };
   } catch {
     return null;
   }
 }
 
-export async function saveConfig(config: CliConfig) {
-  const savedToKeychain = await writeStoredApiKey(config.apiKey);
-  const credentialStore: CredentialStore = savedToKeychain
-    ? "keychain"
-    : "config-file";
-  const diskConfig = savedToKeychain
+export async function saveConfig(config: CliConfig): Promise<CredentialStore> {
+  const credentialStore = (await writeStoredApiKey(config.apiKey)) ?? "config-file";
+  const diskConfig = credentialStore !== "config-file"
     ? {
         baseUrl: config.baseUrl,
         createdAt: config.createdAt,
@@ -82,6 +79,7 @@ export async function saveConfig(config: CliConfig) {
     { encoding: "utf8", mode: 0o600 },
   );
   await chmod(CONFIG_FILE, 0o600).catch(() => undefined);
+  return credentialStore;
 }
 
 export async function clearConfig() {
@@ -93,7 +91,7 @@ export async function requireConfig() {
   const config = await loadConfig();
   if (!config) {
     throw new CliError(
-      'Not authenticated. Run "ibx auth login --api-key iak_..." first.',
+      'Not authenticated. Run "ibx login" first, or "ibx login --api-key iak_..." for automation.',
       { exitCode: EXIT_CODE.AUTH, code: "AUTH_REQUIRED" },
     );
   }

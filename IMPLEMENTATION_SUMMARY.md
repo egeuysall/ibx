@@ -77,6 +77,11 @@
   - the browser flow uses loopback redirect, state, PKCE-style verifier/challenge, and short-lived one-time Convex auth codes,
   - the server mints the same scoped API-key format after approval so existing CLI requests and scripts still work,
   - `--api-key iak_...` remains supported for automation/manual key workflows.
+- Hardened CLI credential storage:
+  - macOS uses Keychain,
+  - Windows uses Credential Manager when available,
+  - Linux uses Secret Service when available,
+  - local config fallback is still supported with `0600` permissions and a visible warning.
 - Expanded the CLI surface required by the offline/publishing workflow:
   - added `ibx sync` to pull current server sync state,
   - added `ibx page create` as the todo-backed page creation command,
@@ -102,6 +107,7 @@
 - `bun run lint` passed with only existing generated Convex warnings.
 - `bun run cli:build` passed.
 - `bun run build` passed.
+- `node cli/dist/index.js --version && node cli/dist/index.js auth --json` verified the rebuilt CLI entrypoint and auth status JSON path without printing secrets.
 - `bunx convex codegen` passed.
 - `bunx convex deploy --yes` deployed the attachment index to production.
 - `bunx convex deploy --yes` deployed the reminder table/functions to production with no deleted indexes.
@@ -114,6 +120,5 @@
 
 ## Known Remaining Work
 
-- CLI credentials now prefer the macOS Keychain and fall back to the existing local config file when Keychain is unavailable.
 - Bri publication now has a first server-side bridge, but per-user Bri account connection remains planned.
 - Convex reminder jobs currently record due reminders as sent; email/push transport is intentionally not enabled until sender credentials or APNs setup exist.

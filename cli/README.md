@@ -42,9 +42,10 @@ ibx td
 - `ibx t l [--view today|upcoming|archive|all] [--json]` (short)
 
 Default login opens a browser for Clerk approval and stores the generated CLI
-API key in the macOS Keychain when available, with the existing local config
-file fallback for automation and non-Keychain environments. Use `--api-key` for
-automation or pre-generated keys.
+API key in secure OS storage when available: macOS Keychain, Windows Credential
+Manager, or Linux Secret Service. If no OS credential store is available, ibx
+falls back to the local config file with `0600` permissions and prints a
+warning. Use `--api-key` for automation or pre-generated keys.
 - `ibx todos add "title" [--notes "..."] [--due YYYY-MM-DD] [--hours 1.5|90m|1h] [--start HH:mm|HH:mm am/pm] [--priority 1|2|3, defaults to 1] [--recurrence none|daily|weekly|monthly] [--json]`
 - `ibx t a "title" [same flags]` (short)
 - `ibx td` (today's completed tasks in `America/Chicago`, override with `IBX_TIMEZONE`)
