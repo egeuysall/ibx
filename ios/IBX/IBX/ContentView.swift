@@ -11,11 +11,16 @@ struct ContentView: View {
     @State private var showingAuth = false
 
     var body: some View {
+        let isSignedIn = clerk.user != nil
+
         Group {
-            if clerk.user == nil {
-                SignedOutRootView(showingAuth: $showingAuth)
-            } else if horizontalSizeClass == .compact {
-                CompactRootView(store: store, showingSettings: $showingSettings)
+            if horizontalSizeClass == .compact {
+                CompactRootView(
+                    store: store,
+                    showingSettings: $showingSettings,
+                    showingAuth: $showingAuth,
+                    isSignedIn: isSignedIn
+                )
             } else {
                 NavigationSplitView {
                     SidebarView(store: store)
@@ -30,7 +35,10 @@ struct ContentView: View {
                                 .accessibilityLabel("Settings")
                             }
                             ToolbarItem(placement: .topBarTrailing) {
-                                UserButton()
+                                AccountToolbarButton(
+                                    showingAuth: $showingAuth,
+                                    isSignedIn: isSignedIn
+                                )
                             }
                         }
                 } detail: {
@@ -106,6 +114,8 @@ struct SignedOutRootView: View {
 struct CompactRootView: View {
     @Bindable var store: TaskStore
     @Binding var showingSettings: Bool
+    @Binding var showingAuth: Bool
+    let isSignedIn: Bool
 
     var body: some View {
         NavigationStack {
@@ -130,7 +140,10 @@ struct CompactRootView: View {
 
                     ToolbarItem(placement: .topBarTrailing) {
                         HStack {
-                            UserButton()
+                            AccountToolbarButton(
+                                showingAuth: $showingAuth,
+                                isSignedIn: isSignedIn
+                            )
                             Button {
                                 showingSettings = true
                             } label: {
@@ -140,6 +153,24 @@ struct CompactRootView: View {
                         }
                     }
                 }
+        }
+    }
+}
+
+struct AccountToolbarButton: View {
+    @Binding var showingAuth: Bool
+    let isSignedIn: Bool
+
+    var body: some View {
+        if isSignedIn {
+            UserButton()
+        } else {
+            Button {
+                showingAuth = true
+            } label: {
+                Image(systemName: "person.crop.circle")
+            }
+            .accessibilityLabel("Sign in")
         }
     }
 }

@@ -12,13 +12,9 @@ xcodebuild -project ios/IBX/IBX.xcodeproj -scheme IBX -destination 'platform=iOS
 
 ## Authentication
 
-The app does not ship with bundled credentials or mock data. Add a read/write API key in Settings. The key is stored in the iOS Keychain and sent as:
-
-```http
-Authorization: Bearer iak_...
-```
-
-Production defaults to `https://ibx.egeuysal.com`. Non-HTTPS URLs are rejected except localhost development URLs.
+Authentication is handled by Clerk. Signed-out users can still use cached and
+Shortcut-created tasks offline; signing in enables live sync to the production
+IBX API at `https://ibx.egeuysal.com`.
 
 ## Features
 
@@ -28,6 +24,7 @@ Production defaults to `https://ibx.egeuysal.com`. Non-HTTPS URLs are rejected e
 - Edit title, notes, due date, estimated hours, time block, recurrence, and priority
 - Delete todos
 - Apple Shortcuts action for offline todo capture with optional notes, due date, estimated hours, and priority
+- Signed-out offline task access with Clerk sign-in from the toolbar
 - Dark, light, and system appearance modes
 - Silent foreground auto-refresh
 - Local notifications five minutes before open tasks with time blocks

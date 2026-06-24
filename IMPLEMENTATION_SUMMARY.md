@@ -96,6 +96,11 @@
   - the App Shortcut can now capture optional notes, due date, estimated hours, and priority offline,
   - the offline snapshot stores those fields in the local todo and pending create payload,
   - iOS settings now shows queued offline changes so Shortcut-created work is visible before sync.
+- Removed the iOS signed-out offline gate:
+  - cached and Shortcut-created tasks remain visible without a Clerk session,
+  - users can add/edit/delete local tasks while signed out,
+  - Clerk sign-in is available from the toolbar and enables sync when ready,
+  - the iOS README now documents Clerk auth plus signed-out offline access.
 - Added the first Convex reminder/background-job slice:
   - added an owner-scoped `reminders` table with bounded indexes,
   - todo creates/updates schedule one time-block prestart reminder through `ctx.scheduler.runAt`,
@@ -127,6 +132,7 @@
 - `bunx convex deploy --yes` deployed optional reminder email delivery to production.
 - `bunx convex run --prod attachments:listAttachments '{"ownerKey":"clerk:user_3FSuDOl29us0znM4RCdO66m9gM4","parentKind":"todo","parentId":"jd78dbtg8ykcvan6ns6znsmkvs89379d","limit":50}'` returned `[]` without the previous index error.
 - XcodeBuildMCP `test_sim` passed on `ios/IBX/IBX.xcodeproj`, scheme `IBX`, `iPhone 17 Pro`: 7 passed, 0 failed.
+- XcodeBuildMCP `test_sim` passed after the signed-out offline iOS shell change: 7 passed, 0 failed.
 - Browser smoke used a temporary local editor route and confirmed the editor rendered with no missing-image error. The temporary route was removed before commit so it is not public.
 - Bri `bun test src/lib/tiptap-markdown.test.ts` passed.
 - Bri `bun run build` passed after rebasing on remote `master`.
