@@ -77,6 +77,7 @@ import {
   removeOfflineOperationsByEntity,
   upsertManyOfflineAttachments,
   upsertOfflineConflictRecovery,
+  upsertOfflineTodoCreateOperation,
   type OfflineAttachment,
 } from "@/lib/offline/db";
 import { flushPendingPublicationOperations } from "@/lib/offline/publication-sync";
@@ -103,6 +104,35 @@ type AppShellProps = {
 };
 type UnauthorizedEventDetail = {
   message?: string;
+};
+
+type TodoPatch = Partial<
+  Pick<
+    TodoItem,
+    | "title"
+    | "notes"
+    | "notesJson"
+    | "notesHtml"
+    | "status"
+    | "dueDate"
+    | "estimatedHours"
+    | "timeBlockStart"
+    | "recurrence"
+    | "priority"
+  >
+>;
+
+type TodoApiPatch = {
+  status?: TodoItem["status"];
+  dueDate?: string | null;
+  estimatedHours?: number | null;
+  timeBlockStart?: number | null;
+  recurrence?: TodoItem["recurrence"];
+  priority?: TodoItem["priority"];
+  title?: string;
+  notes?: string | null;
+  notesJson?: unknown;
+  notesHtml?: string | null;
 };
 
 const PROMPT_INPUT_STORAGE_KEY = "ibx:prompt-input";
@@ -2042,15 +2072,7 @@ export function AppShell({
         const localTodo = createLocalManualTodo(cleanInput);
         setTodos((previousTodos) => sortTodos([...previousTodos, localTodo]));
         setHasLoadedTodos(true);
-        await enqueueOfflineOperation({
-          entity: "todo",
-          entityId: localTodo.id,
-          kind: "create",
-          payload: {
-            title: cleanInput,
-            localId: localTodo.id,
-          },
-        });
+        await upsertOfflineTodoCreateOperation(localTodo);
         setPromptInput("");
         toast.message("todo saved offline");
         return;
@@ -2065,15 +2087,7 @@ export function AppShell({
         const localTodo = createLocalManualTodo(cleanInput);
         setTodos((previousTodos) => sortTodos([...previousTodos, localTodo]));
         setHasLoadedTodos(true);
-        await enqueueOfflineOperation({
-          entity: "todo",
-          entityId: localTodo.id,
-          kind: "create",
-          payload: {
-            title: cleanInput,
-            localId: localTodo.id,
-          },
-        });
+        await upsertOfflineTodoCreateOperation(localTodo);
         setPromptInput("");
         toast.message("todo saved offline");
         return;
@@ -2085,47 +2099,111 @@ export function AppShell({
     }
   };
 
+  const saveTodoPatch = async (
+    todo: TodoItem,
+    patch: TodoPatch,
+    options: {
+      apiPatch?: TodoApiPatch;
+      offlineMessage?: string;
+      successMessage?: string;
+      onNetworkSaved?: () => void;
+      onQueued?: () => void;
+      onFailure?: () => void;
+    } = {},
+  ) => {
+    const nextTodo: TodoItem = { ...todo, ...patch };
+    const queueOfflinePatch = async () => {
+      if (todo.id.startsWith("local-")) {
+        await upsertOfflineTodoCreateOperation(nextTodo);
+        return;
+      }
+
+      await enqueueOfflineOperation({
+        entity: "todo",
+        entityId: todo.id,
+        kind: "update",
+        payload: patch,
+      });
+    };
+
+    const { dueDate: localDueDate, ...apiPatchBase } = patch;
+    const apiPatch: TodoApiPatch =
+      options.apiPatch ??
+      {
+        ...apiPatchBase,
+        ...(localDueDate !== undefined
+          ? {
+              dueDate:
+                typeof localDueDate === "number"
+                  ? getLocalDateKey(localDueDate)
+                  : localDueDate,
+            }
+          : {}),
+      };
+
+    setPendingTodoId(todo.id);
+    setTodos((previousTodos) =>
+      sortTodos(
+        previousTodos.map((item) => (item.id === todo.id ? nextTodo : item)),
+      ),
+    );
+    setHasLoadedTodos(true);
+
+    try {
+      if (!isOnline || todo.id.startsWith("local-")) {
+        await queueOfflinePatch();
+        options.onQueued?.();
+        if (options.offlineMessage) {
+          toast.message(options.offlineMessage);
+        }
+        return true;
+      }
+
+      await apiClient.updateTodo(todo.id, apiPatch);
+      options.onNetworkSaved?.();
+      if (options.successMessage) {
+        toast.message(options.successMessage);
+      }
+      await refreshTodos();
+      return true;
+    } catch (error) {
+      if (error instanceof ApiError && error.isNetworkError) {
+        await queueOfflinePatch();
+        options.onQueued?.();
+        if (options.offlineMessage) {
+          toast.message(options.offlineMessage);
+        }
+        return true;
+      }
+
+      setTodos((previousTodos) =>
+        sortTodos(
+          previousTodos.map((item) => (item.id === todo.id ? todo : item)),
+        ),
+      );
+      options.onFailure?.();
+      toastApiError(error);
+      return false;
+    } finally {
+      setPendingTodoId(null);
+    }
+  };
+
   const updateTodoStatus = async (todo: TodoItem, checked: boolean) => {
     const nextStatus = checked ? "done" : "open";
-    setPendingTodoId(todo.id);
     if (checked) {
       setJustCompletedZenTodoId(todo.id);
     }
-    setTodos((previousTodos) =>
-      sortTodos(
-        previousTodos.map((item) =>
-          item.id === todo.id
-            ? {
-                ...item,
-                status: nextStatus,
-              }
-            : item,
-        ),
-      ),
-    );
 
-    try {
-      await apiClient.updateTodo(todo.id, { status: nextStatus });
-      await refreshTodos();
-    } catch (error) {
-      toastApiError(error);
+    const saved = await saveTodoPatch(
+      todo,
+      { status: nextStatus },
+      { offlineMessage: "todo updated offline" },
+    );
+    if (!saved) {
       if (checked) {
         setJustCompletedZenTodoId(null);
       }
-      setTodos((previousTodos) =>
-        sortTodos(
-          previousTodos.map((item) =>
-            item.id === todo.id
-              ? {
-                  ...item,
-                  status: todo.status,
-                }
-              : item,
-          ),
-        ),
-      );
-    } finally {
-      setPendingTodoId(null);
     }
   };
 
@@ -2147,20 +2225,24 @@ export function AppShell({
         ? nextTimeBlockStart
         : undefined;
 
-    setPendingTodoId(todo.id);
-    try {
-      await apiClient.updateTodo(todo.id, {
-        dueDate,
+    await saveTodoPatch(
+      todo,
+      {
+        dueDate: normalizedDate ? dateKeyToTimestamp(normalizedDate) : null,
         ...(normalizedDate && normalizedTimeBlockStart !== undefined
           ? { timeBlockStart: normalizedTimeBlockStart }
           : {}),
-      });
-      await refreshTodos();
-    } catch (error) {
-      toastApiError(error);
-    } finally {
-      setPendingTodoId(null);
-    }
+      },
+      {
+        apiPatch: {
+          dueDate,
+          ...(normalizedDate && normalizedTimeBlockStart !== undefined
+            ? { timeBlockStart: normalizedTimeBlockStart }
+            : {}),
+        },
+        offlineMessage: "todo date updated offline",
+      },
+    );
   };
 
   const updateTodoEstimatedHours = async (
@@ -2183,17 +2265,13 @@ export function AppShell({
       return;
     }
 
-    setPendingTodoId(todo.id);
-    try {
-      await apiClient.updateTodo(todo.id, {
+    await saveTodoPatch(
+      todo,
+      {
         estimatedHours: normalizedEstimatedHours,
-      });
-      await refreshTodos();
-    } catch (error) {
-      toastApiError(error);
-    } finally {
-      setPendingTodoId(null);
-    }
+      },
+      { offlineMessage: "todo duration updated offline" },
+    );
   };
 
   const updateTodoTimeBlockStart = async (
@@ -2250,17 +2328,13 @@ export function AppShell({
       return;
     }
 
-    setPendingTodoId(todo.id);
-    try {
-      await apiClient.updateTodo(todo.id, {
+    await saveTodoPatch(
+      todo,
+      {
         timeBlockStart: normalizedTimeBlockStart,
-      });
-      await refreshTodos();
-    } catch (error) {
-      toastApiError(error);
-    } finally {
-      setPendingTodoId(null);
-    }
+      },
+      { offlineMessage: "todo schedule updated offline" },
+    );
   };
 
   const updateTodoRecurrence = async (todo: TodoItem, values: string[]) => {
@@ -2274,17 +2348,13 @@ export function AppShell({
       return;
     }
 
-    setPendingTodoId(todo.id);
-    try {
-      await apiClient.updateTodo(todo.id, {
+    await saveTodoPatch(
+      todo,
+      {
         recurrence: nextRecurrence as TodoRecurrence,
-      });
-      await refreshTodos();
-    } catch (error) {
-      toastApiError(error);
-    } finally {
-      setPendingTodoId(null);
-    }
+      },
+      { offlineMessage: "todo recurrence updated offline" },
+    );
   };
 
   const updateTodoPriority = async (todo: TodoItem, values: string[]) => {
@@ -2293,17 +2363,13 @@ export function AppShell({
       return;
     }
 
-    setPendingTodoId(todo.id);
-    try {
-      await apiClient.updateTodo(todo.id, {
+    await saveTodoPatch(
+      todo,
+      {
         priority: Number(nextPriority) as TodoPriority,
-      });
-      await refreshTodos();
-    } catch (error) {
-      toastApiError(error);
-    } finally {
-      setPendingTodoId(null);
-    }
+      },
+      { offlineMessage: "todo priority updated offline" },
+    );
   };
 
   const updateTodoTitle = async (todo: TodoItem) => {
@@ -2319,42 +2385,15 @@ export function AppShell({
       return;
     }
 
-    setPendingTodoId(todo.id);
     const previousTitle = todo.title;
-    setTodos((previousTodos) =>
-      sortTodos(
-        previousTodos.map((item) =>
-          item.id === todo.id
-            ? {
-                ...item,
-                title: nextTitle,
-              }
-            : item,
-        ),
-      ),
+    await saveTodoPatch(
+      todo,
+      { title: nextTitle },
+      {
+        offlineMessage: "todo title updated offline",
+        onFailure: () => setEditingTitleInput(previousTitle),
+      },
     );
-
-    try {
-      await apiClient.updateTodo(todo.id, { title: nextTitle });
-      await refreshTodos();
-    } catch (error) {
-      toastApiError(error);
-      setTodos((previousTodos) =>
-        sortTodos(
-          previousTodos.map((item) =>
-            item.id === todo.id
-              ? {
-                  ...item,
-                  title: previousTitle,
-                }
-              : item,
-          ),
-        ),
-      );
-      setEditingTitleInput(previousTitle);
-    } finally {
-      setPendingTodoId(null);
-    }
   };
 
   const updateTodoLinks = async (todo: TodoItem) => {
@@ -2382,53 +2421,22 @@ export function AppShell({
       return;
     }
 
-    setPendingTodoId(todo.id);
     setEditingLinksInput(nextLinksText);
-    setTodos((previousTodos) =>
-      sortTodos(
-        previousTodos.map((item) =>
-          item.id === todo.id
-            ? {
-                ...item,
-                notes: nextNotes,
-                notesJson: null,
-                notesHtml: null,
-              }
-            : item,
-        ),
-      ),
-    );
-
-    try {
-      await apiClient.updateTodo(todo.id, {
+    const saved = await saveTodoPatch(
+      todo,
+      {
         notes: nextNotes,
         notesJson: null,
         notesHtml: null,
-      });
-      await refreshTodos();
+      },
+      {
+        offlineMessage: "todo links updated offline",
+        onFailure: () => setEditingLinksInput(getTodoLinksInputValue(previousNotes)),
+      },
+    );
 
-      if (parsed.invalidCount > 0) {
-        toast.message("some invalid links were ignored");
-      }
-    } catch (error) {
-      toastApiError(error);
-      setTodos((previousTodos) =>
-        sortTodos(
-          previousTodos.map((item) =>
-            item.id === todo.id
-              ? {
-                  ...item,
-                  notes: previousNotes,
-                  notesJson: todo.notesJson,
-                  notesHtml: todo.notesHtml,
-                }
-              : item,
-          ),
-        ),
-      );
-      setEditingLinksInput(getTodoLinksInputValue(previousNotes));
-    } finally {
-      setPendingTodoId(null);
+    if (saved && parsed.invalidCount > 0) {
+      toast.message("some invalid links were ignored");
     }
   };
 

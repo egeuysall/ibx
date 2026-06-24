@@ -274,6 +274,54 @@ export async function enqueueOfflineOperation(
   return operation;
 }
 
+function offlineTodoCreatePayload(todo: TodoItem) {
+  return {
+    title: todo.title,
+    localId: todo.id,
+    notes: todo.notes,
+    notesJson: todo.notesJson,
+    notesHtml: todo.notesHtml,
+    status: todo.status,
+    dueDate: todo.dueDate,
+    estimatedHours: todo.estimatedHours,
+    timeBlockStart: todo.timeBlockStart,
+    recurrence: todo.recurrence,
+    priority: todo.priority,
+    source: todo.source,
+  };
+}
+
+export async function upsertOfflineTodoCreateOperation(todo: TodoItem) {
+  const table = getOfflineDatabase().pendingOps;
+  const existing = await table
+    .where("[entity+entityId]")
+    .equals(["todo", todo.id])
+    .filter((operation) => operation.kind === "create")
+    .first();
+  const now = Date.now();
+  const previousPayload =
+    existing?.payload && typeof existing.payload === "object"
+      ? (existing.payload as Record<string, unknown>)
+      : {};
+  const operation: PendingOfflineOperation = {
+    id: existing?.id ?? crypto.randomUUID(),
+    entity: "todo",
+    entityId: todo.id,
+    kind: "create",
+    payload: {
+      ...previousPayload,
+      ...offlineTodoCreatePayload(todo),
+    },
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now,
+    attempts: existing?.attempts ?? 0,
+    lastError: existing?.lastError ?? null,
+  };
+
+  await table.put(operation);
+  return operation;
+}
+
 export async function listPendingOfflineOperations(limit = 50) {
   return await getOfflineDatabase()
     .pendingOps.orderBy("createdAt")
