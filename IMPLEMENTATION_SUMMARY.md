@@ -43,6 +43,10 @@
   - online files upload through Convex storage,
   - offline files are stored as local Dexie metadata/blob rows and queued as pending uploads,
   - queued attachment uploads replay after reconnect, including attachments added to local-only todos before their server ID exists.
+- Completed offline attachment delete replay:
+  - deleting a local pending attachment cancels its queued upload,
+  - deleting an uploaded attachment while offline hides it locally and queues a server delete,
+  - queued attachment deletes replay after reconnect and tolerate already-deleted server files.
 - Fixed attachment listing for production:
   - added the exact `attachments.by_parentKind_and_parentId` Convex index,
   - attachment reads still validate ownership server-side before returning files,

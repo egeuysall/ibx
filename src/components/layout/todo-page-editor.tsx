@@ -549,21 +549,51 @@ export function TodoPageEditor({ todoId }: TodoPageEditorProps) {
   };
 
   const deleteAttachment = async (attachment: AttachmentRecord) => {
-    if (attachment.id.startsWith("local-attachment-")) {
+    const removeAttachmentLocally = async () => {
       await removeOfflineAttachment(attachment.id).catch(() => undefined);
       setAttachments((current) =>
         current.filter((item) => item.id !== attachment.id),
       );
+    };
+
+    if (attachment.id.startsWith("local-attachment-")) {
+      await removeOfflineOperationsByEntity("attachment", attachment.id).catch(
+        () => undefined,
+      );
+      await removeAttachmentLocally();
+      toast.message("attachment removed");
+      return;
+    }
+
+    const queueDelete = async () => {
+      await enqueueOfflineOperation({
+        entity: "attachment",
+        entityId: attachment.id,
+        kind: "delete",
+        payload: {
+          parentKind: attachment.parentKind,
+          parentId: attachment.parentId,
+        },
+      });
+      await removeAttachmentLocally();
+      toast.message("attachment delete queued offline");
+    };
+
+    if (!isOnline) {
+      await queueDelete();
       return;
     }
 
     try {
       await apiClient.deleteAttachment(attachment.id);
-      setAttachments((current) =>
-        current.filter((item) => item.id !== attachment.id),
-      );
-      await removeOfflineAttachment(attachment.id).catch(() => undefined);
+      await removeAttachmentLocally();
+      toast.message("attachment deleted");
     } catch (error) {
+      if (error instanceof ApiError && error.isNetworkError) {
+        await queueDelete();
+        return;
+      }
+
       toast.error(parseErrorMessage(error));
     }
   };

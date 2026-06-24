@@ -1346,7 +1346,7 @@ export function AppShell({
 
   const flushPendingAttachmentOperations = useCallback(async () => {
     if (!isAuthenticated || !isOnline) {
-      return { uploaded: 0, paused: false };
+      return { uploaded: 0, deleted: 0, paused: false };
     }
 
     const pendingOperations = await listPendingOfflineOperations(50).catch(
@@ -1354,13 +1354,55 @@ export function AppShell({
     );
     const attachmentOperations = pendingOperations.filter(
       (operation) =>
-        operation.entity === "attachment" && operation.kind === "upload",
+        operation.entity === "attachment" &&
+        (operation.kind === "upload" || operation.kind === "delete"),
     );
 
     let uploaded = 0;
+    let deleted = 0;
     let paused = false;
 
     for (const operation of attachmentOperations) {
+      if (operation.kind === "delete") {
+        if (operation.entityId.startsWith("local-attachment-")) {
+          await removeOfflineAttachment(operation.entityId).catch(() => undefined);
+          await removeOfflineOperation(operation.id).catch(() => undefined);
+          deleted += 1;
+          continue;
+        }
+
+        try {
+          await apiClient.deleteAttachment(operation.entityId);
+          await removeOfflineAttachment(operation.entityId).catch(() => undefined);
+          await removeOfflineOperation(operation.id).catch(() => undefined);
+          deleted += 1;
+        } catch (error) {
+          if (error instanceof ApiError && error.isNetworkError) {
+            paused = true;
+            await patchOfflineOperation(operation.id, {
+              attempts: operation.attempts + 1,
+              lastError: parseErrorMessage(error),
+            }).catch(() => undefined);
+            break;
+          }
+
+          if (error instanceof ApiError && error.status === 404) {
+            await removeOfflineAttachment(operation.entityId).catch(
+              () => undefined,
+            );
+            await removeOfflineOperation(operation.id).catch(() => undefined);
+            deleted += 1;
+            continue;
+          }
+
+          await patchOfflineOperation(operation.id, {
+            attempts: operation.attempts + 1,
+            lastError: parseErrorMessage(error),
+          }).catch(() => undefined);
+        }
+        continue;
+      }
+
       const payload =
         operation.payload && typeof operation.payload === "object"
           ? (operation.payload as Record<string, unknown>)
@@ -1440,7 +1482,7 @@ export function AppShell({
       }
     }
 
-    return { uploaded, paused };
+    return { uploaded, deleted, paused };
   }, [isAuthenticated, isOnline, loadTodoAttachments]);
 
   const flushPendingOfflineOperations = useCallback(async () => {
@@ -1494,6 +1536,11 @@ export function AppShell({
       if (attachmentResult.uploaded > 0) {
         toast.message(
           `${attachmentResult.uploaded} attachment${attachmentResult.uploaded === 1 ? "" : "s"} uploaded`,
+        );
+      }
+      if (attachmentResult.deleted > 0) {
+        toast.message(
+          `${attachmentResult.deleted} attachment${attachmentResult.deleted === 1 ? "" : "s"} deleted`,
         );
       }
       if (publicationResult.published > 0 || publicationResult.unpublished > 0) {
@@ -1573,6 +1620,11 @@ export function AppShell({
     if (attachmentResult.uploaded > 0) {
       toast.message(
         `${attachmentResult.uploaded} attachment${attachmentResult.uploaded === 1 ? "" : "s"} uploaded`,
+      );
+    }
+    if (attachmentResult.deleted > 0) {
+      toast.message(
+        `${attachmentResult.deleted} attachment${attachmentResult.deleted === 1 ? "" : "s"} deleted`,
       );
     }
     if (publicationResult.published > 0 || publicationResult.unpublished > 0) {
