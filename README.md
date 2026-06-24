@@ -33,59 +33,59 @@ If offline, prompts stay queued and are sent when connectivity returns.
 
 ### Frontend (Next.js app router)
 
-- Main UI shell: [src/components/layout/app-shell.tsx](/Users/egeuysal/Developer/inbox/src/components/layout/app-shell.tsx)
-- Settings: [src/components/layout/settings-view.tsx](/Users/egeuysal/Developer/inbox/src/components/layout/settings-view.tsx)
+- Main UI shell: [src/components/layout/app-shell.tsx](/Users/egeuysal/Developer/ibx/src/components/layout/app-shell.tsx)
+- Settings: [src/components/layout/settings-view.tsx](/Users/egeuysal/Developer/ibx/src/components/layout/settings-view.tsx)
 - Pages:
-  - Home: [src/app/page.tsx](/Users/egeuysal/Developer/inbox/src/app/page.tsx)
-  - Settings page: [src/app/settings/page.tsx](/Users/egeuysal/Developer/inbox/src/app/settings/page.tsx)
+  - Home: [src/app/page.tsx](/Users/egeuysal/Developer/ibx/src/app/page.tsx)
+  - Settings page: [src/app/settings/page.tsx](/Users/egeuysal/Developer/ibx/src/app/settings/page.tsx)
 - PWA shell registration:
-  - [src/components/layout/sw-register.tsx](/Users/egeuysal/Developer/inbox/src/components/layout/sw-register.tsx)
-  - [public/sw.js](/Users/egeuysal/Developer/inbox/public/sw.js)
-- Manifest: [src/app/manifest.ts](/Users/egeuysal/Developer/inbox/src/app/manifest.ts)
+  - [src/components/layout/sw-register.tsx](/Users/egeuysal/Developer/ibx/src/components/layout/sw-register.tsx)
+  - [public/sw.js](/Users/egeuysal/Developer/ibx/public/sw.js)
+- Manifest: [src/app/manifest.ts](/Users/egeuysal/Developer/ibx/src/app/manifest.ts)
 
 ### Local storage and offline queue
 
-- IndexedDB adapter: [src/lib/indexedDb.ts](/Users/egeuysal/Developer/inbox/src/lib/indexedDb.ts)
+- IndexedDB adapter: [src/lib/indexedDb.ts](/Users/egeuysal/Developer/ibx/src/lib/indexedDb.ts)
 - Stores:
   - `localThoughts`
   - `queuedPrompts`
 - Queue behavior is integrated in:
-  - [src/components/layout/app-shell.tsx](/Users/egeuysal/Developer/inbox/src/components/layout/app-shell.tsx)
+  - [src/components/layout/app-shell.tsx](/Users/egeuysal/Developer/ibx/src/components/layout/app-shell.tsx)
 
 ### API and auth
 
-- Session/password + Bearer key auth resolver: [src/lib/auth-server.ts](/Users/egeuysal/Developer/inbox/src/lib/auth-server.ts)
-- Session internals (hashing + secure cookie options): [src/lib/session.ts](/Users/egeuysal/Developer/inbox/src/lib/session.ts)
-- API key generation + hashing: [src/lib/api-keys.ts](/Users/egeuysal/Developer/inbox/src/lib/api-keys.ts)
+- Session/password + Bearer key auth resolver: [src/lib/auth-server.ts](/Users/egeuysal/Developer/ibx/src/lib/auth-server.ts)
+- Session internals (hashing + secure cookie options): [src/lib/session.ts](/Users/egeuysal/Developer/ibx/src/lib/session.ts)
+- API key generation + hashing: [src/lib/api-keys.ts](/Users/egeuysal/Developer/ibx/src/lib/api-keys.ts)
 - API routes: `src/app/api/**`
 
 ### AI pipeline and personalization
 
-- AI call + strict todo normalization: [src/lib/ai.ts](/Users/egeuysal/Developer/inbox/src/lib/ai.ts)
+- AI call + strict todo normalization: [src/lib/ai.ts](/Users/egeuysal/Developer/ibx/src/lib/ai.ts)
 - Context hydration from external profile data:
-  - [src/lib/ege-context.ts](/Users/egeuysal/Developer/inbox/src/lib/ege-context.ts)
+  - [src/lib/ege-context.ts](/Users/egeuysal/Developer/ibx/src/lib/ege-context.ts)
   - Pulls `agents.json`, plus latest 7 diary summaries and latest 7 blog titles.
-- Planning and capping generated todos: [src/lib/todo-planning.ts](/Users/egeuysal/Developer/inbox/src/lib/todo-planning.ts)
+- Planning and capping generated todos: [src/lib/todo-planning.ts](/Users/egeuysal/Developer/ibx/src/lib/todo-planning.ts)
 
 ### Convex backend
 
-- Schema: [convex/schema.ts](/Users/egeuysal/Developer/inbox/convex/schema.ts)
+- Schema: [convex/schema.ts](/Users/egeuysal/Developer/ibx/convex/schema.ts)
 - Domain modules:
-  - Thoughts: [convex/thoughts.ts](/Users/egeuysal/Developer/inbox/convex/thoughts.ts)
-  - Todos: [convex/todos.ts](/Users/egeuysal/Developer/inbox/convex/todos.ts)
-  - Sessions: [convex/sessions.ts](/Users/egeuysal/Developer/inbox/convex/sessions.ts)
-  - API keys: [convex/apiKeys.ts](/Users/egeuysal/Developer/inbox/convex/apiKeys.ts)
-  - Memories: [convex/memories.ts](/Users/egeuysal/Developer/inbox/convex/memories.ts)
+  - Thoughts: [convex/thoughts.ts](/Users/egeuysal/Developer/ibx/convex/thoughts.ts)
+  - Todos: [convex/todos.ts](/Users/egeuysal/Developer/ibx/convex/todos.ts)
+  - Sessions: [convex/sessions.ts](/Users/egeuysal/Developer/ibx/convex/sessions.ts)
+  - API keys: [convex/apiKeys.ts](/Users/egeuysal/Developer/ibx/convex/apiKeys.ts)
+  - Memories: [convex/memories.ts](/Users/egeuysal/Developer/ibx/convex/memories.ts)
 
 ### CLI + installer + Shortcut
 
-- CLI source: [cli/src/index.ts](/Users/egeuysal/Developer/inbox/cli/src/index.ts)
-- CLI docs: [cli/README.md](/Users/egeuysal/Developer/inbox/cli/README.md)
-- Bundle script for downloadable binary-like JS file: [scripts/build-ibx-bundle.mjs](/Users/egeuysal/Developer/inbox/scripts/build-ibx-bundle.mjs)
-- Installer script served publicly: [public/install.sh](/Users/egeuysal/Developer/inbox/public/install.sh)
+- CLI source: [cli/src/index.ts](/Users/egeuysal/Developer/ibx/cli/src/index.ts)
+- CLI docs: [cli/README.md](/Users/egeuysal/Developer/ibx/cli/README.md)
+- Bundle script for downloadable binary-like JS file: [scripts/build-ibx-bundle.mjs](/Users/egeuysal/Developer/ibx/scripts/build-ibx-bundle.mjs)
+- Installer script served publicly: [public/install.sh](/Users/egeuysal/Developer/ibx/public/install.sh)
 - Shortcut generator (`@joshfarrant/shortcuts-js`):
-  - [shortcut/generate-shortcut.cjs](/Users/egeuysal/Developer/inbox/shortcut/generate-shortcut.cjs)
-  - Signed output: [public/shortcuts/ibx-capture.shortcut](/Users/egeuysal/Developer/inbox/public/shortcuts/ibx-capture.shortcut)
+  - [shortcut/generate-shortcut.cjs](/Users/egeuysal/Developer/ibx/shortcut/generate-shortcut.cjs)
+  - Signed output: [public/shortcuts/ibx-capture.shortcut](/Users/egeuysal/Developer/ibx/public/shortcuts/ibx-capture.shortcut)
 
 ## Data Model (Convex)
 
@@ -97,7 +97,7 @@ If offline, prompts stay queued and are sent when connectivity returns.
 
 ## Environment Variables
 
-Copy [.env.example](/Users/egeuysal/Developer/inbox/.env.example) to `.env.local`.
+Copy [.env.example](/Users/egeuysal/Developer/ibx/.env.example) to `.env.local`.
 
 Required keys:
 
@@ -112,6 +112,9 @@ Required keys:
 Optional:
 
 - `SESSION_COOKIE_SECURE=false` for local HTTP testing only
+- `BRI_BASE_URL` and server-only `BRI_INTERNAL_API_KEY` for Bri publishing
+- `RESEND_API_KEY`, `NOTIFICATION_EMAIL_FROM`, and server-only
+  `CLERK_SECRET_KEY` in Convex for optional reminder email delivery
 
 ## Local Development
 
@@ -138,8 +141,8 @@ ibx API is available for external integrations using API keys (`iak_...`).
 
 Detailed docs:
 
-- [API Reference](/Users/egeuysal/Developer/inbox/docs/API.md)
-- [Authentication Guide](/Users/egeuysal/Developer/inbox/docs/API_AUTH.md)
+- [API Reference](/Users/egeuysal/Developer/ibx/docs/API.md)
+- [Authentication Guide](/Users/egeuysal/Developer/ibx/docs/API_AUTH.md)
 
 Auth/session:
 
@@ -290,7 +293,7 @@ bun run shortcut:build
 
 Import one of:
 
-- local: [shortcut/dist/ibx-capture.shortcut](/Users/egeuysal/Developer/inbox/shortcut/dist/ibx-capture.shortcut)
+- local: [shortcut/dist/ibx-capture.shortcut](/Users/egeuysal/Developer/ibx/shortcut/dist/ibx-capture.shortcut)
 - hosted signed file: [https://ibx.egeuysal.com/shortcuts/ibx-capture.shortcut](https://ibx.egeuysal.com/shortcuts/ibx-capture.shortcut)
 
 Shortcut behavior:

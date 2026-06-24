@@ -49,6 +49,7 @@ Bri:
 - Add publication metadata in IBX for Bri links: owner, source entity, Bri note URL/slug, visibility, last published time, and status.
 - Avoid unbounded arrays in Convex documents. Store attachments, reminders, and publications in separate tables.
 - Keep API keys keyed by existing `iak_` values and server-side hashes. Do not expose `CLERK_SECRET_KEY` or any bridge API key to client code.
+- Reminder email delivery should derive recipients server-side from Clerk identity data and use only server/Convex env vars such as `RESEND_API_KEY`, `NOTIFICATION_EMAIL_FROM`, and `CLERK_SECRET_KEY`.
 
 ## Offline Sync Strategy
 

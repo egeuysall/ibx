@@ -97,6 +97,11 @@
   - todo creates/updates schedule one time-block prestart reminder through `ctx.scheduler.runAt`,
   - todo deletion, completion, missing time blocks, and reschedules cancel pending reminder jobs,
   - no frequent Convex cron or global user scan is used.
+- Added optional reminder email delivery:
+  - scheduled reminders run through a Convex action,
+  - recipient email is derived server-side from the Clerk user ID in `ownerKey`,
+  - email sends only when Convex has `CLERK_SECRET_KEY`, `RESEND_API_KEY`, and `NOTIFICATION_EMAIL_FROM`,
+  - client requests cannot supply reminder recipient emails.
 - Aligned offline sync with recurring-task behavior:
   - completing a recurring open todo through `/api/sync` now creates the next open recurring instance,
   - sync idempotency still prevents duplicate recurring instances when a pending op is retried.
@@ -115,6 +120,7 @@
 - `bunx convex deploy --yes` deployed recurring-task sync parity to production.
 - `bunx convex deploy --yes` deployed the attachment index to production.
 - `bunx convex deploy --yes` deployed the reminder table/functions to production with no deleted indexes.
+- `bunx convex deploy --yes` deployed optional reminder email delivery to production.
 - `bunx convex run --prod attachments:listAttachments '{"ownerKey":"clerk:user_3FSuDOl29us0znM4RCdO66m9gM4","parentKind":"todo","parentId":"jd78dbtg8ykcvan6ns6znsmkvs89379d","limit":50}'` returned `[]` without the previous index error.
 - XcodeBuildMCP `test_sim` passed on `ios/IBX/IBX.xcodeproj`, scheme `IBX`, `iPhone 17 Pro`: 7 passed, 0 failed.
 - Browser smoke used a temporary local editor route and confirmed the editor rendered with no missing-image error. The temporary route was removed before commit so it is not public.
@@ -125,4 +131,4 @@
 ## Known Remaining Work
 
 - Bri publication now has a first server-side bridge, but per-user Bri account connection remains planned.
-- Convex reminder jobs currently record due reminders as sent; email/push transport is intentionally not enabled until sender credentials or APNs setup exist.
+- Reminder emails require Convex `CLERK_SECRET_KEY`, `RESEND_API_KEY`, and `NOTIFICATION_EMAIL_FROM`; APNs push is still not configured.
