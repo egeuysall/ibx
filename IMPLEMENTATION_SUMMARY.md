@@ -92,6 +92,10 @@
   - todo creates/updates schedule one time-block prestart reminder through `ctx.scheduler.runAt`,
   - todo deletion, completion, missing time blocks, and reschedules cancel pending reminder jobs,
   - no frequent Convex cron or global user scan is used.
+- Completed the browser offline delete path:
+  - deleting an existing todo while offline removes it locally and queues a sync `delete` operation,
+  - deleting a local-only todo removes its pending create operation instead of sending a bogus server delete,
+  - accepted offline sync changes now reschedule or cancel server reminder jobs so background jobs stay aligned.
 
 ## Verification
 

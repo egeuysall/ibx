@@ -74,6 +74,7 @@ import {
   patchOfflineOperation,
   removeOfflineAttachment,
   removeOfflineOperation,
+  removeOfflineOperationsByEntity,
   upsertManyOfflineAttachments,
   upsertOfflineConflictRecovery,
   type OfflineAttachment,
@@ -2437,9 +2438,8 @@ export function AppShell({
     }
 
     const targetTodo = todoPendingDelete;
-    setPendingTodoId(targetTodo.id);
-    try {
-      await apiClient.deleteTodo(targetTodo.id);
+    const previousTodos = todos;
+    const clearDeleteUi = () => {
       setEditingTodoId((current) => {
         if (current === targetTodo.id) {
           setEditingTitleInput("");
@@ -2450,9 +2450,45 @@ export function AppShell({
         return current;
       });
       setTodoPendingDelete(null);
+    };
+    const deleteLocally = async () => {
+      setTodos((current) => current.filter((todo) => todo.id !== targetTodo.id));
+      setHasLoadedTodos(true);
+      clearDeleteUi();
+      if (targetTodo.id.startsWith("local-")) {
+        await removeOfflineOperationsByEntity("todo", targetTodo.id).catch(
+          () => undefined,
+        );
+      } else {
+        await enqueueOfflineOperation({
+          entity: "todo",
+          entityId: targetTodo.id,
+          kind: "delete",
+          payload: {},
+        });
+      }
+    };
+
+    setPendingTodoId(targetTodo.id);
+    try {
+      if (!isOnline) {
+        await deleteLocally();
+        toast.message("todo deleted offline");
+        return;
+      }
+
+      await apiClient.deleteTodo(targetTodo.id);
+      clearDeleteUi();
       toast.message("todo deleted");
       await refreshTodos();
     } catch (error) {
+      if (error instanceof ApiError && error.isNetworkError) {
+        await deleteLocally();
+        toast.message("todo deleted offline");
+        return;
+      }
+
+      setTodos(previousTodos);
       toastApiError(error);
     } finally {
       setPendingTodoId(null);

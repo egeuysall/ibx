@@ -212,6 +212,31 @@ function mapTodo(todo: {
   };
 }
 
+async function syncReminderForAcceptedTodo(
+  ownerKey: string | null,
+  todoId: string,
+) {
+  const todo = await convex.query(api.todos.getByStringId, {
+    ownerKey,
+    todoId,
+  });
+  if (!todo || todo.status !== "open") {
+    await convex.mutation(api.reminders.cancelTodoReminder, {
+      ownerKey,
+      todoId,
+    });
+    return;
+  }
+
+  await convex.mutation(api.reminders.scheduleTimeBlockReminder, {
+    ownerKey,
+    todoId,
+    title: todo.title,
+    timeBlockStart:
+      typeof todo.timeBlockStart === "number" ? todo.timeBlockStart : null,
+  });
+}
+
 export async function POST(request: NextRequest) {
   const auth = await getRouteAuth(request);
   if (!auth) {
@@ -254,6 +279,28 @@ export async function POST(request: NextRequest) {
     clientId,
     ops: ops as NormalizedSyncOperation[],
   });
+  const operationById = new Map(
+    (ops as NormalizedSyncOperation[]).map((operation) => [
+      operation.opId,
+      operation,
+    ]),
+  );
+  for (const acceptedOperation of result.accepted) {
+    if (acceptedOperation.status !== "accepted" || !acceptedOperation.serverId) {
+      continue;
+    }
+
+    const operation = operationById.get(acceptedOperation.opId);
+    if (operation?.operation === "delete") {
+      await convex.mutation(api.reminders.cancelTodoReminder, {
+        ownerKey,
+        todoId: acceptedOperation.serverId,
+      });
+      continue;
+    }
+
+    await syncReminderForAcceptedTodo(ownerKey, acceptedOperation.serverId);
+  }
 
   return NextResponse.json(result);
 }
