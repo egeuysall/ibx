@@ -12,7 +12,7 @@ curl -fsSL https://ibx.egeuysal.com/install.sh | bash
 ## quick start
 
 ```bash
-ibx auth login
+ibx login
 ibx add "finish landing page and email two leads" --auto-schedule
 ibx todos add "email Pat"
 ibx todos list --view today
@@ -23,13 +23,15 @@ ibx td
 
 ## commands
 
-- `ibx auth login [--api-key iak_...] [--url https://ibx.egeuysal.com]`
 - `ibx login [--url https://ibx.egeuysal.com]`
+- `ibx login --api-key iak_... [--url https://ibx.egeuysal.com]`
+- `ibx auth login [--api-key iak_...] [--url https://ibx.egeuysal.com]`
 - `ibx a l [--api-key iak_...] [--url https://ibx.egeuysal.com]` (short)
 - `ibx auth status` / `ibx auth whoami`
 - `ibx whoami`
 - `ibx a s` (short)
 - `ibx auth logout`
+- `ibx logout`
 - `ibx a o` (short)
 - `ibx add [--input "..."] [--auto-schedule|--no-auto-schedule] [--include-links|--no-include-links] [--require-descriptions|--no-require-descriptions] [--availability-notes "..."]`
 - `ibx n [--input "..."]` (short)

@@ -60,9 +60,10 @@ const sections: CommandSection[] = [
   {
     title: "Account",
     rows: [
-      { command: "ibx a l --api-key iak_...", description: "Save API key locally" },
-      { command: "ibx a s --json", description: "Check saved auth" },
-      { command: "ibx a o", description: "Forget local auth" },
+      { command: "ibx login", description: "Open Clerk login in browser" },
+      { command: "ibx login --api-key iak_...", description: "Save API key for automation" },
+      { command: "ibx whoami --json", description: "Check saved auth" },
+      { command: "ibx logout", description: "Forget local auth" },
     ],
   },
 ];

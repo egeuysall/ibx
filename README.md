@@ -240,7 +240,7 @@ curl -fsSL https://ibx.egeuysal.com/install.sh | bash
 Auth and basic flow:
 
 ```bash
-ibx auth login
+ibx login
 ibx add "finish landing page and email two leads"
 ibx todos list --view today
 ibx td
@@ -248,13 +248,15 @@ ibx td
 
 Available commands:
 
-- `ibx auth login [--api-key iak_...] [--url https://ibx.egeuysal.com]`
 - `ibx login [--url https://ibx.egeuysal.com]`
+- `ibx login --api-key iak_... [--url https://ibx.egeuysal.com]`
+- `ibx auth login [--api-key iak_...] [--url https://ibx.egeuysal.com]`
 - `ibx a l [--api-key iak_...] [--url https://ibx.egeuysal.com]` (short)
 - `ibx auth status` / `ibx auth whoami`
 - `ibx whoami`
 - `ibx a s` (short)
 - `ibx auth logout`
+- `ibx logout`
 - `ibx a o` (short)
 - `ibx add [--input "..."]`
 - `ibx n [--input "..."]` (short)
@@ -277,7 +279,7 @@ bun run cli:build
 bun run cli:bundle
 ```
 
-`ibx auth login` opens Clerk in your browser and creates a scoped CLI API key
+`ibx login` opens Clerk in your browser and creates a scoped CLI API key
 after approval. The CLI stores credentials in macOS Keychain, Windows
 Credential Manager, or Linux Secret Service when available; otherwise it falls
 back to the local config file with `0600` permissions and prints a warning.

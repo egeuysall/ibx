@@ -77,7 +77,9 @@
   - queued publication changes replay on reconnect from the app shell and todo page,
   - queued publish operations attached to local-only todos are remapped after the todo receives its server ID.
 - Added browser-based Clerk login for the CLI:
-  - `ibx auth login` now opens a browser approval flow by default,
+  - `ibx login` / `ibx auth login` now open a browser approval flow by default,
+  - `ibx logout` and `ibx whoami` are first-class aliases for auth status/logout,
+  - CLI help now presents Clerk login first and API-key login as the automation path,
   - the browser flow uses loopback redirect, state, PKCE-style verifier/challenge, and short-lived one-time Convex auth codes,
   - the server mints the same scoped API-key format after approval so existing CLI requests and scripts still work,
   - `--api-key iak_...` remains supported for automation/manual key workflows.
