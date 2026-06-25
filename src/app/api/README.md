@@ -192,6 +192,27 @@ Read-only ICS feed URL for calendar subscription (private URL token).
 curl -sS "$IBX_BASE_URL/api/calendar/ics?token=icf_xxx"
 ```
 
+## Server-Only Bri Publishing Config
+
+`/api/publications/bri` publishes todo pages to Bri from the server. Configure:
+
+```text
+BRI_BASE_URL=https://bri.fyi
+BRI_INTERNAL_API_KEY=<fallback Bri API key>
+BRI_INTERNAL_API_KEYS_JSON={"clerk:user_abc":"iak_user_specific_key"}
+```
+
+`BRI_INTERNAL_API_KEYS_JSON` is optional. When present, IBX selects the key by the authenticated owner key. `BRI_INTERNAL_API_KEY` is used only for legacy ownerless sessions, not signed-in Clerk owners. Keep both variables server-only; never expose them with a `NEXT_PUBLIC_` prefix.
+
+Users can also save their own Bri write API key from settings. IBX verifies the key with Bri, encrypts it server-side, stores only ciphertext plus prefix/last4 metadata, and uses it before the server fallback keys. Configure one stable server-side secret for encryption:
+
+```text
+BRI_CONNECTION_ENCRYPTION_KEY=<32+ random chars>
+IBX_CONVEX_SERVER_SECRET=<32+ random chars shared with Convex>
+```
+
+If `BRI_CONNECTION_ENCRYPTION_KEY` is missing, IBX falls back to existing server secrets, but production should set it explicitly so key rotation is intentional. `IBX_CONVEX_SERVER_SECRET` must also be set in Convex env vars; it prevents direct public Convex calls from reading or mutating encrypted Bri connection rows.
+
 ## Notes
 
 - Session-only endpoints (`/api/login`, `/api/logout`, `/api/api-keys*`) are for browser cookie auth, not for bearer-key integrations.

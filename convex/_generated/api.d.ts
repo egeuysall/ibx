@@ -10,6 +10,7 @@
 
 import type * as apiKeys from "../apiKeys.js";
 import type * as attachments from "../attachments.js";
+import type * as briConnections from "../briConnections.js";
 import type * as cliAuth from "../cliAuth.js";
 import type * as memories from "../memories.js";
 import type * as publications from "../publications.js";
@@ -28,6 +29,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   apiKeys: typeof apiKeys;
   attachments: typeof attachments;
+  briConnections: typeof briConnections;
   cliAuth: typeof cliAuth;
   memories: typeof memories;
   publications: typeof publications;

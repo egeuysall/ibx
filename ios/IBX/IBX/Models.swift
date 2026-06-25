@@ -2,7 +2,6 @@ import Foundation
 import SwiftUI
 
 enum TaskFilter: String, CaseIterable, Identifiable {
-    case zen
     case today
     case upcoming
     case archive
@@ -11,7 +10,6 @@ enum TaskFilter: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .zen: "Zen"
         case .today: "Today"
         case .upcoming: "Upcoming"
         case .archive: "Archive"
@@ -20,7 +18,6 @@ enum TaskFilter: String, CaseIterable, Identifiable {
 
     var symbol: String {
         switch self {
-        case .zen: "checkmark.circle"
         case .today: "star.fill"
         case .upcoming: "calendar"
         case .archive: "archivebox"
@@ -29,7 +26,6 @@ enum TaskFilter: String, CaseIterable, Identifiable {
 
     var tint: Color {
         switch self {
-        case .zen: .blue
         case .today: .yellow
         case .upcoming: .pink
         case .archive: .green
@@ -97,6 +93,56 @@ struct TodoSection: Identifiable {
     let id: String
     let title: String
     let todos: [TodoItem]
+}
+
+struct AttachmentRecord: Identifiable, Codable, Hashable {
+    let id: String
+    let parentKind: String
+    let parentId: String
+    let fileName: String
+    let contentType: String
+    let size: Double
+    let status: String
+    let createdAt: Double
+    let updatedAt: Double
+
+    var isImage: Bool {
+        contentType.lowercased().hasPrefix("image/")
+    }
+
+    var fileLabel: String {
+        let type = isImage ? "IMG" : contentType.uppercased()
+        return "\(type) / \(Self.formatBytes(size))"
+    }
+
+    static func formatBytes(_ bytes: Double) -> String {
+        let units = ["B", "KB", "MB", "GB"]
+        var value = bytes
+        var unitIndex = 0
+        while value >= 1024, unitIndex < units.count - 1 {
+            value /= 1024
+            unitIndex += 1
+        }
+        return "\(value >= 10 || unitIndex == 0 ? String(format: "%.0f", value) : String(format: "%.1f", value)) \(units[unitIndex])"
+    }
+}
+
+struct PublicationRecord: Identifiable, Codable, Hashable {
+    let id: String
+    let sourceKind: String
+    let sourceId: String
+    let target: String
+    let remoteId: String
+    let username: String
+    let slug: String
+    let title: String
+    let url: String
+    let visibility: String
+    let status: String
+    let createdAt: Double
+    let updatedAt: Double
+    let lastPublishedAt: Double
+    let deletedAt: Double?
 }
 
 extension TodoItem {
@@ -207,10 +253,46 @@ struct OkResponse: Decodable {
     let ok: Bool
 }
 
+struct AttachmentsResponse: Decodable {
+    let attachments: [AttachmentRecord]
+}
+
+struct AttachmentCreateResponse: Decodable {
+    let ok: Bool
+    let id: String
+}
+
+struct AttachmentUploadUrlResponse: Decodable {
+    struct Limits: Decodable {
+        let maxBytes: Double
+        let allowedContentTypes: [String]
+    }
+
+    let uploadUrl: String
+    let limits: Limits
+}
+
+struct ConvexStorageUploadResponse: Decodable {
+    let storageId: String
+}
+
+struct PublicationResponse: Decodable {
+    let publication: PublicationRecord?
+}
+
+struct PublishResponse: Decodable {
+    let ok: Bool
+    let publication: PublicationRecord
+}
+
 struct APIErrorResponse: Decodable {
     let error: String?
 }
 
 extension Date {
     var millisecondsSince1970: Double { timeIntervalSince1970 * 1000 }
+
+    static func localNoon(forDateKey dateKey: String) -> Date? {
+        TodoItem.localNoon(forDateKey: dateKey)
+    }
 }

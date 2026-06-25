@@ -169,6 +169,18 @@ export default defineSchema({
       "sourceId",
     ])
     .index("by_ownerKey_and_updatedAt", ["ownerKey", "updatedAt"]),
+  briConnections: defineTable({
+    ownerKey: v.union(v.string(), v.null()),
+    encryptedApiKey: v.string(),
+    iv: v.string(),
+    authTag: v.string(),
+    keyPrefix: v.string(),
+    keyLast4: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    verifiedAt: v.number(),
+    lastError: v.union(v.string(), v.null()),
+  }).index("by_ownerKey", ["ownerKey"]),
   reminders: defineTable({
     ownerKey: v.optional(v.union(v.string(), v.null())),
     todoId: v.string(),

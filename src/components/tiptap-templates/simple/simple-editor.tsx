@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import type { JSONContent } from "@tiptap/core"
-import { EditorContent, EditorContext, useEditor } from "@tiptap/react"
+import { EditorContent, EditorContext, useEditor, type Editor } from "@tiptap/react"
 
 // --- Tiptap Core Extensions ---
 import { StarterKit } from "@tiptap/starter-kit"
@@ -85,7 +85,93 @@ type SimpleEditorProps = {
   embedded?: boolean
   autoFocus?: boolean
   onChange?: (value: SimpleEditorChange) => void
+  imageUpload?: (
+    file: File,
+    onProgress?: (event: { progress: number }) => void,
+    abortSignal?: AbortSignal
+  ) => Promise<string>
 }
+
+type SlashRange = {
+  from: number
+  to: number
+}
+
+type SlashCommand = {
+  id: string
+  label: string
+  hint: string
+  run: (editor: Editor, range: SlashRange) => void
+}
+
+const SLASH_COMMANDS: SlashCommand[] = [
+  {
+    id: "text",
+    label: "Text",
+    hint: "Plain paragraph",
+    run: (editor, range) =>
+      editor.chain().focus().deleteRange(range).setParagraph().run(),
+  },
+  {
+    id: "h1",
+    label: "Heading 1",
+    hint: "Large section title",
+    run: (editor, range) =>
+      editor
+        .chain()
+        .focus()
+        .deleteRange(range)
+        .toggleHeading({ level: 1 })
+        .run(),
+  },
+  {
+    id: "h2",
+    label: "Heading 2",
+    hint: "Medium section title",
+    run: (editor, range) =>
+      editor
+        .chain()
+        .focus()
+        .deleteRange(range)
+        .toggleHeading({ level: 2 })
+        .run(),
+  },
+  {
+    id: "bullet",
+    label: "Bulleted list",
+    hint: "Simple list",
+    run: (editor, range) =>
+      editor.chain().focus().deleteRange(range).toggleBulletList().run(),
+  },
+  {
+    id: "numbered",
+    label: "Numbered list",
+    hint: "Ordered steps",
+    run: (editor, range) =>
+      editor.chain().focus().deleteRange(range).toggleOrderedList().run(),
+  },
+  {
+    id: "todo",
+    label: "Todo list",
+    hint: "Checklist",
+    run: (editor, range) =>
+      editor.chain().focus().deleteRange(range).toggleTaskList().run(),
+  },
+  {
+    id: "quote",
+    label: "Quote",
+    hint: "Callout-style quote",
+    run: (editor, range) =>
+      editor.chain().focus().deleteRange(range).toggleBlockquote().run(),
+  },
+  {
+    id: "code",
+    label: "Code block",
+    hint: "Snippet or command",
+    run: (editor, range) =>
+      editor.chain().focus().deleteRange(range).toggleCodeBlock().run(),
+  },
+]
 
 const MainToolbarContent = ({
   onHighlighterClick,
@@ -198,13 +284,32 @@ export function SimpleEditor({
   embedded = false,
   autoFocus = false,
   onChange,
+  imageUpload = handleImageUpload,
 }: SimpleEditorProps) {
   const isMobile = useIsBreakpoint()
   const { height } = useWindowSize()
   const [mobileView, setMobileView] = useState<"main" | "highlighter" | "link">(
     "main"
   )
+  const [slashRange, setSlashRange] = useState<SlashRange | null>(null)
   const toolbarRef = useRef<HTMLDivElement>(null)
+
+  const updateSlashMenu = (nextEditor: Editor) => {
+    const { selection } = nextEditor.state
+    if (!selection.empty) {
+      setSlashRange(null)
+      return
+    }
+
+    const parentOffset = selection.$from.parentOffset
+    const textBeforeCursor = selection.$from.parent.textBetween(0, parentOffset)
+    if (textBeforeCursor.endsWith("/")) {
+      setSlashRange({ from: selection.from - 1, to: selection.from })
+      return
+    }
+
+    setSlashRange(null)
+  }
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -242,13 +347,14 @@ export function SimpleEditor({
         accept: "image/*",
         maxSize: MAX_FILE_SIZE,
         limit: 3,
-        upload: handleImageUpload,
+        upload: imageUpload,
         onError: (error) => console.error("Upload failed:", error),
       }),
     ],
     content: value ?? (embedded ? "" : demoContent),
     autofocus: autoFocus,
     onUpdate: ({ editor }) => {
+      updateSlashMenu(editor)
       onChange?.({
         text: editor.getText(),
         json: editor.getJSON(),
@@ -256,6 +362,15 @@ export function SimpleEditor({
       })
     },
   })
+
+  const runSlashCommand = (command: SlashCommand) => {
+    if (!editor || !slashRange) {
+      return
+    }
+
+    command.run(editor, slashRange)
+    setSlashRange(null)
+  }
 
   const rect = useCursorVisibility({
     editor,
@@ -280,10 +395,11 @@ export function SimpleEditor({
   }, [editor, value])
 
   return (
-    <div className="simple-editor-wrapper">
+    <div className="simple-editor-wrapper" data-embedded={embedded}>
       <EditorContext.Provider value={{ editor }}>
         <Toolbar
           ref={toolbarRef}
+          data-plain={embedded}
           style={{
             ...(isMobile
               ? {
@@ -305,6 +421,25 @@ export function SimpleEditor({
             />
           )}
         </Toolbar>
+
+        {editor && slashRange ? (
+          <div className="simple-editor-slash-menu">
+            {SLASH_COMMANDS.map((command) => (
+              <button
+                key={command.id}
+                type="button"
+                className="simple-editor-slash-item"
+                onMouseDown={(event) => {
+                  event.preventDefault()
+                  runSlashCommand(command)
+                }}
+              >
+                <span>{command.label}</span>
+                <small>{command.hint}</small>
+              </button>
+            ))}
+          </div>
+        ) : null}
 
         <EditorContent
           editor={editor}

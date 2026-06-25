@@ -520,6 +520,10 @@ export const updateSchedule = mutation({
     timeBlockStart: v.optional(nullableNumberValidator),
     recurrence: v.optional(recurrenceValidator),
     priority: v.optional(priorityValidator),
+    notes: v.optional(v.union(v.string(), v.null())),
+    notesJson: v.optional(v.union(v.string(), v.null())),
+    notesHtml: v.optional(v.union(v.string(), v.null())),
+    title: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const existingTodo = await ctx.db.get(args.todoId);
@@ -533,6 +537,10 @@ export const updateSchedule = mutation({
       timeBlockStart?: number | null;
       recurrence?: "none" | "daily" | "weekly" | "monthly";
       priority?: 1 | 2 | 3;
+      notes?: string | null;
+      notesJson?: string | null;
+      notesHtml?: string | null;
+      title?: string;
       updatedAt?: number;
       version?: number;
     } = {};
@@ -557,6 +565,22 @@ export const updateSchedule = mutation({
 
     if (args.priority !== undefined) {
       patch.priority = args.priority;
+    }
+
+    if (args.notes !== undefined) {
+      patch.notes = args.notes;
+    }
+
+    if (args.notesJson !== undefined) {
+      patch.notesJson = args.notesJson;
+    }
+
+    if (args.notesHtml !== undefined) {
+      patch.notesHtml = args.notesHtml;
+    }
+
+    if (args.title !== undefined) {
+      patch.title = args.title;
     }
 
     await ctx.db.patch(args.todoId, {

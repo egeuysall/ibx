@@ -161,13 +161,16 @@ actor OfflineTaskStorage {
     ) -> TodoItem {
         let now = Date()
         let id = "local-\(UUID().uuidString)"
+        let dueDateValue = dueDate.map {
+            Date.localNoon(forDateKey: TaskStore.dateKey($0)) ?? $0
+        }
         return TodoItem(
             id: id,
             thoughtId: id,
             title: title,
             notes: notes,
             status: .open,
-            dueDate: dueDate?.millisecondsSince1970,
+            dueDate: dueDateValue?.millisecondsSince1970,
             estimatedHours: estimatedHours,
             timeBlockStart: nil,
             priority: TodoItem.normalizedPriority(priority),

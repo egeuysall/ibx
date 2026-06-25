@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import {
+  decryptBriApiKey,
+  normalizeBriApiKey,
+  readBriBaseUrl,
+  readConvexServerSecret,
+} from "@/lib/bri-connection";
+import {
   getRouteAuth,
   getRouteAuthOwnerKey,
   unauthorizedJson,
@@ -22,6 +28,16 @@ type BriNoteResponse = {
   };
   error?: unknown;
 };
+
+class BriRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "BriRequestError";
+  }
+}
 
 function normalizeSourceKind(input: unknown) {
   return input === "todo" || input === "thought" ? input : null;
@@ -46,26 +62,100 @@ function normalizeVisibility(input: unknown) {
   return input === "private" ? "private" : "public";
 }
 
-function readBriConfig() {
-  const baseUrl = process.env.BRI_BASE_URL?.trim() || "https://bri.fyi";
-  const apiKey = process.env.BRI_INTERNAL_API_KEY?.trim();
-  if (!apiKey) {
-    return null;
+function readOwnerApiKeys() {
+  const raw = process.env.BRI_INTERNAL_API_KEYS_JSON?.trim();
+  if (!raw) {
+    return new Map<string, string>();
   }
 
   try {
-    const url = new URL(baseUrl);
-    if (url.protocol !== "https:" && process.env.NODE_ENV === "production") {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
       return null;
     }
 
-    return {
-      baseUrl: url.origin,
-      apiKey,
-    };
+    const entries: Array<[string, string]> = [];
+    for (const [rawOwnerKey, rawApiKey] of Object.entries(parsed)) {
+      const ownerKey = rawOwnerKey.trim();
+      const apiKey = typeof rawApiKey === "string" ? rawApiKey.trim() : "";
+      if (!ownerKey || !apiKey) {
+        return null;
+      }
+      entries.push([ownerKey, apiKey]);
+    }
+
+    return new Map(entries);
   } catch {
     return null;
   }
+}
+
+async function readBriConfig(ownerKey: string | null) {
+  const baseUrl = readBriBaseUrl();
+  if (!baseUrl) {
+    return {
+      error: "Bri base URL is not configured.",
+      status: 503,
+    } as const;
+  }
+
+  const serverSecret = readConvexServerSecret();
+  if (serverSecret) {
+    const connection = await convex.query(api.briConnections.get, {
+      ownerKey,
+      serverSecret,
+    });
+    if (connection) {
+      const apiKey = decryptBriApiKey(connection);
+      if (!apiKey || !normalizeBriApiKey(apiKey)) {
+        return {
+          error: "Saved Bri connection could not be decrypted. Reconnect Bri in Settings.",
+          status: 503,
+        } as const;
+      }
+
+      return { config: { baseUrl, apiKey } } as const;
+    }
+  }
+
+  if (ownerKey) {
+    const ownerApiKeys = readOwnerApiKeys();
+    if (ownerApiKeys === null) {
+      return {
+        error: "Bri owner API key configuration is invalid.",
+        status: 503,
+      } as const;
+    }
+
+    const ownerApiKey = ownerApiKeys.get(ownerKey);
+    if (ownerApiKey && normalizeBriApiKey(ownerApiKey)) {
+      return { config: { baseUrl, apiKey: ownerApiKey } } as const;
+    }
+
+    return {
+      error: serverSecret
+        ? "Connect Bri in Settings before publishing."
+        : "Bri secure connection support is not configured. Restart the app after setting IBX_CONVEX_SERVER_SECRET.",
+      status: 503,
+    } as const;
+  }
+
+  const apiKey = process.env.BRI_INTERNAL_API_KEY?.trim();
+  if (!apiKey) {
+    return {
+      error: "Bri publishing is not configured for this auth mode.",
+      status: 503,
+    } as const;
+  }
+
+  if (!normalizeBriApiKey(apiKey)) {
+    return {
+      error: "Bri internal API key is invalid.",
+      status: 503,
+    } as const;
+  }
+
+  return { config: { baseUrl, apiKey } } as const;
 }
 
 function serializePublication(publication: {
@@ -133,7 +223,7 @@ async function sendBriRequest(input: {
   if (!response.ok) {
     const message =
       typeof json.error === "string" ? json.error : "Bri publication failed.";
-    throw new Error(message);
+    throw new BriRequestError(message, response.status);
   }
 
   const remoteId = typeof json.data?.id === "string" ? json.data.id : null;
@@ -196,13 +286,15 @@ export async function POST(request: NextRequest) {
     return permissionError;
   }
 
-  const config = readBriConfig();
-  if (!config) {
+  const ownerKey = getRouteAuthOwnerKey(auth);
+  const configResult = await readBriConfig(ownerKey);
+  if ("error" in configResult) {
     return NextResponse.json(
-      { error: "Bri publishing is not configured." },
-      { status: 503 },
+      { error: configResult.error },
+      { status: configResult.status },
     );
   }
+  const { config } = configResult;
 
   const body = (await request.json().catch(() => null)) as {
     sourceKind?: unknown;
@@ -226,7 +318,7 @@ export async function POST(request: NextRequest) {
       parsedJson = null;
     }
   }
-  const markdown = tiptapJsonToMarkdown(parsedJson, fallbackNotes).slice(
+  let markdown = tiptapJsonToMarkdown(parsedJson, fallbackNotes).slice(
     0,
     MAX_MARKDOWN_LENGTH,
   );
@@ -247,13 +339,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Title is required." }, { status: 400 });
   }
   if (!markdown.trim()) {
-    return NextResponse.json(
-      { error: "Published content cannot be empty." },
-      { status: 400 },
-    );
+    markdown = `# ${title}`;
   }
 
-  const ownerKey = getRouteAuthOwnerKey(auth);
   const sourceTodo = await convex.query(api.todos.getByStringId, {
     ownerKey,
     todoId: sourceId,
@@ -269,17 +357,23 @@ export async function POST(request: NextRequest) {
   });
 
   try {
-    const briResult =
-      existing?.status === "published" && existing.remoteId
-        ? await sendBriRequest({
-            method: "PATCH",
-            path: `${config.baseUrl}/api/notes/by-id/${existing.remoteId}`,
-            apiKey: config.apiKey,
-            title,
-            content: markdown,
-            visibility,
-          })
-        : await sendBriRequest({
+    let briResult: Awaited<ReturnType<typeof sendBriRequest>>;
+    if (existing?.status === "published" && existing.remoteId) {
+      try {
+        briResult = await sendBriRequest({
+          method: "PATCH",
+          path: `${config.baseUrl}/api/notes/by-id/${existing.remoteId}`,
+          apiKey: config.apiKey,
+          title,
+          content: markdown,
+          visibility,
+        });
+      } catch (error) {
+        if (
+          error instanceof BriRequestError &&
+          (error.status === 404 || error.message.toLowerCase().includes("not found"))
+        ) {
+          briResult = await sendBriRequest({
             method: "POST",
             path: `${config.baseUrl}/api/notes`,
             apiKey: config.apiKey,
@@ -287,6 +381,20 @@ export async function POST(request: NextRequest) {
             content: markdown,
             visibility,
           });
+        } else {
+          throw error;
+        }
+      }
+    } else {
+      briResult = await sendBriRequest({
+        method: "POST",
+        path: `${config.baseUrl}/api/notes`,
+        apiKey: config.apiKey,
+        title,
+        content: markdown,
+        visibility,
+      });
+    }
 
     const url = `${config.baseUrl}/${briResult.username}/${briResult.slug}`;
     await convex.mutation(api.publications.upsertBriPublication, {
@@ -319,11 +427,15 @@ export async function POST(request: NextRequest) {
       publication: serializePublication(publication),
     });
   } catch (error) {
+    const status =
+      error instanceof BriRequestError && error.status >= 400 && error.status < 500
+        ? error.status
+        : 502;
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : "Bri publication failed.",
       },
-      { status: 502 },
+      { status },
     );
   }
 }
@@ -342,13 +454,15 @@ export async function DELETE(request: NextRequest) {
     return permissionError;
   }
 
-  const config = readBriConfig();
-  if (!config) {
+  const ownerKey = getRouteAuthOwnerKey(auth);
+  const configResult = await readBriConfig(ownerKey);
+  if ("error" in configResult) {
     return NextResponse.json(
-      { error: "Bri publishing is not configured." },
-      { status: 503 },
+      { error: configResult.error },
+      { status: configResult.status },
     );
   }
+  const { config } = configResult;
 
   const sourceKind = normalizeSourceKind(
     request.nextUrl.searchParams.get("sourceKind"),
@@ -361,7 +475,6 @@ export async function DELETE(request: NextRequest) {
     );
   }
 
-  const ownerKey = getRouteAuthOwnerKey(auth);
   const existing = await convex.query(api.publications.getBySource, {
     ownerKey,
     sourceKind,

@@ -1,6 +1,7 @@
 import type {
   AttachmentParentKind,
   AttachmentRecord,
+  BriConnectionRecord,
   GenerationPreferences,
   PublicationRecord,
   TodoItem,
@@ -366,6 +367,32 @@ export const apiClient = {
     }>("/api/calendar/feed-token", {
       method: "POST",
       body: JSON.stringify({}),
+    });
+  },
+
+  async getBriConnection() {
+    return requestJson<{
+      connection: BriConnectionRecord | null;
+      configured: boolean;
+      encryptionReady: boolean;
+    }>("/api/bri/connection", {
+      method: "GET",
+    });
+  },
+
+  async saveBriConnection(apiKey: string) {
+    return requestJson<{ ok: true; connection: BriConnectionRecord }>(
+      "/api/bri/connection",
+      {
+        method: "POST",
+        body: JSON.stringify({ apiKey }),
+      },
+    );
+  },
+
+  async deleteBriConnection() {
+    return requestJson<{ ok: true }>("/api/bri/connection", {
+      method: "DELETE",
     });
   },
 

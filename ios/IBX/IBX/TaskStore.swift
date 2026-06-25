@@ -15,9 +15,13 @@ final class TaskStore {
     var isAuthenticated = false
     var isLoading = false
     var isSavingSettings = false
-    var statusMessage: String?
     var errorMessage: String?
     var pendingOfflineCount = 0
+    var attachmentsByTodoId: [String: [AttachmentRecord]] = [:]
+    var publicationsByTodoId: [String: PublicationRecord] = [:]
+    var loadingDetailTodoIds: Set<String> = []
+    var publishingTodoIds: Set<String> = []
+    var uploadingAttachmentTodoIds: Set<String> = []
 
     private let keychain = KeychainStore()
     private static let productionBaseURL = URL(string: "https://ibx.egeuysal.com")!
@@ -27,7 +31,6 @@ final class TaskStore {
     private let autoRefreshAccount = "auto-refresh-enabled"
     private let notificationScheduler = NotificationScheduler()
     private let offlineStorage = OfflineTaskStorage()
-    @ObservationIgnored private var toastDismissTask: Task<Void, Never>?
     @ObservationIgnored var authTokenProvider: (@Sendable () async throws -> String?)?
 
     init() {
@@ -53,8 +56,6 @@ final class TaskStore {
         let openTodos = todos.filter { $0.status == .open }
         let today = openTodos.filter { $0.dueDateKey == todayKey }
         switch filter {
-        case .zen:
-            return openTodos.sortedForIBX().prefix(1).map { $0 }
         case .today:
             return today.sortedForIBX()
         case .upcoming:
@@ -188,24 +189,25 @@ final class TaskStore {
         let text = commandText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
 
-        let placeholder = OfflineTaskStorage.localTodo(title: text, source: .ai)
         commandText = ""
-        withAnimation(.smooth(duration: 0.22)) {
-            todos.append(placeholder)
-        }
-        await enqueue(.init(
-            id: UUID().uuidString,
-            kind: .generate,
-            todoId: placeholder.id,
-            text: text,
-            payload: nil,
-            createdAt: Date().millisecondsSince1970
-        ))
-        await syncNotifications()
-        showStatus("Command queued.")
 
         if isAuthenticated {
-            await syncQueuedChanges(successMessage: "ibx processed the command.")
+            await performLoading(nil) {
+                _ = try await client.generateTodos(from: text)
+                let nextTodos = try await client.listTodos()
+                todos = nextTodos
+                try await saveOfflineSnapshot(todos: nextTodos, pendingOperations: [])
+                await syncNotifications()
+            }
+        } else {
+            await enqueue(.init(
+                id: UUID().uuidString,
+                kind: .generate,
+                todoId: nil,
+                text: text,
+                payload: nil,
+                createdAt: Date().millisecondsSince1970
+            ))
         }
     }
 
@@ -236,7 +238,7 @@ final class TaskStore {
         guard let index = todos.firstIndex(where: { $0.id == todo.id }) else { return }
         todos[index].title = title
         todos[index].notes = notes
-        todos[index].dueDate = dueDate?.millisecondsSince1970
+        todos[index].dueDate = dueDate.map(Self.dateOnlyMilliseconds)
         todos[index].estimatedHours = estimatedHours
         todos[index].timeBlockStart = timeBlockStart?.millisecondsSince1970
         todos[index].recurrence = recurrence
@@ -260,6 +262,107 @@ final class TaskStore {
         showStatus("Todo saved.")
         if isAuthenticated {
             await syncQueuedChanges(successMessage: "Todo updated.")
+        }
+    }
+
+    func attachments(for todo: TodoItem) -> [AttachmentRecord] {
+        attachmentsByTodoId[todo.id] ?? []
+    }
+
+    func publication(for todo: TodoItem) -> PublicationRecord? {
+        publicationsByTodoId[todo.id]
+    }
+
+    func loadDetails(for todo: TodoItem) async {
+        guard isAuthenticated, !todo.id.hasPrefix("local-") else { return }
+        guard !loadingDetailTodoIds.contains(todo.id) else { return }
+        loadingDetailTodoIds.insert(todo.id)
+        defer { loadingDetailTodoIds.remove(todo.id) }
+
+        do {
+            async let attachments = client.listAttachments(parentId: todo.id)
+            async let publication = client.getPublication(sourceId: todo.id)
+            attachmentsByTodoId[todo.id] = try await attachments
+            if let nextPublication = try await publication, nextPublication.status == "published" {
+                publicationsByTodoId[todo.id] = nextPublication
+            } else {
+                publicationsByTodoId.removeValue(forKey: todo.id)
+            }
+        } catch {
+            showError(error.localizedDescription)
+        }
+    }
+
+    func attachmentURL(_ attachment: AttachmentRecord) -> URL {
+        client.attachmentFileURL(attachment)
+    }
+
+    func publishToBri(_ todo: TodoItem) async {
+        guard requireAuthentication() else { return }
+        guard !todo.id.hasPrefix("local-") else {
+            showError("Sync this todo before publishing to Bri.")
+            return
+        }
+        publishingTodoIds.insert(todo.id)
+        defer { publishingTodoIds.remove(todo.id) }
+
+        do {
+            let publication = try await client.publishToBri(todo: todo)
+            publicationsByTodoId[todo.id] = publication
+        } catch {
+            showError(error.localizedDescription)
+        }
+    }
+
+    func unpublishFromBri(_ todo: TodoItem) async {
+        guard requireAuthentication() else { return }
+        guard !todo.id.hasPrefix("local-") else { return }
+        publishingTodoIds.insert(todo.id)
+        defer { publishingTodoIds.remove(todo.id) }
+
+        do {
+            try await client.unpublishFromBri(sourceId: todo.id)
+            publicationsByTodoId.removeValue(forKey: todo.id)
+        } catch {
+            showError(error.localizedDescription)
+        }
+    }
+
+    func uploadAttachment(
+        for todo: TodoItem,
+        fileName: String,
+        contentType: String,
+        data: Data
+    ) async {
+        guard requireAuthentication() else { return }
+        guard !todo.id.hasPrefix("local-") else {
+            showError("Sync this todo before adding attachments.")
+            return
+        }
+        uploadingAttachmentTodoIds.insert(todo.id)
+        defer { uploadingAttachmentTodoIds.remove(todo.id) }
+
+        do {
+            _ = try await client.uploadAttachment(
+                parentId: todo.id,
+                fileName: fileName,
+                contentType: contentType,
+                data: data
+            )
+            attachmentsByTodoId[todo.id] = try await client.listAttachments(parentId: todo.id)
+        } catch {
+            showError(error.localizedDescription)
+        }
+    }
+
+    func deleteAttachment(_ attachment: AttachmentRecord) async {
+        guard requireAuthentication() else { return }
+
+        do {
+            try await client.deleteAttachment(attachment.id)
+            attachmentsByTodoId[attachment.parentId]?.removeAll { $0.id == attachment.id }
+        } catch {
+            showError(error.localizedDescription)
         }
     }
 
@@ -314,6 +417,10 @@ final class TaskStore {
         } catch {
             showError(error.localizedDescription)
         }
+    }
+
+    func clearError() {
+        errorMessage = nil
     }
 
     private var client: IBXClient {
@@ -510,31 +617,15 @@ final class TaskStore {
     }
 
     private func syncNotifications() async {
-        await notificationScheduler.sync(todos: todos, enabled: notificationsEnabled && isAuthenticated)
+        await notificationScheduler.sync(todos: todos, enabled: notificationsEnabled)
     }
 
     private func showStatus(_ message: String) {
-        statusMessage = message
         errorMessage = nil
-        scheduleToastDismiss()
     }
 
     private func showError(_ message: String) {
         errorMessage = message
-        statusMessage = nil
-        scheduleToastDismiss()
-    }
-
-    private func scheduleToastDismiss() {
-        toastDismissTask?.cancel()
-        toastDismissTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(3))
-            guard !Task.isCancelled else { return }
-            await MainActor.run {
-                self?.statusMessage = nil
-                self?.errorMessage = nil
-            }
-        }
     }
 
     private func sectionTitle(for todo: TodoItem) -> String {
@@ -562,6 +653,11 @@ final class TaskStore {
         formatter.timeZone = .current
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter.string(from: date)
+    }
+
+    nonisolated static func dateOnlyMilliseconds(_ date: Date) -> Double {
+        let key = dateKey(date)
+        return (Date.localNoon(forDateKey: key) ?? date).millisecondsSince1970
     }
 }
 

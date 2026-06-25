@@ -36,6 +36,7 @@ import {
   removeOfflineConflictRecovery,
   type OfflineConflictRecovery,
 } from "@/lib/offline/db";
+import type { BriConnectionRecord } from "@/lib/types";
 
 const FILTER_STORAGE_KEY = "ibx:active-view";
 const PROMPT_AUTOFOCUS_STORAGE_KEY = "ibx:prompt-autofocus";
@@ -178,6 +179,11 @@ export function SettingsView() {
   const [keyPermission, setKeyPermission] = useState<ApiKeyPermission>("both");
   const [createdApiKey, setCreatedApiKey] = useState<string | null>(null);
   const [apiKeys, setApiKeys] = useState<ApiKeySummary[]>([]);
+  const [briConnection, setBriConnection] = useState<BriConnectionRecord | null>(
+    null,
+  );
+  const [briApiKey, setBriApiKey] = useState("");
+  const [briEncryptionReady, setBriEncryptionReady] = useState(true);
   const [calendarFeed, setCalendarFeed] = useState<CalendarFeedSummary | null>(
     null,
   );
@@ -187,6 +193,10 @@ export function SettingsView() {
   >([]);
   const [isLoadingKeys, setIsLoadingKeys] = useState(true);
   const [isCreatingKey, startCreateKeyTransition] = useTransition();
+  const [isSavingBriConnection, startSaveBriConnectionTransition] =
+    useTransition();
+  const [isDeletingBriConnection, startDeleteBriConnectionTransition] =
+    useTransition();
   const [isRotatingCalendarFeed, startRotateCalendarFeedTransition] =
     useTransition();
   const [revokingKeyId, setRevokingKeyId] = useState<string | null>(null);
@@ -387,6 +397,7 @@ export function SettingsView() {
 
   useEffect(() => {
     void refreshApiKeys();
+    void refreshBriConnection();
     void refreshCalendarFeedStatus();
     void refreshConflictRecoveries();
   }, []);
@@ -443,6 +454,49 @@ export function SettingsView() {
     } finally {
       setRevokingKeyId(null);
     }
+  };
+
+  const refreshBriConnection = async () => {
+    try {
+      const { connection, encryptionReady } = await apiClient.getBriConnection();
+      setBriConnection(connection);
+      setBriEncryptionReady(encryptionReady);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to load Bri connection.";
+      toast.error(message);
+    }
+  };
+
+  const saveBriConnection = () => {
+    startSaveBriConnectionTransition(async () => {
+      try {
+        const { connection } = await apiClient.saveBriConnection(briApiKey);
+        setBriConnection(connection);
+        setBriApiKey("");
+        toast.message("Bri connection saved");
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Failed to save Bri connection.";
+        toast.error(message);
+      }
+    });
+  };
+
+  const deleteBriConnection = () => {
+    startDeleteBriConnectionTransition(async () => {
+      try {
+        await apiClient.deleteBriConnection();
+        setBriConnection(null);
+        toast.message("Bri connection removed");
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Failed to remove Bri connection.";
+        toast.error(message);
+      }
+    });
   };
 
   const copyCreatedApiKey = async () => {
@@ -909,6 +963,72 @@ export function SettingsView() {
                       </Button>
                     </div>
                   ))
+                )}
+              </div>
+            </section>
+
+            <section className="border-b px-4 py-4 md:px-6">
+              <p className="text-sm">bri publishing</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                connect a Bri write API key so todo pages publish to your Bri account.
+              </p>
+
+              <div className="mt-3 flex max-w-xl flex-wrap items-center gap-1.5">
+                <input
+                  value={briApiKey}
+                  onChange={(event) =>
+                    setBriApiKey(event.target.value.slice(0, 512))
+                  }
+                  className="h-7 w-64 rounded-md border border-input bg-background px-2 text-xs outline-none focus-visible:border-ring"
+                  placeholder="bri_..."
+                  type="password"
+                  autoComplete="off"
+                  disabled={!briEncryptionReady || isSavingBriConnection}
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-auto"
+                  onClick={saveBriConnection}
+                  disabled={
+                    !briEncryptionReady ||
+                    isSavingBriConnection ||
+                    briApiKey.trim().length === 0
+                  }
+                >
+                  {isSavingBriConnection ? "verifying..." : "save connection"}
+                </Button>
+              </div>
+
+              {!briEncryptionReady ? (
+                <p className="mt-2 max-w-xl text-xs text-destructive">
+                  server encryption is not configured.
+                </p>
+              ) : null}
+
+              <div className="mt-3 flex max-w-xl flex-col gap-1.5">
+                {!briConnection ? (
+                  <p className="text-xs text-muted-foreground">
+                    no Bri connection saved
+                  </p>
+                ) : (
+                  <div className="flex items-center justify-between rounded-md border border-input px-2 py-1.5 text-xs">
+                    <div className="min-w-0">
+                      <p>Bri API key</p>
+                      <p className="text-muted-foreground">
+                        {briConnection.keyPrefix}.****{briConnection.keyLast4} / write
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-auto"
+                      onClick={deleteBriConnection}
+                      disabled={isDeletingBriConnection}
+                    >
+                      {isDeletingBriConnection ? "removing..." : "remove"}
+                    </Button>
+                  </div>
                 )}
               </div>
             </section>

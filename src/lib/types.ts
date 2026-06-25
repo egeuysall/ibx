@@ -85,3 +85,13 @@ export type PublicationRecord = {
   lastPublishedAt: number;
   deletedAt: number | null;
 };
+
+export type BriConnectionRecord = {
+  id: string;
+  keyPrefix: string;
+  keyLast4: string;
+  createdAt: number;
+  updatedAt: number;
+  verifiedAt: number;
+  lastError: string | null;
+};

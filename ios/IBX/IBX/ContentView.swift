@@ -230,54 +230,50 @@ struct TaskListView: View {
                 .padding(.top, 12)
                 .padding(.bottom, 8)
 
-            if store.selectedFilter == .zen {
-                ZenView(store: store)
-            } else {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 20, pinnedViews: [.sectionHeaders]) {
-                        ForEach(store.sections) { section in
-                            Section {
-                                VStack(spacing: 0) {
-                                    ForEach(section.todos) { todo in
-                                        TaskRow(todo: todo) {
-                                            Task { await store.toggle(todo) }
-                                        } update: { title, notes, dueDate, estimatedHours, timeBlockStart, recurrence, priority in
-                                            Task {
-                                                await store.update(
-                                                    todo,
-                                                    title: title,
-                                                    notes: notes,
-                                                    dueDate: dueDate,
-                                                    estimatedHours: estimatedHours,
-                                                    timeBlockStart: timeBlockStart,
-                                                    recurrence: recurrence,
-                                                    priority: priority
-                                                )
-                                            }
-                                        } delete: {
-                                            Task { await store.delete(todo) }
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 20, pinnedViews: [.sectionHeaders]) {
+                    ForEach(store.sections) { section in
+                        Section {
+                            VStack(spacing: 0) {
+                                ForEach(section.todos) { todo in
+                                    TaskRow(store: store, todo: todo) {
+                                        Task { await store.toggle(todo) }
+                                    } update: { title, notes, dueDate, estimatedHours, timeBlockStart, recurrence, priority in
+                                        Task {
+                                            await store.update(
+                                                todo,
+                                                title: title,
+                                                notes: notes,
+                                                dueDate: dueDate,
+                                                estimatedHours: estimatedHours,
+                                                timeBlockStart: timeBlockStart,
+                                                recurrence: recurrence,
+                                                priority: priority
+                                            )
                                         }
-                                        Divider().padding(.leading, 44)
+                                    } delete: {
+                                        Task { await store.delete(todo) }
                                     }
+                                    Divider().padding(.leading, 44)
                                 }
-                                .background(.background)
-                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                            } header: {
-                                SectionHeader(title: section.title, count: section.todos.count)
                             }
-                        }
-
-                        if store.filteredTodos.isEmpty {
-                            EmptyListView(filter: store.selectedFilter, isAuthenticated: store.isAuthenticated)
-                                .frame(maxWidth: .infinity)
-                                .padding(.top, 80)
+                            .background(.background)
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        } header: {
+                            SectionHeader(title: section.title, count: section.todos.count)
                         }
                     }
-                    .padding(.horizontal, 18)
-                    .padding(.bottom, 96)
+
+                    if store.filteredTodos.isEmpty {
+                        EmptyListView(filter: store.selectedFilter, isAuthenticated: store.isAuthenticated)
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 80)
+                    }
                 }
-                .refreshable { await store.refresh() }
+                .padding(.horizontal, 18)
+                .padding(.bottom, 96)
             }
+            .refreshable { await store.refresh() }
         }
         .navigationTitle(store.selectedFilter.title)
         .toolbar {
@@ -293,11 +289,6 @@ struct TaskListView: View {
                 }
                 .accessibilityLabel("Refresh")
             }
-        }
-        .overlay(alignment: .bottom) {
-            StatusToast(message: store.errorMessage ?? store.statusMessage, isError: store.errorMessage != nil)
-                .padding(.bottom, 12)
-                .animation(.smooth(duration: 0.2), value: store.errorMessage ?? store.statusMessage)
         }
     }
 }

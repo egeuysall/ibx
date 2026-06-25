@@ -120,6 +120,25 @@
   - deleting an existing todo while offline removes it locally and queues a sync `delete` operation,
   - deleting a local-only todo removes its pending create operation instead of sending a bogus server delete,
   - accepted offline sync changes now reschedule or cancel server reminder jobs so background jobs stay aligned.
+- Added server-configurable per-owner Bri publishing credentials:
+  - `/api/publications/bri` now selects a Bri API key from `BRI_INTERNAL_API_KEYS_JSON` by IBX owner key before falling back to `BRI_INTERNAL_API_KEY`,
+  - Bri bridge credentials stay server-only and are documented in `src/app/api/README.md`,
+  - malformed per-owner key maps fail closed instead of silently routing publishes through the wrong account.
+- Completed self-service Bri connection:
+  - settings now lets a signed-in user save/remove their own Bri write API key,
+  - `/api/bri/connection` verifies the key has Bri write permission before saving it,
+  - IBX encrypts saved Bri keys server-side and stores only ciphertext plus prefix/last4 metadata,
+  - publish/unpublish uses the saved user key before explicit per-owner server bridge keys,
+  - sensitive Convex Bri connection functions require a shared server secret before returning or mutating rows,
+  - signed-in owners without an explicit saved or mapped Bri key fail closed instead of publishing through a global fallback account.
+- Tightened Bri API integration in `/Users/egeuysal/Developer/bri`:
+  - added `/api/keys/verify` so IBX can validate write-capable Bri API keys without creating notes,
+  - explicit `expiresInDays: null` now preserves no-expiry publishing instead of being normalized to 30 days.
+- Kept iOS local reminders active for signed-out/offline tasks when notification preference is enabled.
+- Fixed local slug-page Convex deployment drift:
+  - pushed the attachment, publication, and todo lookup functions to the dev Convex deployment used by `.env.local`,
+  - redeployed the same functions to production,
+  - widened `todos.updateSchedule` to accept rich note fields (`notesJson`, `notesHtml`) used by todo slug pages.
 
 ## Verification
 
@@ -128,6 +147,9 @@
 - `bun run build` passed.
 - `node cli/dist/index.js --version && node cli/dist/index.js auth --json` verified the rebuilt CLI entrypoint and auth status JSON path without printing secrets.
 - `bunx convex codegen` passed.
+- `CONVEX_DEPLOYMENT=dev:hallowed-quail-58 bunx convex dev --once` pushed local slug-page functions to the dev deployment.
+- `CONVEX_DEPLOYMENT=prod:strong-fennec-517 bunx convex deploy --yes` pushed the same function/validator fixes to production.
+- Dev Convex smoke confirmed `attachments:listAttachments`, `publications:getBySource`, `todos:getByStringId`, and `todos:updateSchedule` resolve for todo `jd78dbtg8ykcvan6ns6znsmkvs89379d`.
 - `bunx convex deploy --yes` deployed recurring-task sync parity to production.
 - `bunx convex deploy --yes` deployed the attachment index to production.
 - `bunx convex deploy --yes` deployed the reminder table/functions to production with no deleted indexes.
@@ -142,5 +164,5 @@
 
 ## Known Remaining Work
 
-- Bri publication now has a first server-side bridge, but per-user Bri account connection remains planned.
+- Bri publication supports self-service saved Bri keys plus server-configured fallback bridge keys.
 - Reminder emails require Convex `CLERK_SECRET_KEY`, `RESEND_API_KEY`, and `NOTIFICATION_EMAIL_FROM`; APNs push is still not configured.
