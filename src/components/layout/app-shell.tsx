@@ -1175,10 +1175,10 @@ export function AppShell({
       );
       const insideOverlay = Boolean(
         target.closest("[data-radix-popper-content-wrapper]") ||
-          target.closest("[data-slot='combobox-content']") ||
-          target.closest("[data-slot='popover-content']") ||
-          target.closest("[data-slot='calendar']") ||
-          target.closest("[data-slot='popover-trigger']"),
+        target.closest("[data-slot='combobox-content']") ||
+        target.closest("[data-slot='popover-content']") ||
+        target.closest("[data-slot='calendar']") ||
+        target.closest("[data-slot='popover-trigger']"),
       );
 
       if (insideActiveRow || insideOverlay) {
@@ -1436,7 +1436,9 @@ export function AppShell({
     for (const operation of attachmentOperations) {
       if (operation.kind === "delete") {
         if (operation.entityId.startsWith("local-attachment-")) {
-          await removeOfflineAttachment(operation.entityId).catch(() => undefined);
+          await removeOfflineAttachment(operation.entityId).catch(
+            () => undefined,
+          );
           await removeOfflineOperation(operation.id).catch(() => undefined);
           deleted += 1;
           continue;
@@ -1444,7 +1446,9 @@ export function AppShell({
 
         try {
           await apiClient.deleteAttachment(operation.entityId);
-          await removeOfflineAttachment(operation.entityId).catch(() => undefined);
+          await removeOfflineAttachment(operation.entityId).catch(
+            () => undefined,
+          );
           await removeOfflineOperation(operation.id).catch(() => undefined);
           deleted += 1;
         } catch (error) {
@@ -1586,7 +1590,9 @@ export function AppShell({
         };
       })
       .filter(
-        (operation): operation is {
+        (
+          operation,
+        ): operation is {
           opId: string;
           clientId: string;
           entityType: "todo";
@@ -1614,7 +1620,10 @@ export function AppShell({
           `${attachmentResult.deleted} attachment${attachmentResult.deleted === 1 ? "" : "s"} deleted`,
         );
       }
-      if (publicationResult.published > 0 || publicationResult.unpublished > 0) {
+      if (
+        publicationResult.published > 0 ||
+        publicationResult.unpublished > 0
+      ) {
         toast.message("queued Bri publication changes synced");
       }
       return;
@@ -1639,7 +1648,9 @@ export function AppShell({
             acceptedOperation.serverId,
           ).catch(() => undefined);
         }
-        await removeOfflineOperation(acceptedOperation.opId).catch(() => undefined);
+        await removeOfflineOperation(acceptedOperation.opId).catch(
+          () => undefined,
+        );
       }
     }
 
@@ -1813,7 +1824,8 @@ export function AppShell({
       }
     ).TimestampTrigger;
     const canUseNotificationTriggers =
-      canUseServiceWorkerNotifications && typeof timestampTriggerCtor === "function";
+      canUseServiceWorkerNotifications &&
+      typeof timestampTriggerCtor === "function";
 
     const showTimeBlockNotification = async (
       todo: TodoItem,
@@ -1855,16 +1867,13 @@ export function AppShell({
               return;
             }
 
-            await registration.showNotification(
-              "Upcoming ibx block",
-              {
-                tag: notificationTag,
-                body,
-                data: {
-                  url: `/?view=${targetView}`,
-                },
+            await registration.showNotification("Upcoming ibx block", {
+              tag: notificationTag,
+              body,
+              data: {
+                url: `/?view=${targetView}`,
               },
-            );
+            });
             return;
           }
         } catch {
@@ -2256,19 +2265,17 @@ export function AppShell({
     };
 
     const { dueDate: localDueDate, ...apiPatchBase } = patch;
-    const apiPatch: TodoApiPatch =
-      options.apiPatch ??
-      {
-        ...apiPatchBase,
-        ...(localDueDate !== undefined
-          ? {
-              dueDate:
-                typeof localDueDate === "number"
-                  ? getLocalDateKey(localDueDate)
-                  : localDueDate,
-            }
-          : {}),
-      };
+    const apiPatch: TodoApiPatch = options.apiPatch ?? {
+      ...apiPatchBase,
+      ...(localDueDate !== undefined
+        ? {
+            dueDate:
+              typeof localDueDate === "number"
+                ? getLocalDateKey(localDueDate)
+                : localDueDate,
+          }
+        : {}),
+    };
 
     setPendingTodoId(todo.id);
     setTodos((previousTodos) =>
@@ -2560,7 +2567,8 @@ export function AppShell({
       },
       {
         offlineMessage: "todo links updated offline",
-        onFailure: () => setEditingLinksInput(getTodoLinksInputValue(previousNotes)),
+        onFailure: () =>
+          setEditingLinksInput(getTodoLinksInputValue(previousNotes)),
       },
     );
 
@@ -2589,7 +2597,9 @@ export function AppShell({
       setTodoPendingDelete(null);
     };
     const deleteLocally = async () => {
-      setTodos((current) => current.filter((todo) => todo.id !== targetTodo.id));
+      setTodos((current) =>
+        current.filter((todo) => todo.id !== targetTodo.id),
+      );
       setHasLoadedTodos(true);
       clearDeleteUi();
       if (targetTodo.id.startsWith("local-")) {
@@ -2808,17 +2818,18 @@ export function AppShell({
         byPriority[normalizeTodoPriority(todo.priority)].push(todo);
       }
 
-      return ([1, 2, 3] as TodoPriority[])
-        .map((priority) => {
-          const sectionTodos = byPriority[priority].sort(compareByPriorityAndStartTime);
-          return {
-            key: `today-p${priority}`,
-            label: `${TODAY_PRIORITY_LABELS[priority]} // ${formatSectionHoursLabel(
-              sectionTodos,
-            )}`,
-            todos: sectionTodos,
-          };
-        });
+      return ([1, 2, 3] as TodoPriority[]).map((priority) => {
+        const sectionTodos = byPriority[priority].sort(
+          compareByPriorityAndStartTime,
+        );
+        return {
+          key: `today-p${priority}`,
+          label: `${TODAY_PRIORITY_LABELS[priority]} // ${formatSectionHoursLabel(
+            sectionTodos,
+          )}`,
+          todos: sectionTodos,
+        };
+      });
     }
 
     const sectionsByDate = new Map<
@@ -2885,7 +2896,11 @@ export function AppShell({
     const command = rawCommand.toLowerCase();
     const argument = rest.join(" ").trim();
     const addOutput = (line: string) =>
-      setTerminalOutput((current) => [...current.slice(-40), `$ ${input}`, line]);
+      setTerminalOutput((current) => [
+        ...current.slice(-40),
+        `$ ${input}`,
+        line,
+      ]);
     const todoAtIndex = (value: string) => {
       const index = Number(value) - 1;
       return Number.isInteger(index) && index >= 0 ? visibleTodos[index] : null;
@@ -2995,7 +3010,9 @@ export function AppShell({
       if (todo) {
         setTodoPendingDelete(todo);
       }
-      addOutput(todo ? `delete review opened for ${todo.title}` : "todo not found");
+      addOutput(
+        todo ? `delete review opened for ${todo.title}` : "todo not found",
+      );
       return;
     }
 
@@ -3045,11 +3062,14 @@ export function AppShell({
   const terminalLines = terminalOutput.flatMap((entry) => entry.split("\n"));
   const renderTerminalLine = (line: string, index: number) => {
     if (line.startsWith("$ ")) {
-      const [, command = "", args = ""] = line.match(/^\$ (\S+)(?:\s+(.*))?$/) ?? [];
+      const [, command = "", args = ""] =
+        line.match(/^\$ (\S+)(?:\s+(.*))?$/) ?? [];
       return (
         <div key={`${line}-${index}`} className="flex gap-2">
           <span className="text-neutral-600">$</span>
-          <span className="text-neutral-100">{command}</span>
+          <span className="text-neutral-900 dark:text-neutral-100">
+            {command}
+          </span>
           {args ? <span className="text-neutral-400">{args}</span> : null}
         </div>
       );
@@ -3066,7 +3086,9 @@ export function AppShell({
           <span className="text-neutral-300">{columns[1]}</span>
           <span>{columns[2]}</span>
           <span className="text-neutral-500">{columns[3]}</span>
-          <span className="truncate text-neutral-200">{columns.slice(4).join(" ")}</span>
+          <span className="truncate text-neutral-200">
+            {columns.slice(4).join(" ")}
+          </span>
         </div>
       );
     }
@@ -3371,7 +3393,8 @@ export function AppShell({
                         getTodoDisplayMeta(todo.notes);
                       const resourceLinks = todoMeta.links;
                       const notesDescription = todoMeta.description;
-                      const previewNotesDescription = todoMeta.descriptionPreview;
+                      const previewNotesDescription =
+                        todoMeta.descriptionPreview;
                       const isZenLeadTask =
                         zenModeEnabled &&
                         sectionIndex === 0 &&
@@ -3566,8 +3589,7 @@ export function AppShell({
                                         "h-auto w-full border-0 bg-transparent px-0 py-0 text-sm leading-5 lowercase shadow-none ring-0 focus-visible:ring-0",
                                         zenModeEnabled &&
                                           "text-[15px] leading-6 md:text-base",
-                                        isZenLeadTask &&
-                                          "text-foreground/95",
+                                        isZenLeadTask && "text-foreground/95",
                                         todo.status === "done" &&
                                           "line-through opacity-70",
                                       )}
@@ -3581,8 +3603,7 @@ export function AppShell({
                                         "truncate text-sm leading-5 lowercase sm:pr-16",
                                         zenModeEnabled &&
                                           "text-[15px] leading-6 md:text-base",
-                                        isZenLeadTask &&
-                                          "text-foreground/95",
+                                        isZenLeadTask && "text-foreground/95",
                                         todo.status === "done" &&
                                           "line-through opacity-70",
                                       )}
@@ -3593,7 +3614,9 @@ export function AppShell({
                                   {editingTodoId !== todo.id ? (
                                     <span
                                       className="shrink-0 opacity-100 sm:absolute sm:right-0 sm:top-0 sm:pointer-events-none sm:opacity-0 sm:group-hover:pointer-events-auto sm:group-hover:opacity-100 sm:group-focus-within:pointer-events-auto sm:group-focus-within:opacity-100"
-                                      style={{ transition: "opacity 180ms ease" }}
+                                      style={{
+                                        transition: "opacity 180ms ease",
+                                      }}
                                     >
                                       <Button
                                         type="button"
@@ -3622,7 +3645,8 @@ export function AppShell({
                                         ? notesDescription
                                         : previewNotesDescription}
                                     </p>
-                                    {notesDescription.length > NOTE_PREVIEW_LENGTH ? (
+                                    {notesDescription.length >
+                                    NOTE_PREVIEW_LENGTH ? (
                                       <Button
                                         variant="ghost"
                                         size="sm"
@@ -3651,7 +3675,10 @@ export function AppShell({
                                   <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
                                     <span>links:</span>
                                     {resourceLinks.map((link, index) => (
-                                      <span key={link.url} className="lowercase">
+                                      <span
+                                        key={link.url}
+                                        className="lowercase"
+                                      >
                                         <a
                                           href={link.url}
                                           target="_blank"
@@ -3666,7 +3693,9 @@ export function AppShell({
                                         >
                                           {link.label}
                                         </a>
-                                        {index < resourceLinks.length - 1 ? ", " : ""}
+                                        {index < resourceLinks.length - 1
+                                          ? ", "
+                                          : ""}
                                       </span>
                                     ))}
                                   </div>
@@ -3676,7 +3705,8 @@ export function AppShell({
                                     <p
                                       className={cn(
                                         "text-[11px] text-muted-foreground lowercase",
-                                        isZenLeadTask && "text-muted-foreground/90",
+                                        isZenLeadTask &&
+                                          "text-muted-foreground/90",
                                       )}
                                     >
                                       {displayZenTaskMeta(todo)}
@@ -3684,7 +3714,9 @@ export function AppShell({
                                   ) : (
                                     <p className="text-xs text-muted-foreground">
                                       {displayPriority(todo.priority)} /{" "}
-                                      {displayEstimatedHours(todo.estimatedHours)}{" "}
+                                      {displayEstimatedHours(
+                                        todo.estimatedHours,
+                                      )}{" "}
                                       / due: {displayDueDate(todo.dueDate)} /{" "}
                                       {displayRecurrence(todo.recurrence)} /{" "}
                                       {displayTimeBlock(
@@ -3715,238 +3747,244 @@ export function AppShell({
                                 }
                               >
                                 <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-7 w-full border-border/70 bg-background/80 px-3 text-[0.8rem] font-medium sm:w-auto"
-                                  disabled={pendingTodoId === todo.id}
-                                  render={<Link href={getTodoPageHref(todo)} />}
-                                >
-                                  edit note
-                                </Button>
-                                <Input
-                                  type="text"
-                                  value={editingLinksInput}
-                                  onChange={(event) =>
-                                    setEditingLinksInput(event.target.value)
-                                  }
-                                  placeholder="https://meet..., https://docs..."
-                                  className="h-7 w-full text-[0.8rem] sm:w-72"
-                                  disabled={pendingTodoId === todo.id}
-                                  onPointerDown={(event) =>
-                                    event.stopPropagation()
-                                  }
-                                  onClick={(event) => event.stopPropagation()}
-                                  onKeyDown={(event) => {
-                                    if (event.key === "Enter") {
-                                      event.preventDefault();
-                                      void updateTodoLinks(todo);
-                                      event.currentTarget.blur();
-                                    }
-
-                                    if (event.key === "Escape") {
-                                      event.preventDefault();
-                                      setEditingLinksInput(todoMeta.linksInputValue);
-                                      event.currentTarget.blur();
-                                    }
-                                  }}
-                                  onBlur={() => {
-                                    void updateTodoLinks(todo);
-                                  }}
-                                  aria-label="Task links"
-                                />
-                                <Popover>
-                                  <PopoverTrigger
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 w-full border-border/70 bg-background/80 px-3 text-[0.8rem] font-medium sm:w-auto"
+                                    disabled={pendingTodoId === todo.id}
                                     render={
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className={cn(
-                                          "w-full justify-start sm:w-44",
-                                          !todo.dueDate &&
-                                            "text-muted-foreground",
-                                        )}
-                                        disabled={pendingTodoId === todo.id}
-                                      />
+                                      <Link href={getTodoPageHref(todo)} />
                                     }
                                   >
-                                    {displayDateInputValue(todo.dueDate)}
-                                  </PopoverTrigger>
-                                  <PopoverContent className="w-auto gap-0 rounded-md bg-background p-1 shadow-none">
-                                    <Calendar
-                                      className="rounded-sm border border-border"
-                                      mode="single"
-                                      selected={
-                                        todo.dueDate
-                                          ? (dateKeyToLocalDate(
-                                              getTodoDateKey(todo.dueDate) ??
-                                                "",
-                                            ) ?? undefined)
-                                          : undefined
+                                    edit note
+                                  </Button>
+                                  <Input
+                                    type="text"
+                                    value={editingLinksInput}
+                                    onChange={(event) =>
+                                      setEditingLinksInput(event.target.value)
+                                    }
+                                    placeholder="https://meet..., https://docs..."
+                                    className="h-7 w-full text-[0.8rem] sm:w-72"
+                                    disabled={pendingTodoId === todo.id}
+                                    onPointerDown={(event) =>
+                                      event.stopPropagation()
+                                    }
+                                    onClick={(event) => event.stopPropagation()}
+                                    onKeyDown={(event) => {
+                                      if (event.key === "Enter") {
+                                        event.preventDefault();
+                                        void updateTodoLinks(todo);
+                                        event.currentTarget.blur();
                                       }
-                                      onSelect={(date) =>
-                                        void updateTodoDate(
+
+                                      if (event.key === "Escape") {
+                                        event.preventDefault();
+                                        setEditingLinksInput(
+                                          todoMeta.linksInputValue,
+                                        );
+                                        event.currentTarget.blur();
+                                      }
+                                    }}
+                                    onBlur={() => {
+                                      void updateTodoLinks(todo);
+                                    }}
+                                    aria-label="Task links"
+                                  />
+                                  <Popover>
+                                    <PopoverTrigger
+                                      render={
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          className={cn(
+                                            "w-full justify-start sm:w-44",
+                                            !todo.dueDate &&
+                                              "text-muted-foreground",
+                                          )}
+                                          disabled={pendingTodoId === todo.id}
+                                        />
+                                      }
+                                    >
+                                      {displayDateInputValue(todo.dueDate)}
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-auto gap-0 rounded-md bg-background p-1 shadow-none">
+                                      <Calendar
+                                        className="rounded-sm border border-border"
+                                        mode="single"
+                                        selected={
+                                          todo.dueDate
+                                            ? (dateKeyToLocalDate(
+                                                getTodoDateKey(todo.dueDate) ??
+                                                  "",
+                                              ) ?? undefined)
+                                            : undefined
+                                        }
+                                        onSelect={(date) =>
+                                          void updateTodoDate(
+                                            todo,
+                                            date
+                                              ? format(date, "yyyy-MM-dd")
+                                              : "",
+                                          )
+                                        }
+                                      />
+                                    </PopoverContent>
+                                  </Popover>
+                                  <Input
+                                    type="text"
+                                    defaultValue={formatEstimatedHoursInput(
+                                      todo.estimatedHours,
+                                    )}
+                                    placeholder="15m / 1h / 1h 30m"
+                                    className="h-7 w-full text-[0.8rem] sm:w-36"
+                                    disabled={pendingTodoId === todo.id}
+                                    onPointerDown={(event) =>
+                                      event.stopPropagation()
+                                    }
+                                    onClick={(event) => event.stopPropagation()}
+                                    onKeyDown={(event) => {
+                                      if (event.key === "Enter") {
+                                        event.preventDefault();
+                                        void updateTodoEstimatedHours(
                                           todo,
-                                          date
-                                            ? format(date, "yyyy-MM-dd")
-                                            : "",
-                                        )
+                                          event.currentTarget.value,
+                                        );
+                                        event.currentTarget.blur();
                                       }
-                                    />
-                                  </PopoverContent>
-                                </Popover>
-                                <Input
-                                  type="text"
-                                  defaultValue={formatEstimatedHoursInput(
-                                    todo.estimatedHours,
-                                  )}
-                                  placeholder="15m / 1h / 1h 30m"
-                                  className="h-7 w-full text-[0.8rem] sm:w-36"
-                                  disabled={pendingTodoId === todo.id}
-                                  onPointerDown={(event) =>
-                                    event.stopPropagation()
-                                  }
-                                  onClick={(event) => event.stopPropagation()}
-                                  onKeyDown={(event) => {
-                                    if (event.key === "Enter") {
-                                      event.preventDefault();
+                                    }}
+                                    onBlur={(event) => {
                                       void updateTodoEstimatedHours(
                                         todo,
                                         event.currentTarget.value,
                                       );
-                                      event.currentTarget.blur();
-                                    }
-                                  }}
-                                  onBlur={(event) => {
-                                    void updateTodoEstimatedHours(
-                                      todo,
-                                      event.currentTarget.value,
-                                    );
-                                  }}
-                                  aria-label="Estimated duration"
-                                />
-                                <Combobox
-                                  items={TIME_BLOCK_CLOCK_OPTIONS}
-                                  value={
-                                    TIME_BLOCK_CLOCK_OPTIONS.find(
-                                      (option) =>
-                                        option.value ===
-                                        displayTimeBlockClockValue(
-                                          todo.timeBlockStart,
-                                        ),
-                                    ) ?? null
-                                  }
-                                  itemToStringValue={(option) => option.label}
-                                  onOpenChange={(open) => {
-                                    if (open) {
-                                      scrollTimeComboboxNearCurrentTime();
-                                    }
-                                  }}
-                                  onValueChange={(option) => {
-                                    void updateTodoTimeBlockStart(
-                                      todo,
-                                      option?.value ?? "",
-                                    );
-                                  }}
-                                >
-                                  <ComboboxInput
-                                    className="w-full border border-input sm:w-36 [&_[data-slot=input-group-control]]:text-[0.8rem]"
-                                    placeholder="--:--"
-                                    disabled={pendingTodoId === todo.id}
+                                    }}
+                                    aria-label="Estimated duration"
                                   />
-                                  <ComboboxContent
-                                    className="border border-input"
-                                    data-time-block-combobox="1"
+                                  <Combobox
+                                    items={TIME_BLOCK_CLOCK_OPTIONS}
+                                    value={
+                                      TIME_BLOCK_CLOCK_OPTIONS.find(
+                                        (option) =>
+                                          option.value ===
+                                          displayTimeBlockClockValue(
+                                            todo.timeBlockStart,
+                                          ),
+                                      ) ?? null
+                                    }
+                                    itemToStringValue={(option) => option.label}
+                                    onOpenChange={(open) => {
+                                      if (open) {
+                                        scrollTimeComboboxNearCurrentTime();
+                                      }
+                                    }}
+                                    onValueChange={(option) => {
+                                      void updateTodoTimeBlockStart(
+                                        todo,
+                                        option?.value ?? "",
+                                      );
+                                    }}
                                   >
-                                    <ComboboxEmpty>no times found.</ComboboxEmpty>
-                                    <ComboboxList>
-                                      {(option) => (
-                                        <ComboboxItem
-                                          key={option.value}
-                                          value={option}
-                                        >
-                                          {option.label}
-                                        </ComboboxItem>
-                                      )}
-                                    </ComboboxList>
-                                  </ComboboxContent>
-                                </Combobox>
-                                <ToggleGroup
-                                  multiple={false}
-                                  value={[String(todo.priority)]}
-                                  onValueChange={(values) =>
-                                    void updateTodoPriority(todo, values)
-                                  }
-                                  variant="default"
-                                  size="sm"
-                                >
-                                  <ToggleGroupItem
-                                    value="1"
-                                    className="border border-input aria-pressed:border-foreground aria-pressed:bg-foreground aria-pressed:text-background data-[state=on]:border-foreground data-[state=on]:bg-foreground data-[state=on]:text-background"
+                                    <ComboboxInput
+                                      className="w-full border border-input sm:w-36 [&_[data-slot=input-group-control]]:text-[0.8rem]"
+                                      placeholder="--:--"
+                                      disabled={pendingTodoId === todo.id}
+                                    />
+                                    <ComboboxContent
+                                      className="border border-input"
+                                      data-time-block-combobox="1"
+                                    >
+                                      <ComboboxEmpty>
+                                        no times found.
+                                      </ComboboxEmpty>
+                                      <ComboboxList>
+                                        {(option) => (
+                                          <ComboboxItem
+                                            key={option.value}
+                                            value={option}
+                                          >
+                                            {option.label}
+                                          </ComboboxItem>
+                                        )}
+                                      </ComboboxList>
+                                    </ComboboxContent>
+                                  </Combobox>
+                                  <ToggleGroup
+                                    multiple={false}
+                                    value={[String(todo.priority)]}
+                                    onValueChange={(values) =>
+                                      void updateTodoPriority(todo, values)
+                                    }
+                                    variant="default"
+                                    size="sm"
                                   >
-                                    p1
-                                  </ToggleGroupItem>
-                                  <ToggleGroupItem
-                                    value="2"
-                                    className="border border-input aria-pressed:border-foreground aria-pressed:bg-foreground aria-pressed:text-background data-[state=on]:border-foreground data-[state=on]:bg-foreground data-[state=on]:text-background"
+                                    <ToggleGroupItem
+                                      value="1"
+                                      className="border border-input aria-pressed:border-foreground aria-pressed:bg-foreground aria-pressed:text-background data-[state=on]:border-foreground data-[state=on]:bg-foreground data-[state=on]:text-background"
+                                    >
+                                      p1
+                                    </ToggleGroupItem>
+                                    <ToggleGroupItem
+                                      value="2"
+                                      className="border border-input aria-pressed:border-foreground aria-pressed:bg-foreground aria-pressed:text-background data-[state=on]:border-foreground data-[state=on]:bg-foreground data-[state=on]:text-background"
+                                    >
+                                      p2
+                                    </ToggleGroupItem>
+                                    <ToggleGroupItem
+                                      value="3"
+                                      className="border border-input aria-pressed:border-foreground aria-pressed:bg-foreground aria-pressed:text-background data-[state=on]:border-foreground data-[state=on]:bg-foreground data-[state=on]:text-background"
+                                    >
+                                      p3
+                                    </ToggleGroupItem>
+                                  </ToggleGroup>
+                                  <ToggleGroup
+                                    multiple={false}
+                                    value={[todo.recurrence]}
+                                    onValueChange={(values) =>
+                                      void updateTodoRecurrence(todo, values)
+                                    }
+                                    variant="default"
+                                    size="sm"
                                   >
-                                    p2
-                                  </ToggleGroupItem>
-                                  <ToggleGroupItem
-                                    value="3"
-                                    className="border border-input aria-pressed:border-foreground aria-pressed:bg-foreground aria-pressed:text-background data-[state=on]:border-foreground data-[state=on]:bg-foreground data-[state=on]:text-background"
+                                    <ToggleGroupItem
+                                      value="none"
+                                      className="border border-input aria-pressed:border-foreground aria-pressed:bg-foreground aria-pressed:text-background data-[state=on]:border-foreground data-[state=on]:bg-foreground data-[state=on]:text-background"
+                                    >
+                                      once
+                                    </ToggleGroupItem>
+                                    <ToggleGroupItem
+                                      value="daily"
+                                      className="border border-input aria-pressed:border-foreground aria-pressed:bg-foreground aria-pressed:text-background data-[state=on]:border-foreground data-[state=on]:bg-foreground data-[state=on]:text-background"
+                                    >
+                                      daily
+                                    </ToggleGroupItem>
+                                    <ToggleGroupItem
+                                      value="weekly"
+                                      className="border border-input aria-pressed:border-foreground aria-pressed:bg-foreground aria-pressed:text-background data-[state=on]:border-foreground data-[state=on]:bg-foreground data-[state=on]:text-background"
+                                    >
+                                      weekly
+                                    </ToggleGroupItem>
+                                    <ToggleGroupItem
+                                      value="monthly"
+                                      className="border border-input aria-pressed:border-foreground aria-pressed:bg-foreground aria-pressed:text-background data-[state=on]:border-foreground data-[state=on]:bg-foreground data-[state=on]:text-background"
+                                    >
+                                      monthly
+                                    </ToggleGroupItem>
+                                  </ToggleGroup>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    disabled={pendingTodoId === todo.id}
+                                    onClick={() => {
+                                      setTodoPendingDelete(todo);
+                                    }}
+                                    onPointerDown={(event) =>
+                                      event.stopPropagation()
+                                    }
                                   >
-                                    p3
-                                  </ToggleGroupItem>
-                                </ToggleGroup>
-                                <ToggleGroup
-                                  multiple={false}
-                                  value={[todo.recurrence]}
-                                  onValueChange={(values) =>
-                                    void updateTodoRecurrence(todo, values)
-                                  }
-                                  variant="default"
-                                  size="sm"
-                                >
-                                  <ToggleGroupItem
-                                    value="none"
-                                    className="border border-input aria-pressed:border-foreground aria-pressed:bg-foreground aria-pressed:text-background data-[state=on]:border-foreground data-[state=on]:bg-foreground data-[state=on]:text-background"
-                                  >
-                                    once
-                                  </ToggleGroupItem>
-                                  <ToggleGroupItem
-                                    value="daily"
-                                    className="border border-input aria-pressed:border-foreground aria-pressed:bg-foreground aria-pressed:text-background data-[state=on]:border-foreground data-[state=on]:bg-foreground data-[state=on]:text-background"
-                                  >
-                                    daily
-                                  </ToggleGroupItem>
-                                  <ToggleGroupItem
-                                    value="weekly"
-                                    className="border border-input aria-pressed:border-foreground aria-pressed:bg-foreground aria-pressed:text-background data-[state=on]:border-foreground data-[state=on]:bg-foreground data-[state=on]:text-background"
-                                  >
-                                    weekly
-                                  </ToggleGroupItem>
-                                  <ToggleGroupItem
-                                    value="monthly"
-                                    className="border border-input aria-pressed:border-foreground aria-pressed:bg-foreground aria-pressed:text-background data-[state=on]:border-foreground data-[state=on]:bg-foreground data-[state=on]:text-background"
-                                  >
-                                    monthly
-                                  </ToggleGroupItem>
-                                </ToggleGroup>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  disabled={pendingTodoId === todo.id}
-                                  onClick={() => {
-                                    setTodoPendingDelete(todo);
-                                  }}
-                                  onPointerDown={(event) =>
-                                    event.stopPropagation()
-                                  }
-                                >
-                                  delete
-                                </Button>
+                                    delete
+                                  </Button>
                                 </div>
                               </div>
                             ) : null}
@@ -4051,7 +4089,7 @@ export function AppShell({
 
         {isTerminalRendered ? (
           <div
-            className="fixed inset-x-0 bottom-0 z-50 border-t border-neutral-900 bg-black shadow-2xl will-change-transform"
+            className="fixed inset-x-0 bottom-0 z-50 border-t dark:border-neutral-800 bg-white dark:bg-black will-change-transform"
             style={{
               opacity: isTerminalOpen ? 1 : 0,
               transform: isTerminalOpen
@@ -4065,7 +4103,10 @@ export function AppShell({
           >
             <div className="flex h-[44vh] min-h-72 w-full flex-col px-4 py-3 md:px-6">
               <div className="mb-2 flex items-center justify-between gap-3 font-mono text-[0.72rem] text-neutral-500">
-                <span>ibx terminal // help, pwd, ls, cd, search, create, open, done, delete</span>
+                <span>
+                  ibx terminal // help, pwd, ls, cd, search, create, open, done,
+                  delete
+                </span>
                 <button
                   type="button"
                   className="text-neutral-500 transition-colors hover:text-neutral-100"
@@ -4074,28 +4115,28 @@ export function AppShell({
                   close
                 </button>
               </div>
-              <div className="min-h-0 flex-1 overflow-auto font-mono text-xs leading-5 whitespace-pre-wrap text-neutral-100">
+              <div className="min-h-0 flex-1 overflow-auto font-mono text-xs leading-5 whitespace-pre-wrap text-neutral-900 dark:text-neutral-100">
                 {terminalLines.map(renderTerminalLine)}
                 <div className="flex items-center gap-2">
                   <span className="text-neutral-500">$</span>
-                <Input
-                  value={terminalInput}
-                  onChange={(event) => setTerminalInput(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      void runTerminalCommand();
-                    }
+                  <Input
+                    value={terminalInput}
+                    onChange={(event) => setTerminalInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        void runTerminalCommand();
+                      }
 
-                    if (event.key === "Escape") {
-                      event.preventDefault();
-                      closeTerminal();
-                    }
-                  }}
-                  placeholder="ls"
-                  autoFocus
-                    className="h-5 flex-1 border-0 bg-transparent px-0 py-0 font-mono text-xs text-neutral-100 shadow-none placeholder:text-neutral-600 focus-visible:ring-0"
-                />
+                      if (event.key === "Escape") {
+                        event.preventDefault();
+                        closeTerminal();
+                      }
+                    }}
+                    placeholder="ls"
+                    autoFocus
+                    className="h-5 flex-1 border-0 bg-transparent px-0 py-0 font-mono text-xs text-neutral-900 dark:text-neutral-100 shadow-none placeholder:text-neutral-500 dark:placeholder:text-neutral-600 focus-visible:ring-0"
+                  />
                 </div>
               </div>
             </div>
