@@ -35,6 +35,13 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
@@ -1008,6 +1015,13 @@ export function AppShell({
   const [zenModeEnabled, setZenModeEnabled] = useState(false);
   const pushUpdatesEnabled = true;
   const [promptInput, setPromptInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isCommandCenterOpen, setIsCommandCenterOpen] = useState(false);
+  const [isTerminalOpen, setIsTerminalOpen] = useState(false);
+  const [terminalInput, setTerminalInput] = useState("");
+  const [terminalOutput, setTerminalOutput] = useState<string[]>([
+    "ibx terminal ready. try: list, search bread, create call mum, done 1, delete 1, open 1",
+  ]);
   const [promptAutofocus, setPromptAutofocus] = useState(false);
   const [hasHydratedPreferences, setHasHydratedPreferences] = useState(false);
   const [todos, setTodos] = useState<TodoItem[]>([]);
@@ -1028,6 +1042,8 @@ export function AppShell({
   const [todoPendingDelete, setTodoPendingDelete] = useState<TodoItem | null>(
     null,
   );
+  const [isArchiveCleanupOpen, setIsArchiveCleanupOpen] = useState(false);
+  const [draggedTodoId, setDraggedTodoId] = useState<string | null>(null);
   const [holdProgress, setHoldProgress] = useState(0);
   const [expandedNoteIds, setExpandedNoteIds] = useState<
     Record<string, boolean>
@@ -2112,10 +2128,10 @@ export function AppShell({
     }
   };
 
-  const handleAddTodo = async () => {
-    const cleanInput = promptInput.trim();
+  const createTodoFromTitle = async (title: string) => {
+    const cleanInput = title.trim();
     if (!cleanInput) {
-      return;
+      return false;
     }
 
     setIsAddingTodo(true);
@@ -2125,29 +2141,35 @@ export function AppShell({
         setTodos((previousTodos) => sortTodos([...previousTodos, localTodo]));
         setHasLoadedTodos(true);
         await upsertOfflineTodoCreateOperation(localTodo);
-        setPromptInput("");
         toast.message("todo saved offline");
-        return;
+        return true;
       }
 
       await apiClient.createManualTodo(cleanInput);
-      setPromptInput("");
       toast.message("todo added");
       await refreshTodos();
+      return true;
     } catch (error) {
       if (error instanceof ApiError && error.isNetworkError) {
         const localTodo = createLocalManualTodo(cleanInput);
         setTodos((previousTodos) => sortTodos([...previousTodos, localTodo]));
         setHasLoadedTodos(true);
         await upsertOfflineTodoCreateOperation(localTodo);
-        setPromptInput("");
         toast.message("todo saved offline");
-        return;
+        return true;
       }
 
       toastApiError(error);
+      return false;
     } finally {
       setIsAddingTodo(false);
+    }
+  };
+
+  const handleAddTodo = async () => {
+    const saved = await createTodoFromTitle(promptInput);
+    if (saved) {
+      setPromptInput("");
     }
   };
 
@@ -2555,6 +2577,72 @@ export function AppShell({
     }
   };
 
+  const cleanupArchivedTodos = async () => {
+    const archivedTodos = todos.filter((todo) => todo.status === "done");
+    if (archivedTodos.length === 0) {
+      setIsArchiveCleanupOpen(false);
+      return;
+    }
+
+    const previousTodos = todos;
+    setTodos((current) => current.filter((todo) => todo.status !== "done"));
+    setIsArchiveCleanupOpen(false);
+
+    try {
+      for (const todo of archivedTodos) {
+        if (!isOnline || todo.id.startsWith("local-")) {
+          await enqueueOfflineOperation({
+            entity: "todo",
+            entityId: todo.id,
+            kind: "delete",
+            payload: {},
+          });
+        } else {
+          await apiClient.deleteTodo(todo.id);
+        }
+      }
+      toast.message("archive cleaned");
+      if (isOnline) {
+        await refreshTodos();
+      }
+    } catch (error) {
+      setTodos(previousTodos);
+      toastApiError(error);
+    }
+  };
+
+  const moveTodoToSection = async (todoId: string, sectionKey: string) => {
+    const targetTodo = todos.find((todo) => todo.id === todoId);
+    if (!targetTodo) {
+      return;
+    }
+
+    if (sectionKey.startsWith("today-p")) {
+      const priority = Number(sectionKey.replace("today-p", ""));
+      if (priority === 1 || priority === 2 || priority === 3) {
+        await saveTodoPatch(
+          targetTodo,
+          {
+            priority: priority as TodoPriority,
+            dueDate: dateKeyToTimestamp(getLocalDateKey(Date.now())),
+          },
+          {
+            apiPatch: {
+              priority: priority as TodoPriority,
+              dueDate: getLocalDateKey(Date.now()),
+            },
+            offlineMessage: "todo moved offline",
+          },
+        );
+      }
+      return;
+    }
+
+    if (ISO_DATE_REGEX.test(sectionKey)) {
+      await updateTodoDate(targetTodo, sectionKey);
+    }
+  };
+
   const groupedTodos = useMemo(() => {
     const todayDateKey = getLocalDateKey(Date.now());
     const openTodos = todos.filter((todo) => todo.status === "open");
@@ -2618,6 +2706,26 @@ export function AppShell({
     return groupedTodos.today;
   }, [filter, groupedTodos, zenNowTodo]);
 
+  const visibleTodos = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) {
+      return filteredTodos;
+    }
+
+    return filteredTodos.filter((todo) => {
+      const haystack = [
+        todo.title,
+        todo.notes ?? "",
+        displayPriority(todo.priority),
+        displayRecurrence(todo.recurrence),
+        displayDueDate(todo.dueDate),
+      ]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(query);
+    });
+  }, [filteredTodos, searchQuery]);
+
   const todoSections = useMemo<TodoSection[]>(() => {
     if (filter === "zen") {
       return [];
@@ -2629,7 +2737,7 @@ export function AppShell({
         2: [],
         3: [],
       };
-      for (const todo of filteredTodos) {
+      for (const todo of visibleTodos) {
         byPriority[normalizeTodoPriority(todo.priority)].push(todo);
       }
 
@@ -2643,8 +2751,7 @@ export function AppShell({
             )}`,
             todos: sectionTodos,
           };
-        })
-        .filter((section) => section.todos.length > 0);
+        });
     }
 
     const sectionsByDate = new Map<
@@ -2652,7 +2759,7 @@ export function AppShell({
       { dateKey: string | null; todos: TodoItem[] }
     >();
 
-    for (const todo of filteredTodos) {
+    for (const todo of visibleTodos) {
       const dateKey = getTodoDateKey(todo.dueDate);
       const mapKey = dateKey === null ? "no-date" : String(dateKey);
       const existingSection = sectionsByDate.get(mapKey);
@@ -2691,15 +2798,100 @@ export function AppShell({
         label: `${formatSectionDateLabel(section.dateKey, filter, Date.now())} // ${formatSectionHoursLabel(section.todos)}`,
         todos: section.todos.sort(compareByPriorityAndStartTime),
       }));
-  }, [filter, filteredTodos]);
+  }, [filter, visibleTodos]);
 
   const todoDisplayMetaById = useMemo(() => {
     const map = new Map<string, TodoDisplayMeta>();
-    for (const todo of filteredTodos) {
+    for (const todo of visibleTodos) {
       map.set(todo.id, getTodoDisplayMeta(todo.notes));
     }
     return map;
-  }, [filteredTodos]);
+  }, [visibleTodos]);
+
+  const runTerminalCommand = async () => {
+    const input = terminalInput.trim();
+    if (!input) {
+      return;
+    }
+
+    const [command = "", ...rest] = input.split(/\s+/);
+    const argument = rest.join(" ").trim();
+    const addOutput = (line: string) =>
+      setTerminalOutput((current) => [...current.slice(-12), `> ${input}`, line]);
+    const todoAtIndex = (value: string) => {
+      const index = Number(value) - 1;
+      return Number.isInteger(index) && index >= 0 ? visibleTodos[index] : null;
+    };
+
+    setTerminalInput("");
+
+    if (command === "list") {
+      addOutput(
+        visibleTodos
+          .slice(0, 8)
+          .map((todo, index) => `${index + 1}. ${todo.title}`)
+          .join("\n") || "no todos",
+      );
+      return;
+    }
+
+    if (command === "search") {
+      setSearchQuery(argument);
+      addOutput(`searching "${argument}"`);
+      return;
+    }
+
+    if (command === "create") {
+      const saved = await createTodoFromTitle(argument);
+      addOutput(saved ? `created "${argument}"` : "create failed");
+      return;
+    }
+
+    if (command === "open") {
+      const todo = todoAtIndex(argument);
+      if (todo) {
+        router.push(getTodoPageHref(todo));
+      }
+      addOutput(todo ? `opening ${todo.title}` : "todo not found");
+      return;
+    }
+
+    if (command === "done") {
+      const todo = todoAtIndex(argument);
+      if (todo) {
+        await updateTodoStatus(todo, true);
+      }
+      addOutput(todo ? `completed ${todo.title}` : "todo not found");
+      return;
+    }
+
+    if (command === "delete") {
+      const todo = todoAtIndex(argument);
+      if (todo) {
+        setTodoPendingDelete(todo);
+      }
+      addOutput(todo ? `delete review opened for ${todo.title}` : "todo not found");
+      return;
+    }
+
+    addOutput("unknown command");
+  };
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setIsCommandCenterOpen(true);
+      }
+      if ((event.metaKey || event.ctrlKey) && event.key === "`") {
+        event.preventDefault();
+        setIsTerminalOpen(true);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   const showTaskDetails = true;
   const showZenView = filter === "zen";
@@ -2867,6 +3059,29 @@ export function AppShell({
               >
                 {isGenerating || isProcessingQueue ? "running..." : "run"}
               </Button>
+              <Input
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="search"
+                className="hidden h-8 w-40 border-0 bg-transparent px-1 text-[0.8rem] shadow-none focus-visible:ring-0 sm:block"
+                aria-label="Search todos"
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => setIsCommandCenterOpen(true)}
+              >
+                cmd
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => setIsTerminalOpen(true)}
+              >
+                term
+              </Button>
             </div>
           </header>
 
@@ -2906,12 +3121,26 @@ export function AppShell({
                   no todo ready for now.
                 </p>
               )
-            ) : filteredTodos.length === 0 ? (
+            ) : visibleTodos.length === 0 ? (
               <p className="px-4 text-sm text-muted-foreground md:px-6">
-                no todos in this view yet.
+                {searchQuery.trim()
+                  ? "no todos match that search."
+                  : "no todos in this view yet."}
               </p>
             ) : (
               <div className="flex flex-col gap-4">
+                {filter === "archive" && groupedTodos.archive.length > 0 ? (
+                  <div className="px-4 md:px-6">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setIsArchiveCleanupOpen(true)}
+                    >
+                      clean archive
+                    </Button>
+                  </div>
+                ) : null}
                 {todoSections.map((section, sectionIndex) => (
                   <section
                     key={section.key}
@@ -2919,6 +3148,18 @@ export function AppShell({
                       "flex flex-col gap-0",
                       section.label ? "pt-2" : "",
                     )}
+                    onDragOver={(event) => {
+                      if (draggedTodoId) {
+                        event.preventDefault();
+                      }
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      if (draggedTodoId) {
+                        void moveTodoToSection(draggedTodoId, section.key);
+                        setDraggedTodoId(null);
+                      }
+                    }}
                   >
                     {section.label ? (
                       <p className="px-4 pb-2 text-xs text-muted-foreground md:px-6">
@@ -2942,8 +3183,9 @@ export function AppShell({
                         <article
                           key={todo.id}
                           data-todo-article-id={todo.id}
+                          draggable={pendingTodoId !== todo.id}
                           className={cn(
-                            "relative cursor-pointer overflow-hidden border-b select-none [content-visibility:auto] [contain-intrinsic-size:0_56px]",
+                            "group relative cursor-pointer overflow-hidden border-b select-none [content-visibility:auto] [contain-intrinsic-size:0_56px]",
                             index === 0 && "border-t",
                             zenModeEnabled &&
                               "transition-colors [contain-intrinsic-size:0_64px]",
@@ -2962,14 +3204,24 @@ export function AppShell({
                               return;
                             }
 
-                            router.push(getTodoPageHref(todo));
+                            setEditingTodoId((current) =>
+                              current === todo.id ? null : todo.id,
+                            );
+                            setEditingTitleInput(todo.title);
+                            setEditingLinksInput(todoMeta.linksInputValue);
                           }}
+                          onDragStart={(event) => {
+                            setDraggedTodoId(todo.id);
+                            event.dataTransfer.effectAllowed = "move";
+                            event.dataTransfer.setData("text/plain", todo.id);
+                          }}
+                          onDragEnd={() => setDraggedTodoId(null)}
                           onPointerDown={(event) => {
                             if (
                               pendingTodoId === todo.id ||
                               isInteractiveTarget(event.target) ||
-                              (event.pointerType === "mouse" &&
-                                event.button !== 0)
+                              draggedTodoId === todo.id ||
+                              event.pointerType === "mouse"
                             ) {
                               return;
                             }
@@ -3116,7 +3368,7 @@ export function AppShell({
                                   ) : (
                                     <p
                                       className={cn(
-                                        "text-sm lowercase",
+                                        "truncate text-sm lowercase",
                                         zenModeEnabled &&
                                           "text-[15px] leading-6 md:text-base",
                                         isZenLeadTask &&
@@ -3128,6 +3380,28 @@ export function AppShell({
                                       {todo.title}
                                     </p>
                                   )}
+                                  {editingTodoId !== todo.id ? (
+                                    <span
+                                      className="shrink-0 opacity-100 sm:pointer-events-none sm:opacity-0 sm:group-hover:pointer-events-auto sm:group-hover:opacity-100 sm:group-focus-within:pointer-events-auto sm:group-focus-within:opacity-100"
+                                      style={{ transition: "opacity 180ms ease" }}
+                                    >
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-8 border-border/70 bg-background/80 px-3 text-xs font-medium shadow-sm hover:border-foreground/30 hover:bg-muted hover:text-foreground"
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          router.push(getTodoPageHref(todo));
+                                        }}
+                                        onPointerDown={(event) =>
+                                          event.stopPropagation()
+                                        }
+                                      >
+                                        edit
+                                      </Button>
+                                    </span>
+                                  ) : null}
                                 </div>
                                 {showTaskDetails &&
                                 !zenModeEnabled &&
@@ -3230,29 +3504,17 @@ export function AppShell({
                                   event.stopPropagation()
                                 }
                               >
-                                <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-background/80 p-2">
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    render={<Link href={getTodoPageHref(todo)} />}
-                                  >
-                                    open page
-                                  </Button>
-                                  <span className="text-xs text-muted-foreground">
-                                    notes and attachments live on the todo page
-                                  </span>
-                                </div>
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    disabled={pendingTodoId === todo.id}
-                                    render={<Link href={getTodoPageHref(todo)} />}
-                                  >
-                                    edit note
-                                  </Button>
-                                </div>
                                 <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 w-full border-border/70 bg-background/80 px-3 text-[0.8rem] font-medium sm:w-auto"
+                                  disabled={pendingTodoId === todo.id}
+                                  render={<Link href={getTodoPageHref(todo)} />}
+                                >
+                                  edit note
+                                </Button>
                                 <Input
                                   type="text"
                                   value={editingLinksInput}
@@ -3488,6 +3750,135 @@ export function AppShell({
             )}
           </main>
         </SidebarInset>
+        <Dialog
+          open={isCommandCenterOpen}
+          onOpenChange={setIsCommandCenterOpen}
+        >
+          <DialogContent className="max-w-md gap-3">
+            <DialogHeader>
+              <DialogTitle>command center</DialogTitle>
+              <DialogDescription>
+                Run common IBX actions without leaving the current view.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-2">
+              <Input
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="search todos"
+                autoFocus
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setIsCommandCenterOpen(false);
+                    promptInputRef.current?.focus();
+                  }}
+                >
+                  create todo
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setActiveFilter("archive")}
+                >
+                  open archive
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsArchiveCleanupOpen(true)}
+                >
+                  clean archive
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsTerminalOpen(true)}
+                >
+                  terminal mode
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    const firstTodo = visibleTodos[0];
+                    if (firstTodo) {
+                      setEditingTodoId(firstTodo.id);
+                      setEditingTitleInput(firstTodo.title);
+                      setEditingLinksInput(
+                        getTodoDisplayMeta(firstTodo.notes).linksInputValue,
+                      );
+                    }
+                  }}
+                >
+                  edit first
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  render={<Link href="/settings" prefetch={false} />}
+                >
+                  settings
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={isTerminalOpen} onOpenChange={setIsTerminalOpen}>
+          <DialogContent className="max-w-2xl gap-3">
+            <DialogHeader>
+              <DialogTitle>terminal mode</DialogTitle>
+              <DialogDescription>
+                Commands: create, list, open, done, delete, search.
+              </DialogDescription>
+            </DialogHeader>
+            <pre className="max-h-72 overflow-auto rounded-md border border-border bg-muted/30 p-3 text-xs whitespace-pre-wrap">
+              {terminalOutput.join("\n")}
+            </pre>
+            <Input
+              value={terminalInput}
+              onChange={(event) => setTerminalInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  void runTerminalCommand();
+                }
+              }}
+              placeholder="list"
+              autoFocus
+            />
+          </DialogContent>
+        </Dialog>
+
+        <AlertDialog
+          open={isArchiveCleanupOpen}
+          onOpenChange={setIsArchiveCleanupOpen}
+        >
+          <AlertDialogContent size="sm">
+            <AlertDialogHeader>
+              <AlertDialogTitle>clean archive?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This permanently deletes completed todos only. Active todos are
+                not touched.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  void cleanupArchivedTodos();
+                }}
+              >
+                clean archive
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
         <AlertDialog
           open={todoPendingDelete !== null}
           onOpenChange={(nextOpen) => {

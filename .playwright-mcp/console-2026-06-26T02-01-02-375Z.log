@@ -1,0 +1,115 @@
+[      87ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:2431
+[      99ms] [LOG] [HMR] connected @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:2431
+[     326ms] [WARNING] Clerk: Clerk has been loaded with development keys. Development instances have strict usage limits and should not be used when deploying your application to production. Learn more: https://clerk.com/docs/deployments/overview @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:2431
+[    1233ms] [ERROR] In HTML, %s cannot be a descendant of <%s>.
+This will cause a hydration error.%s <figure> p 
+
+  ...
+    <LoadingBoundary name="code/" loading={[...]}>
+      <Suspense name="code/" fallback={<Fragment>}>
+        <HTTPAccessFallbackBoundary notFound={undefined} forbidden={undefined} unauthorized={undefined}>
+          <RedirectBoundary>
+            <RedirectErrorBoundary router={{...}}>
+              <InnerLayoutRouter url="/egeuysall..." tree={[...]} params={{username:"...", ...}} ...>
+                <SegmentViewNode type="page" pagePath="[username]...">
+                  <SegmentTrieNode>
+                  <NotePage>
+                    <section className="w-full ani..." style={{--delay:"40ms"}}>
+                      <article className="mx-auto w-...">
+                        <div>
+                        <p>
+                        <div className="px-0 py-6 ...">
+                          <div className="prose pros...">
+                            <CodeBlock>
+>                           <p>
+                              <img>
+                                <MarkdownImage src="data:image..." alt="icon.png">
+>                                 <figure
+>                                   className="not-prose my-6 max-w-full overflow-hidden rounded-md border border-neut..."
+>                                 >
+                            ...
+                    ...
+                ...
+              ...
+ @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:3272
+[    1234ms] [ERROR] <%s> cannot contain a nested %s.
+See this log for the ancestor stack trace. p <figure> @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:3272
+[   37243ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:2431
+[   37626ms] [ERROR] %o
+
+%s TypeError: Failed to construct 'Image': Please use the 'new' operator, this DOM object constructor cannot be called as a function.
+    at Object.react_stack_bottom_frame (http://localhost:3001/_next/static/chunks/node_modules_next_dist_compiled_react-dom_058-ah~._.js:15037:24)
+    at renderWithHooks (http://localhost:3001/_next/static/chunks/node_modules_next_dist_compiled_react-dom_058-ah~._.js:4620:24)
+    at updateFunctionComponent (http://localhost:3001/_next/static/chunks/node_modules_next_dist_compiled_react-dom_058-ah~._.js:6081:21)
+    at beginWork (http://localhost:3001/_next/static/chunks/node_modules_next_dist_compiled_react-dom_058-ah~._.js:6691:24)
+    at runWithFiberInDEV (http://localhost:3001/_next/static/chunks/node_modules_next_dist_compiled_react-dom_058-ah~._.js:965:74)
+    at performUnitOfWork (http://localhost:3001/_next/static/chunks/node_modules_next_dist_compiled_react-dom_058-ah~._.js:9555:97)
+    at workLoopSync (http://localhost:3001/_next/static/chunks/node_modules_next_dist_compiled_react-dom_058-ah~._.js:9449:40)
+    at renderRootSync (http://localhost:3001/_next/static/chunks/node_modules_next_dist_compiled_react-dom_058-ah~._.js:9433:13)
+    at performWorkOnRoot (http://localhost:3001/_next/static/chunks/node_modules_next_dist_compiled_react-dom_058-ah~._.js:9098:47)
+    at performSyncWorkOnRoot (http://localhost:3001/_next/static/chunks/node_modules_next_dist_compiled_react-dom_058-ah~._.js:10263:9)
+    at flushSyncWorkAcrossRoots_impl (http://localhost:3001/_next/static/chunks/node_modules_next_dist_compiled_react-dom_058-ah~._.js:10179:316)
+    at flushSyncWork$1 (http://localhost:3001/_next/static/chunks/node_modules_next_dist_compiled_react-dom_058-ah~._.js:9230:86)
+    at Object.scheduleRefresh (http://localhost:3001/_next/static/chunks/node_modules_next_dist_compiled_react-dom_058-ah~._.js:299:13)
+    at http://localhost:3001/_next/static/chunks/node_modules_next_dist_compiled_0rpq4pf._.js:391:33
+    at Set.forEach (<anonymous>)
+    at Object.performReactRefresh (http://localhost:3001/_next/static/chunks/node_modules_next_dist_compiled_0rpq4pf._.js:384:38)
+    at applyUpdate (http://localhost:3001/_next/static/chunks/node_modules_next_dist_compiled_0rpq4pf._.js:878:31)
+    at http://localhost:3001/_next/static/chunks/node_modules_next_dist_compiled_0rpq4pf._.js:886:13 The above error occurred in the <Image> component. It was handled by the <ErrorBoundaryHandler> error boundary. @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_client_0fhqo1d._.js:1998
+[   37638ms] [LOG] [Fast Refresh] done in 467ms @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:2431
+[   37759ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:2431
+[   38734ms] [LOG] [Fast Refresh] done in 1077ms @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:2431
+[   45478ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:2431
+[   45514ms] [LOG] [Fast Refresh] done in 73ms @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:2431
+[   86389ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:2431
+[   86426ms] [LOG] [Fast Refresh] done in 74ms @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:2431
+[   99686ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:2431
+[   99722ms] [LOG] [Fast Refresh] done in 81ms @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:2431
+[  140797ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:2431
+[  140870ms] [LOG] [Fast Refresh] done in 75ms @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:2431
+[  144145ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:2431
+[  144197ms] [LOG] [Fast Refresh] done in 89ms @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:2431
+[  147409ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:2431
+[  147410ms] [ERROR] In HTML, %s cannot be a descendant of <%s>.
+This will cause a hydration error.%s <div> p 
+
+  ...
+    <LoadingBoundary name="code/" loading={[...]}>
+      <Suspense name="code/" fallback={<Fragment>}>
+        <HTTPAccessFallbackBoundary notFound={undefined} forbidden={undefined} unauthorized={undefined}>
+          <RedirectBoundary>
+            <RedirectErrorBoundary router={{...}}>
+              <InnerLayoutRouter url="/egeuysall..." tree={[...]} params={{username:"...", ...}} ...>
+                <SegmentViewNode type="page" pagePath="[username]...">
+                  <SegmentTrieNode>
+                  <NotePage>
+                    <section className="w-full ani..." style={{--delay:"40ms"}}>
+                      <article className="mx-auto w-...">
+                        <div>
+                        <p>
+                        <div className="px-0 py-6 ...">
+                          <div className="prose pros...">
+                            <CodeBlock>
+>                           <p>
+                              <img>
+                                <MarkdownImage src="data:image..." alt="icon.png">
+                                  <figure className="not-prose ...">
+>                                   <div className="relative h-full w-full overflow-hidden rounded-md">
+                            ...
+                    ...
+                ...
+              ...
+ @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:3272
+[  147410ms] [ERROR] <%s> cannot contain a nested %s.
+See this log for the ancestor stack trace. p <div> @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:3272
+[  147615ms] [LOG] [Fast Refresh] done in 64ms @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:2431
+[  148601ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:2431
+[  148714ms] [LOG] [Fast Refresh] done in 71ms @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:2431
+[  152806ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:2431
+[  152855ms] [LOG] [Fast Refresh] done in 72ms @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:2431
+[  156642ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:2431
+[  156689ms] [LOG] [Fast Refresh] done in 53ms @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:2431
+[  160122ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:2431
+[  160649ms] [LOG] [Fast Refresh] done in 580ms @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:2431
+[  174179ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:2431
+[  174728ms] [LOG] [Fast Refresh] done in 650ms @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:2431

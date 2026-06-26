@@ -22,9 +22,21 @@ const MAX_MARKDOWN_LENGTH = 200_000;
 type BriNoteResponse = {
   data?: {
     id?: unknown;
+    noteId?: unknown;
     username?: unknown;
+    owner?: { username?: unknown };
+    user?: { username?: unknown };
     slug?: unknown;
     title?: unknown;
+    note?: {
+      id?: unknown;
+      noteId?: unknown;
+      username?: unknown;
+      owner?: { username?: unknown };
+      user?: { username?: unknown };
+      slug?: unknown;
+      title?: unknown;
+    };
   };
   error?: unknown;
 };
@@ -198,6 +210,126 @@ async function readBriJson(response: Response) {
   return (await response.json().catch(() => ({}))) as BriNoteResponse;
 }
 
+function readString(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  return null;
+}
+
+async function resolveAttachmentImageUrls(
+  markdown: string,
+  ownerKey: string | null,
+) {
+  const attachmentIds = new Set<string>();
+  const attachmentUrlPattern =
+    /!\[([^\]]*)\]\((\/api\/attachments\/([^/)]+)\/file)(?:\s+"([^"]*)")?\)/g;
+
+  for (const match of markdown.matchAll(attachmentUrlPattern)) {
+    const attachmentId = decodeURIComponent(match[3] ?? "").trim();
+    if (attachmentId && attachmentId.length <= 128) {
+      attachmentIds.add(attachmentId);
+    }
+  }
+
+  if (attachmentIds.size === 0) {
+    return markdown;
+  }
+
+  const urlByAttachmentId = new Map<string, string>();
+  await Promise.all(
+    [...attachmentIds].map(async (attachmentId) => {
+      const url = await convex
+        .query(api.attachments.getAttachmentUrl, {
+          ownerKey,
+          attachmentId: attachmentId as never,
+        })
+        .catch(() => null);
+      if (url) {
+        urlByAttachmentId.set(attachmentId, url);
+      }
+    }),
+  );
+
+  return markdown.replace(
+    attachmentUrlPattern,
+    (fullMatch, alt: string, _localUrl: string, encodedId: string, title?: string) => {
+      const attachmentId = decodeURIComponent(encodedId).trim();
+      const resolvedUrl = urlByAttachmentId.get(attachmentId);
+      if (!resolvedUrl) {
+        return fullMatch;
+      }
+
+      return `![${alt}](${resolvedUrl}${title ? ` "${title}"` : ""})`;
+    },
+  );
+}
+
+function getReferencedAttachmentIds(markdown: string) {
+  const attachmentIds = new Set<string>();
+  const attachmentUrlPattern = /!\[[^\]]*\]\(\/api\/attachments\/([^/)]+)\/file/g;
+
+  for (const match of markdown.matchAll(attachmentUrlPattern)) {
+    const attachmentId = decodeURIComponent(match[1] ?? "").trim();
+    if (attachmentId && attachmentId.length <= 128) {
+      attachmentIds.add(attachmentId);
+    }
+  }
+
+  return attachmentIds;
+}
+
+async function appendImageAttachments(
+  markdown: string,
+  ownerKey: string | null,
+  sourceId: string,
+  referencedAttachmentIds: Set<string>,
+) {
+  const attachments = await convex
+    .query(api.attachments.listAttachments, {
+      ownerKey,
+      parentKind: "todo",
+      parentId: sourceId,
+      limit: 100,
+    })
+    .catch(() => []);
+  const imageLines: string[] = [];
+
+  for (const attachment of attachments) {
+    const attachmentId = String(attachment._id);
+    const contentType =
+      typeof attachment.contentType === "string"
+        ? attachment.contentType.toLowerCase()
+        : "";
+    if (
+      referencedAttachmentIds.has(attachmentId) ||
+      !contentType.startsWith("image/")
+    ) {
+      continue;
+    }
+
+    const url = await convex
+      .query(api.attachments.getAttachmentUrl, {
+        ownerKey,
+        attachmentId: attachment._id,
+      })
+      .catch(() => null);
+    if (url) {
+      const alt = attachment.fileName.replace(/[\[\]\n]/g, " ");
+      imageLines.push(`![${alt}](${url})`);
+    }
+  }
+
+  if (imageLines.length === 0) {
+    return markdown;
+  }
+
+  return `${markdown.trim()}\n\n${imageLines.join("\n\n")}`;
+}
+
 async function sendBriRequest(input: {
   method: "POST" | "PATCH";
   path: string;
@@ -205,6 +337,12 @@ async function sendBriRequest(input: {
   title: string;
   content: string;
   visibility: "public" | "private";
+  fallback?: {
+    remoteId?: string | null;
+    username?: string | null;
+    slug?: string | null;
+    title?: string | null;
+  };
 }) {
   const response = await fetch(input.path, {
     method: input.method,
@@ -226,12 +364,27 @@ async function sendBriRequest(input: {
     throw new BriRequestError(message, response.status);
   }
 
-  const remoteId = typeof json.data?.id === "string" ? json.data.id : null;
-  const username =
-    typeof json.data?.username === "string" ? json.data.username : null;
-  const slug = typeof json.data?.slug === "string" ? json.data.slug : null;
+  const data = json.data;
+  const note = data?.note;
+  const remoteId = readString(
+    data?.id,
+    data?.noteId,
+    note?.id,
+    note?.noteId,
+    input.fallback?.remoteId,
+  );
+  const username = readString(
+    data?.username,
+    data?.owner?.username,
+    data?.user?.username,
+    note?.username,
+    note?.owner?.username,
+    note?.user?.username,
+    input.fallback?.username,
+  );
+  const slug = readString(data?.slug, note?.slug, input.fallback?.slug);
   const title =
-    typeof json.data?.title === "string" ? json.data.title : input.title;
+    readString(data?.title, note?.title, input.fallback?.title) ?? input.title;
   if (!remoteId || !username || !slug) {
     throw new Error("Bri returned incomplete publication metadata.");
   }
@@ -355,6 +508,18 @@ export async function POST(request: NextRequest) {
     sourceKind,
     sourceId,
   });
+  const referencedAttachmentIds = getReferencedAttachmentIds(markdown);
+  const markdownWithAttachments = await appendImageAttachments(
+    markdown,
+    ownerKey,
+    sourceId,
+    referencedAttachmentIds,
+  );
+  const resolvedMarkdown = await resolveAttachmentImageUrls(
+    markdownWithAttachments,
+    ownerKey,
+  );
+  const content = resolvedMarkdown.trim();
 
   try {
     let briResult: Awaited<ReturnType<typeof sendBriRequest>>;
@@ -365,8 +530,14 @@ export async function POST(request: NextRequest) {
           path: `${config.baseUrl}/api/notes/by-id/${existing.remoteId}`,
           apiKey: config.apiKey,
           title,
-          content: markdown,
+          content,
           visibility,
+          fallback: {
+            remoteId: existing.remoteId,
+            username: existing.username,
+            slug: existing.slug,
+            title: existing.title,
+          },
         });
       } catch (error) {
         if (
@@ -378,7 +549,7 @@ export async function POST(request: NextRequest) {
             path: `${config.baseUrl}/api/notes`,
             apiKey: config.apiKey,
             title,
-            content: markdown,
+            content,
             visibility,
           });
         } else {
@@ -391,7 +562,7 @@ export async function POST(request: NextRequest) {
         path: `${config.baseUrl}/api/notes`,
         apiKey: config.apiKey,
         title,
-        content: markdown,
+        content,
         visibility,
       });
     }

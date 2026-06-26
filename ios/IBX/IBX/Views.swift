@@ -68,6 +68,9 @@ struct TaskRow: View {
     @State private var isConfirmingDelete = false
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var previewAttachment: AttachmentRecord?
+    @State private var autosaveTask: Task<Void, Never>?
+    @State private var autosaveState = "saved"
+    @State private var hasSeededEditor = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -190,21 +193,9 @@ struct TaskRow: View {
                     )
 
                     HStack {
-                        Button("Save") {
-                            update(
-                                title.trimmingCharacters(in: .whitespacesAndNewlines),
-                                notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : notes.trimmingCharacters(in: .whitespacesAndNewlines),
-                                hasDate ? selectedDate : nil,
-                                hasEstimatedHours ? estimatedHours : nil,
-                                hasTimeBlock ? Self.combinedDate(date: hasDate ? selectedDate : timeBlockStart, time: timeBlockStart) : nil,
-                                recurrence,
-                                priority
-                            )
-                            withAnimation(.snappy(duration: 0.18)) { isExpanded = false }
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-
+                        Label(autosaveState, systemImage: autosaveState == "saving..." ? "arrow.triangle.2.circlepath" : "checkmark.circle")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                         Button("Delete", role: .destructive) {
                             isConfirmingDelete = true
                         }
@@ -236,9 +227,22 @@ struct TaskRow: View {
                         )
                     }
                 }
+                .onChange(of: title) { scheduleAutosave() }
+                .onChange(of: notes) { scheduleAutosave() }
+                .onChange(of: selectedDate) { scheduleAutosave() }
+                .onChange(of: hasDate) { scheduleAutosave() }
+                .onChange(of: estimatedHours) { scheduleAutosave() }
+                .onChange(of: hasEstimatedHours) { scheduleAutosave() }
+                .onChange(of: timeBlockStart) { scheduleAutosave() }
+                .onChange(of: hasTimeBlock) { scheduleAutosave() }
+                .onChange(of: recurrence) { scheduleAutosave() }
+                .onChange(of: priority) { scheduleAutosave() }
             }
         }
         .animation(.smooth(duration: 0.2), value: todo.status)
+        .onDisappear {
+            autosaveTask?.cancel()
+        }
         .confirmationDialog("Delete todo?", isPresented: $isConfirmingDelete, titleVisibility: .visible) {
             Button("Delete", role: .destructive, action: delete)
             Button("Cancel", role: .cancel) {}
@@ -259,6 +263,36 @@ struct TaskRow: View {
         hasTimeBlock = todo.timeBlockStart != nil
         recurrence = todo.recurrence
         priority = TodoItem.normalizedPriority(todo.priority)
+        autosaveState = "saved"
+        hasSeededEditor = true
+    }
+
+    private func scheduleAutosave() {
+        guard isExpanded, hasSeededEditor else { return }
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty else {
+            autosaveState = "title required"
+            return
+        }
+
+        autosaveState = "saving..."
+        autosaveTask?.cancel()
+        autosaveTask = Task {
+            try? await Task.sleep(for: .milliseconds(700))
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                update(
+                    trimmedTitle,
+                    notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : notes.trimmingCharacters(in: .whitespacesAndNewlines),
+                    hasDate ? selectedDate : nil,
+                    hasEstimatedHours ? estimatedHours : nil,
+                    hasTimeBlock ? Self.combinedDate(date: hasDate ? selectedDate : timeBlockStart, time: timeBlockStart) : nil,
+                    recurrence,
+                    priority
+                )
+                autosaveState = "saved"
+            }
+        }
     }
 
     private static func combinedDate(date: Date, time: Date) -> Date {
@@ -286,6 +320,10 @@ struct MarkdownNotesEditor: View {
                 markdownButton("•", prefix: "- ")
                 markdownButton("[]", prefix: "- [ ] ")
                 markdownButton("`", wrapper: "`")
+                markdownButton(">", prefix: "> ")
+                markdownButton("link", snippet: "[text](https://)")
+                markdownButton("img", snippet: "![image](https://)")
+                markdownButton("tbl", snippet: "| Item | Amount |\n| --- | --- |\n|  |  |")
                 Spacer()
             }
             .font(.caption.weight(.semibold))
@@ -295,7 +333,7 @@ struct MarkdownNotesEditor: View {
                 .font(.system(.body, design: .monospaced))
                 .textInputAutocapitalization(.sentences)
                 .scrollContentBackground(.hidden)
-                .frame(minHeight: 120)
+                .frame(height: 170)
                 .padding(10)
                 .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .overlay(alignment: .topLeading) {
@@ -311,12 +349,14 @@ struct MarkdownNotesEditor: View {
         }
     }
 
-    private func markdownButton(_ title: String, prefix: String? = nil, wrapper: String? = nil) -> some View {
+    private func markdownButton(_ title: String, prefix: String? = nil, wrapper: String? = nil, snippet: String? = nil) -> some View {
         Button {
             if let prefix {
                 insert(prefix: prefix)
             } else if let wrapper {
                 wrap(wrapper)
+            } else if let snippet {
+                insert(snippet: snippet)
             }
         } label: {
             Text(title)
@@ -333,6 +373,16 @@ struct MarkdownNotesEditor: View {
             text += prefix
         } else {
             text += "\n\(prefix)"
+        }
+    }
+
+    private func insert(snippet: String) {
+        if text.isEmpty {
+            text = snippet
+        } else if text.hasSuffix("\n") {
+            text += snippet
+        } else {
+            text += "\n\(snippet)"
         }
     }
 
@@ -550,9 +600,15 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     LabeledContent("Sync", value: store.isAuthenticated ? "Signed in" : "Offline")
+                    LabeledContent("Open tasks", value: "\(store.todos.filter { $0.status == .open }.count)")
+                    LabeledContent("Archived", value: "\(store.todos.filter { $0.status == .done }.count)")
                 }
                 Section("Bri") {
                     Text("Publishing uses the Bri connection configured in web Settings. Published todos can be updated or unpublished from each expanded todo.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    LabeledContent("Published todos", value: "\(store.publicationsByTodoId.count)")
+                    Text("Attachments and Bri controls live inside each expanded task.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -597,6 +653,17 @@ struct SettingsView: View {
                 Section("Offline") {
                     LabeledContent("Queued changes", value: "\(store.pendingOfflineCount)")
                     Text("Shortcuts and in-app edits save locally first. Queued changes sync when Clerk is signed in and the network is available.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Section("Editor") {
+                    LabeledContent("Markdown", value: "headings, lists, tasks, links, images, tables")
+                    Text("Long notes scroll inside the editor so schedule, priority, attachments, and Bri controls stay reachable.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Section("Drag and Drop") {
+                    Text("Long-press a task and drop it on another task or priority section to move its day and priority.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

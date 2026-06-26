@@ -50,6 +50,7 @@ import type {
   PublicationRecord,
   TodoItem,
   TodoPriority,
+  TodoRecurrence,
   TodoStatus,
 } from "@/lib/types";
 
@@ -94,6 +95,27 @@ const PRIORITY_OPTIONS: Array<TodoPropertyOption<`${TodoPriority}`>> = [
   { value: "1", label: "P1" },
   { value: "2", label: "P2" },
   { value: "3", label: "P3" },
+];
+
+const RECURRENCE_OPTIONS: Array<TodoPropertyOption<TodoRecurrence>> = [
+  { value: "none", label: "Once" },
+  { value: "daily", label: "Daily" },
+  { value: "weekly", label: "Weekly" },
+  { value: "monthly", label: "Monthly" },
+];
+
+const TIME_BLOCK_OPTIONS: Array<TodoPropertyOption<string>> = [
+  { value: "", label: "No time block" },
+  { value: "480", label: "8:00 AM" },
+  { value: "540", label: "9:00 AM" },
+  { value: "600", label: "10:00 AM" },
+  { value: "660", label: "11:00 AM" },
+  { value: "720", label: "12:00 PM" },
+  { value: "780", label: "1:00 PM" },
+  { value: "840", label: "2:00 PM" },
+  { value: "900", label: "3:00 PM" },
+  { value: "960", label: "4:00 PM" },
+  { value: "1020", label: "5:00 PM" },
 ];
 
 function parseTodoNotesJson(value: string | null | undefined) {
@@ -386,6 +408,8 @@ export function TodoPageEditor({ todoId }: TodoPageEditorProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const resolvedEditorValue = useMemo(() => {
     if (editorValue?.json) {
@@ -494,6 +518,14 @@ export function TodoPageEditor({ todoId }: TodoPageEditorProps) {
   useEffect(() => {
     void loadAttachments();
   }, [loadAttachments]);
+
+  useEffect(() => {
+    if (!todo) {
+      return;
+    }
+
+    document.title = `${todo.title.toLowerCase()} · ibx`;
+  }, [todo]);
 
   useEffect(() => {
     if (!isOnline || todoId.startsWith("local-")) {
@@ -651,12 +683,22 @@ export function TodoPageEditor({ todoId }: TodoPageEditorProps) {
 
   const saveTodoPatch = async (
     patch: Partial<
-      Pick<TodoItem, "status" | "dueDate" | "estimatedHours" | "priority">
+      Pick<
+        TodoItem,
+        | "status"
+        | "dueDate"
+        | "estimatedHours"
+        | "timeBlockStart"
+        | "recurrence"
+        | "priority"
+      >
     >,
     apiPatch: {
       status?: TodoStatus;
       dueDate?: string | null;
       estimatedHours?: number | null;
+      timeBlockStart?: number | null;
+      recurrence?: TodoRecurrence;
       priority?: TodoPriority;
     },
   ) => {
@@ -786,6 +828,85 @@ export function TodoPageEditor({ todoId }: TodoPageEditorProps) {
       { estimatedHours: nextEstimatedHours },
       { estimatedHours: nextEstimatedHours },
     );
+  };
+
+  const updateTimeBlockStart = async (value: string) => {
+    if (!todo) {
+      return;
+    }
+
+    const nextTimeBlockStart = value ? Number(value) : null;
+    if (
+      nextTimeBlockStart !== null &&
+      (!Number.isInteger(nextTimeBlockStart) ||
+        nextTimeBlockStart < 0 ||
+        nextTimeBlockStart > 1439)
+    ) {
+      toast.error("Invalid time block.");
+      return;
+    }
+    if ((todo.timeBlockStart ?? null) === nextTimeBlockStart) {
+      return;
+    }
+
+    await saveTodoPatch(
+      { timeBlockStart: nextTimeBlockStart },
+      { timeBlockStart: nextTimeBlockStart },
+    );
+  };
+
+  const updateRecurrence = async (nextRecurrence: TodoRecurrence) => {
+    if (!todo || nextRecurrence === todo.recurrence) {
+      return;
+    }
+
+    await saveTodoPatch(
+      { recurrence: nextRecurrence },
+      { recurrence: nextRecurrence },
+    );
+  };
+
+  const deletePage = async () => {
+    if (!todo || isDeleting) {
+      return;
+    }
+
+    const previousTodo = todo;
+    const previousTodos = await getCachedTodos().catch(() => []);
+    setIsDeleting(true);
+    setTodo(null);
+    await setCachedTodos(previousTodos.filter((item) => item.id !== todo.id)).catch(
+      () => undefined,
+    );
+
+    const queueDelete = async () => {
+      await enqueueOfflineOperation({
+        entity: "todo",
+        entityId: previousTodo.id,
+        kind: "delete",
+        payload: {},
+      });
+    };
+
+    try {
+      if (!isOnline || previousTodo.id.startsWith("local-")) {
+        await queueDelete();
+        toast.message("todo delete queued offline");
+        router.replace("/app");
+        return;
+      }
+
+      await apiClient.deleteTodo(previousTodo.id);
+      toast.message("todo deleted");
+      router.replace("/app");
+    } catch (error) {
+      setTodo(previousTodo);
+      await setCachedTodos(previousTodos).catch(() => undefined);
+      toast.error(parseErrorMessage(error));
+    } finally {
+      setIsDeleting(false);
+      setIsDeleteDialogOpen(false);
+    }
   };
 
   const handleAttachmentSelected = async (files: FileList | null) => {
@@ -1105,7 +1226,7 @@ export function TodoPageEditor({ todoId }: TodoPageEditorProps) {
                 ibx
               </Link>
               <span className="text-border">/</span>
-              <span className="truncate text-foreground">
+              <span className="truncate lowercase text-foreground">
                 {title || todo?.title || "todo"}
               </span>
             </div>
@@ -1131,18 +1252,26 @@ export function TodoPageEditor({ todoId }: TodoPageEditorProps) {
                   >
                     {isUploading ? "attaching" : "attach"}
                   </Button>
+                  {publication ? null : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={isPublishing}
+                      onClick={() => void publishPage()}
+                    >
+                      {isPublishing ? "publishing" : "publish"}
+                    </Button>
+                  )}
                   <Button
                     type="button"
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
-                    disabled={isPublishing}
-                    onClick={() => void publishPage()}
+                    disabled={isDeleting}
+                    onClick={() => setIsDeleteDialogOpen(true)}
+                    className="text-destructive hover:text-destructive"
                   >
-                    {isPublishing
-                      ? "publishing"
-                      : publication
-                        ? "update Bri"
-                        : "publish"}
+                    delete
                   </Button>
                 </>
               ) : null}
@@ -1169,7 +1298,7 @@ export function TodoPageEditor({ todoId }: TodoPageEditorProps) {
                 <textarea
                   value={title}
                   onChange={(event) => setTitle(event.target.value)}
-                  className="min-h-9 resize-none border-0 bg-transparent px-0 py-0 !text-xl font-semibold leading-tight tracking-normal shadow-none outline-none placeholder:text-muted-foreground/50 focus-visible:ring-0 md:!text-2xl"
+                  className="min-h-9 resize-none border-0 bg-transparent px-0 py-0 !text-lg font-semibold lowercase leading-tight tracking-normal shadow-none outline-none placeholder:text-muted-foreground/50 focus-visible:ring-0 md:!text-xl"
                   maxLength={140}
                   aria-label="Todo title"
                   rows={2}
@@ -1310,6 +1439,86 @@ export function TodoPageEditor({ todoId }: TodoPageEditorProps) {
                     }
                     className="h-8 w-32 rounded-md border-0 bg-transparent px-0 text-foreground outline-none placeholder:text-muted-foreground/60 hover:bg-muted focus-visible:bg-muted"
                   />
+
+                  <label
+                    className="self-center text-muted-foreground"
+                    htmlFor="todo-time-block"
+                  >
+                    Time
+                  </label>
+                  <Combobox
+                    items={TIME_BLOCK_OPTIONS}
+                    value={
+                      TIME_BLOCK_OPTIONS.find(
+                        (option) =>
+                          option.value ===
+                          (todo.timeBlockStart === null
+                            ? ""
+                            : String(todo.timeBlockStart)),
+                      ) ??
+                      TIME_BLOCK_OPTIONS[0] ??
+                      null
+                    }
+                    itemToStringValue={(option) => option.label}
+                    onValueChange={(option) => {
+                      if (option) {
+                        void updateTimeBlockStart(option.value);
+                      }
+                    }}
+                  >
+                    <ComboboxInput
+                      id="todo-time-block"
+                      className="w-40 border-0 bg-transparent shadow-none [&_[data-slot=input-group-control]]:text-sm"
+                    />
+                    <ComboboxContent className="border border-border">
+                      <ComboboxEmpty>No time found.</ComboboxEmpty>
+                      <ComboboxList>
+                        {(option) => (
+                          <ComboboxItem key={option.value || "none"} value={option}>
+                            {option.label}
+                          </ComboboxItem>
+                        )}
+                      </ComboboxList>
+                    </ComboboxContent>
+                  </Combobox>
+
+                  <label
+                    className="self-center text-muted-foreground"
+                    htmlFor="todo-recurrence"
+                  >
+                    Repeat
+                  </label>
+                  <Combobox
+                    items={RECURRENCE_OPTIONS}
+                    value={
+                      RECURRENCE_OPTIONS.find(
+                        (option) => option.value === todo.recurrence,
+                      ) ??
+                      RECURRENCE_OPTIONS[0] ??
+                      null
+                    }
+                    itemToStringValue={(option) => option.label}
+                    onValueChange={(option) => {
+                      if (option) {
+                        void updateRecurrence(option.value);
+                      }
+                    }}
+                  >
+                    <ComboboxInput
+                      id="todo-recurrence"
+                      className="w-32 border-0 bg-transparent shadow-none [&_[data-slot=input-group-control]]:text-sm"
+                    />
+                    <ComboboxContent className="border border-border">
+                      <ComboboxEmpty>No repeat found.</ComboboxEmpty>
+                      <ComboboxList>
+                        {(option) => (
+                          <ComboboxItem key={option.value} value={option}>
+                            {option.label}
+                          </ComboboxItem>
+                        )}
+                      </ComboboxList>
+                    </ComboboxContent>
+                  </Combobox>
                 </div>
               </div>
 
@@ -1463,6 +1672,35 @@ export function TodoPageEditor({ todoId }: TodoPageEditorProps) {
               />
             </div>
           ) : null}
+        </DialogContent>
+      </Dialog>
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent className="max-w-sm gap-4">
+          <DialogHeader>
+            <DialogTitle>Delete todo?</DialogTitle>
+            <DialogDescription>
+              This removes the todo from IBX. Published Bri pages can be
+              unpublished separately if needed.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setIsDeleteDialogOpen(false)}
+              disabled={isDeleting}
+            >
+              cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void deletePage()}
+              disabled={isDeleting}
+            >
+              {isDeleting ? "deleting" : "delete"}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </main>

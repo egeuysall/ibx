@@ -13,6 +13,10 @@ import { Typography } from "@tiptap/extension-typography"
 import { Highlight } from "@tiptap/extension-highlight"
 import { Subscript } from "@tiptap/extension-subscript"
 import { Superscript } from "@tiptap/extension-superscript"
+import { Table } from "@tiptap/extension-table"
+import { TableCell } from "@tiptap/extension-table-cell"
+import { TableHeader } from "@tiptap/extension-table-header"
+import { TableRow } from "@tiptap/extension-table-row"
 import { Placeholder, Selection } from "@tiptap/extensions"
 
 // --- UI Primitives ---
@@ -171,7 +175,141 @@ const SLASH_COMMANDS: SlashCommand[] = [
     run: (editor, range) =>
       editor.chain().focus().deleteRange(range).toggleCodeBlock().run(),
   },
+  {
+    id: "table",
+    label: "Table",
+    hint: "3 x 3 table",
+    run: (editor, range) =>
+      editor
+        .chain()
+        .focus()
+        .deleteRange(range)
+        .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
+        .run(),
+  },
 ]
+
+const MARKDOWN_SEPARATOR_ROW = /^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$/
+
+function expandMarkdownTableLines(line: string) {
+  const rowParts = line.split(/\|\s+\|/)
+  if (rowParts.length >= 2) {
+    return rowParts
+      .map((part, index) => {
+        const prefix = index === 0 ? "" : "|"
+        const suffix = index === rowParts.length - 1 ? "" : "|"
+        return `${prefix}${part}${suffix}`.trim()
+      })
+      .filter((row) => row.includes("|"))
+  }
+
+  return [line.trim()]
+}
+
+function parseMarkdownTableLines(lines: string[]): JSONContent | null {
+  const normalizedLines = lines
+    .flatMap(expandMarkdownTableLines)
+    .map((line) => line.trim())
+    .filter(Boolean)
+  const headerIndex = normalizedLines.findIndex(
+    (line, index) =>
+      index < normalizedLines.length - 1 &&
+      line.includes("|") &&
+      MARKDOWN_SEPARATOR_ROW.test(normalizedLines[index + 1] ?? "")
+  )
+
+  if (headerIndex < 0) {
+    return null
+  }
+
+  const tableLines = normalizedLines
+    .slice(headerIndex)
+    .filter((line) => line.includes("|"))
+  const rows = tableLines
+    .filter((_, index) => index !== 1)
+    .map((line) =>
+      line
+        .replace(/^\|/, "")
+        .replace(/\|$/, "")
+        .split("|")
+        .map((cell) => cell.trim())
+    )
+  const columnCount = Math.max(...rows.map((row) => row.length))
+  if (rows.length < 2 || columnCount < 2) {
+    return null
+  }
+
+  return {
+    type: "table",
+    content: rows.map((row, rowIndex) => ({
+      type: "tableRow",
+      content: Array.from({ length: columnCount }, (_, index) => ({
+        type: rowIndex === 0 ? "tableHeader" : "tableCell",
+        content: [
+          {
+            type: "paragraph",
+            content: row[index]
+              ? [{ type: "text", text: row[index] }]
+              : undefined,
+          },
+        ],
+      })),
+    })),
+  }
+}
+
+function textBlock(line: string): JSONContent {
+  return {
+    type: "paragraph",
+    content: line.trim() ? [{ type: "text", text: line.trim() }] : undefined,
+  }
+}
+
+function parseMarkdownBlocks(text: string): JSONContent[] | null {
+  const lines = text
+    .trim()
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+
+  if (lines.length === 0) {
+    return null
+  }
+
+  const blocks: JSONContent[] = []
+  let parsedTable = false
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]
+    if (!line) {
+      continue
+    }
+
+    if (line.includes("|")) {
+      const tableCandidate = [line]
+      let nextIndex = index + 1
+      while (nextIndex < lines.length && lines[nextIndex]?.includes("|")) {
+        tableCandidate.push(lines[nextIndex] ?? "")
+        nextIndex += 1
+      }
+
+      const table = parseMarkdownTableLines(tableCandidate)
+      if (table) {
+        blocks.push(table)
+        parsedTable = true
+        index = nextIndex - 1
+        continue
+      }
+    }
+
+    blocks.push(textBlock(line))
+  }
+
+  if (!parsedTable) {
+    return null
+  }
+
+  return blocks
+}
 
 const MainToolbarContent = ({
   onHighlighterClick,
@@ -293,6 +431,7 @@ export function SimpleEditor({
   )
   const [slashRange, setSlashRange] = useState<SlashRange | null>(null)
   const toolbarRef = useRef<HTMLDivElement>(null)
+  const editorRef = useRef<Editor | null>(null)
 
   const updateSlashMenu = (nextEditor: Editor) => {
     const { selection } = nextEditor.state
@@ -321,6 +460,26 @@ export function SimpleEditor({
         "aria-label": placeholder,
         class: "simple-editor",
       },
+      handlePaste: (view, event) => {
+        const text = event.clipboardData?.getData("text/plain")
+        if (!text) {
+          return false
+        }
+
+        const blocks = parseMarkdownBlocks(text)
+        if (!blocks) {
+          return false
+        }
+
+        event.preventDefault()
+        const editor = editorRef.current
+        if (!editor) {
+          return false
+        }
+
+        editor.chain().focus().insertContent(blocks).run()
+        return true
+      },
     },
     extensions: [
       StarterKit.configure({
@@ -343,6 +502,12 @@ export function SimpleEditor({
       Superscript,
       Subscript,
       Selection,
+      Table.configure({
+        resizable: true,
+      }),
+      TableRow,
+      TableHeader,
+      TableCell,
       ImageUploadNode.configure({
         accept: "image/*",
         maxSize: MAX_FILE_SIZE,
@@ -362,6 +527,10 @@ export function SimpleEditor({
       })
     },
   })
+
+  useEffect(() => {
+    editorRef.current = editor
+  }, [editor])
 
   const runSlashCommand = (command: SlashCommand) => {
     if (!editor || !slashRange) {

@@ -12,6 +12,7 @@ final class TaskStore {
     var notificationsEnabled = true
     var autoRefreshEnabled = true
     var commandText = ""
+    var searchQuery = ""
     var isAuthenticated = false
     var isLoading = false
     var isSavingSettings = false
@@ -55,16 +56,26 @@ final class TaskStore {
         let todayKey = Self.dateKey(now)
         let openTodos = todos.filter { $0.status == .open }
         let today = openTodos.filter { $0.dueDateKey == todayKey }
+        let items: [TodoItem]
         switch filter {
         case .today:
-            return today.sortedForIBX()
+            items = today.sortedForIBX()
         case .upcoming:
-            return openTodos.filter { todo in
+            items = openTodos.filter { todo in
                 guard let dueDay = todo.dueDay, todo.dueDateKey != todayKey else { return false }
                 return dueDay > calendar.startOfDay(for: now)
             }.sortedForIBX()
         case .archive:
-            return todos.filter { $0.status == .done }.sortedForIBX()
+            items = todos.filter { $0.status == .done }.sortedForIBX()
+        }
+
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !query.isEmpty else { return items }
+
+        return items.filter { todo in
+            todo.title.lowercased().contains(query)
+                || (todo.notes?.lowercased().contains(query) ?? false)
+                || todo.metadataLine.lowercased().contains(query)
         }
     }
 
@@ -263,6 +274,46 @@ final class TaskStore {
         if isAuthenticated {
             await syncQueuedChanges(successMessage: "Todo updated.")
         }
+    }
+
+    func move(_ sourceId: String, near target: TodoItem) async {
+        guard sourceId != target.id,
+              let source = todos.first(where: { $0.id == sourceId }) else { return }
+
+        await update(
+            source,
+            title: source.title,
+            notes: source.notes,
+            dueDate: target.dueDay,
+            estimatedHours: source.estimatedHours,
+            timeBlockStart: source.timeBlock,
+            recurrence: source.recurrence,
+            priority: TodoItem.normalizedPriority(target.priority)
+        )
+    }
+
+    func move(_ sourceId: String, toSection section: TodoSection) async {
+        guard let source = todos.first(where: { $0.id == sourceId }) else { return }
+        let sectionPriority = section.id.hasPrefix("priority-")
+            ? Int(section.id.replacingOccurrences(of: "priority-", with: ""))
+            : nil
+        let targetPriority =
+            sectionPriority ?? section.todos.first.map { TodoItem.normalizedPriority($0.priority) } ?? TodoItem.normalizedPriority(source.priority)
+        let targetDate =
+            selectedFilter == .today
+                ? Date()
+                : section.todos.first?.dueDay ?? source.dueDay
+
+        await update(
+            source,
+            title: source.title,
+            notes: source.notes,
+            dueDate: targetDate,
+            estimatedHours: source.estimatedHours,
+            timeBlockStart: source.timeBlock,
+            recurrence: source.recurrence,
+            priority: targetPriority
+        )
     }
 
     func attachments(for todo: TodoItem) -> [AttachmentRecord] {

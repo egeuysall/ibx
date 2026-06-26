@@ -114,6 +114,34 @@
   padding: 0.75rem 0 0;
 }
 
+.simple-editor-content .tiptap.ProseMirror.simple-editor .tableWrapper {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.simple-editor-content .tiptap.ProseMirror.simple-editor table {
+  width: 100%;
+  min-width: 28rem;
+  margin: 0.875rem 0;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.simple-editor-content .tiptap.ProseMirror.simple-editor th,
+.simple-editor-content .tiptap.ProseMirror.simple-editor td {
+  min-width: 7rem;
+  border: 1px solid var(--border);
+  padding: 0.5rem 0.625rem;
+  vertical-align: top;
+  word-break: break-word;
+}
+
+.simple-editor-content .tiptap.ProseMirror.simple-editor th {
+  background: var(--muted);
+  color: var(--foreground);
+  font-weight: 600;
+}
+
 @media screen and (max-width: 480px) {
   .simple-editor-content .tiptap.ProseMirror.simple-editor {
     padding: 0.875rem;

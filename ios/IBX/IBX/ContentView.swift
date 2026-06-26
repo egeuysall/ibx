@@ -119,41 +119,58 @@ struct CompactRootView: View {
 
     var body: some View {
         NavigationStack {
-            TaskListView(store: store)
-                .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Menu {
-                            ForEach(TaskFilter.allCases) { filter in
-                                Button {
-                                    store.selectedFilter = filter
-                                } label: {
-                                    Label(filter.title, systemImage: filter.symbol)
-                                }
-                            }
-                        } label: {
-                            Image(systemName: store.selectedFilter.symbol)
-                                .symbolRenderingMode(.palette)
-                                .foregroundStyle(store.selectedFilter.tint, .secondary)
-                        }
-                        .accessibilityLabel("Choose List")
+            TaskListView(store: store) {
+                HeaderActionCapsule {
+                    AccountToolbarButton(
+                        showingAuth: $showingAuth,
+                        isSignedIn: isSignedIn
+                    )
+                    Button {
+                        showingSettings = true
+                    } label: {
+                        Image(systemName: "slider.horizontal.3")
                     }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 22, weight: .regular))
+                    .foregroundStyle(.primary)
+                    .accessibilityLabel("Settings")
 
-                    ToolbarItem(placement: .topBarTrailing) {
-                        HStack {
-                            AccountToolbarButton(
-                                showingAuth: $showingAuth,
-                                isSignedIn: isSignedIn
-                            )
-                            Button {
-                                showingSettings = true
-                            } label: {
-                                Image(systemName: "slider.horizontal.3")
-                            }
-                            .accessibilityLabel("Settings")
+                    Button {
+                        Task { await store.refresh() }
+                    } label: {
+                        if store.isLoading {
+                            ProgressView()
+                        } else {
+                            Image(systemName: "arrow.clockwise")
                         }
                     }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 20, weight: .regular))
+                    .foregroundStyle(.primary)
+                    .accessibilityLabel("Refresh")
                 }
+            }
+            .toolbar(.hidden, for: .navigationBar)
         }
+    }
+}
+
+struct HeaderActionCapsule<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        HStack(spacing: 18) {
+            content()
+        }
+        .frame(height: 44)
+        .padding(.horizontal, 8)
+        .background(Color(.secondarySystemGroupedBackground).opacity(0.72), in: Capsule())
+        .overlay {
+            Capsule()
+                .stroke(Color.secondary.opacity(0.14), lineWidth: 1)
+        }
+        .tint(.primary)
+        .controlSize(.small)
     }
 }
 
@@ -164,12 +181,15 @@ struct AccountToolbarButton: View {
     var body: some View {
         if isSignedIn {
             UserButton()
+                .frame(width: 36, height: 36)
         } else {
             Button {
                 showingAuth = true
             } label: {
                 Image(systemName: "person.crop.circle")
             }
+            .buttonStyle(.plain)
+            .font(.system(size: 30, weight: .regular))
             .accessibilityLabel("Sign in")
         }
     }
@@ -218,20 +238,102 @@ struct SidebarView: View {
 
 }
 
-struct TaskListView: View {
+struct TaskListView<HeaderActions: View>: View {
     @Bindable var store: TaskStore
+    @ViewBuilder let headerActions: () -> HeaderActions
     @FocusState private var commandFocused: Bool
+    @FocusState private var searchFocused: Bool
+    @State private var searchVisible = false
+
+    init(store: TaskStore, @ViewBuilder headerActions: @escaping () -> HeaderActions = { EmptyView() }) {
+        self.store = store
+        self.headerActions = headerActions
+    }
 
     var body: some View {
         VStack(spacing: 0) {
-            CommandBar(store: store)
-                .focused($commandFocused)
-                .padding(.horizontal, 18)
-                .padding(.top, 12)
-                .padding(.bottom, 8)
-
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 20, pinnedViews: [.sectionHeaders]) {
+                LazyVStack(alignment: .leading, spacing: 14, pinnedViews: [.sectionHeaders]) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(alignment: .center, spacing: 10) {
+                            Menu {
+                                ForEach(TaskFilter.allCases) { filter in
+                                    Button {
+                                        store.selectedFilter = filter
+                                    } label: {
+                                        Label(filter.title, systemImage: filter.symbol)
+                                    }
+                                }
+                            } label: {
+                                Image(systemName: store.selectedFilter.symbol)
+                                    .font(.headline)
+                                    .symbolRenderingMode(.palette)
+                                    .foregroundStyle(store.selectedFilter.tint, .secondary)
+                                    .frame(width: 28, height: 28)
+                                    .background(Color(.secondarySystemGroupedBackground), in: Circle())
+                            }
+                            .accessibilityLabel("Choose List")
+
+                            Text(store.selectedFilter.title)
+                                .font(.title3.weight(.semibold))
+                                .lineLimit(1)
+
+                            Spacer()
+
+                            CountBadge(count: store.filteredTodos.count)
+                            Button {
+                                withAnimation(.smooth(duration: 0.18)) {
+                                    searchVisible.toggle()
+                                }
+                                if searchVisible {
+                                    searchFocused = true
+                                } else {
+                                    store.searchQuery = ""
+                                    searchFocused = false
+                                }
+                            } label: {
+                                Image(systemName: "magnifyingglass")
+                                    .frame(width: 32, height: 32)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 19, weight: .regular))
+                            .foregroundStyle(searchVisible ? .primary : .secondary)
+                            .accessibilityLabel(searchVisible ? "Close Search" : "Search")
+
+                            headerActions()
+                        }
+
+                        if searchVisible {
+                            HStack(spacing: 8) {
+                                Image(systemName: "magnifyingglass")
+                                    .foregroundStyle(.secondary)
+                                TextField("search tasks", text: $store.searchQuery)
+                                    .textInputAutocapitalization(.never)
+                                    .disableAutocorrection(true)
+                                    .focused($searchFocused)
+                                if !store.searchQuery.isEmpty {
+                                    Button {
+                                        store.searchQuery = ""
+                                    } label: {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityLabel("Clear Search")
+                                }
+                            }
+                            .font(.body)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                            .background(Color(.secondarySystemGroupedBackground), in: Capsule())
+                            .transition(.opacity)
+                        }
+
+                        CommandBar(store: store)
+                            .focused($commandFocused)
+                    }
+
                     ForEach(store.sections) { section in
                         Section {
                             VStack(spacing: 0) {
@@ -254,11 +356,28 @@ struct TaskListView: View {
                                     } delete: {
                                         Task { await store.delete(todo) }
                                     }
+                                    .draggable(todo.id) {
+                                        Text(todo.title)
+                                            .font(.caption.weight(.semibold))
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 8)
+                                            .background(.regularMaterial, in: Capsule())
+                                    }
+                                    .dropDestination(for: String.self) { items, _ in
+                                        guard let sourceId = items.first else { return false }
+                                        Task { await store.move(sourceId, near: todo) }
+                                        return true
+                                    }
                                     Divider().padding(.leading, 44)
                                 }
                             }
                             .background(.background)
                             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .dropDestination(for: String.self) { items, _ in
+                                guard let sourceId = items.first else { return false }
+                                Task { await store.move(sourceId, toSection: section) }
+                                return true
+                            }
                         } header: {
                             SectionHeader(title: section.title, count: section.todos.count)
                         }
@@ -271,24 +390,18 @@ struct TaskListView: View {
                     }
                 }
                 .padding(.horizontal, 18)
+                .padding(.top, 2)
                 .padding(.bottom, 96)
             }
             .refreshable { await store.refresh() }
         }
-        .navigationTitle(store.selectedFilter.title)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    Task { await store.refresh() }
-                } label: {
-                    if store.isLoading {
-                        ProgressView()
-                    } else {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                }
-                .accessibilityLabel("Refresh")
-            }
+        .background(Color.black.ignoresSafeArea())
+        .safeAreaInset(edge: .top, spacing: 0) {
+            Color.black
+                .frame(height: 18)
+                .allowsHitTesting(false)
         }
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }

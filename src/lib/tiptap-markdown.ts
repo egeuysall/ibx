@@ -73,6 +73,49 @@ function renderTaskItem(node: JSONContent, depth: number) {
   return `${indent}- [${checked}] ${text}${nested ? `\n${nested}` : ""}`;
 }
 
+function renderTableCell(node: JSONContent | undefined) {
+  const text = renderChildren(node?.content?.[0]?.content);
+  return text.replace(/\|/g, "\\|").replace(/\n+/g, " ").trim();
+}
+
+function renderTable(node: JSONContent) {
+  const rows = (node.content ?? []).filter((row) => row.type === "tableRow");
+  const tableRows = rows.map((row) => row.content ?? []);
+  const columnCount = Math.max(0, ...tableRows.map((row) => row.length));
+
+  if (rows.length === 0 || columnCount === 0) {
+    return "";
+  }
+
+  const normalizedRows = tableRows.map((row) =>
+    Array.from({ length: columnCount }, (_, index) => renderTableCell(row[index])),
+  );
+  const header = normalizedRows[0];
+  const separator = Array.from({ length: columnCount }, () => "---");
+  const body = normalizedRows.slice(1);
+  const toLine = (cells: string[]) => `| ${cells.join(" | ")} |`;
+
+  return [toLine(header), toLine(separator), ...body.map(toLine)].join("\n");
+}
+
+function renderImage(node: JSONContent) {
+  const src = typeof node.attrs?.src === "string" ? node.attrs.src.trim() : "";
+  if (!src) {
+    return "";
+  }
+
+  const alt =
+    typeof node.attrs?.alt === "string" && node.attrs.alt.trim()
+      ? node.attrs.alt.trim().replace(/[\[\]\n]/g, " ")
+      : "image";
+  const title =
+    typeof node.attrs?.title === "string" && node.attrs.title.trim()
+      ? ` "${node.attrs.title.trim().replace(/"/g, '\\"')}"`
+      : "";
+
+  return `![${alt}](${src}${title})`;
+}
+
 function renderBlock(node: JSONContent, depth: number): string {
   switch (node.type) {
     case "heading": {
@@ -100,6 +143,10 @@ function renderBlock(node: JSONContent, depth: number): string {
         .join("\n");
     case "taskList":
       return (node.content ?? []).map((child) => renderTaskItem(child, depth)).join("\n");
+    case "table":
+      return renderTable(node);
+    case "image":
+      return renderImage(node);
     case "horizontalRule":
       return "---";
     default:

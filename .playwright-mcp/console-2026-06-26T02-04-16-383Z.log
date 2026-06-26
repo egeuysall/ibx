@@ -1,0 +1,78 @@
+[     109ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:2431
+[     121ms] [LOG] [HMR] connected @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:2431
+[     337ms] [WARNING] Clerk: Clerk has been loaded with development keys. Development instances have strict usage limits and should not be used when deploying your application to production. Learn more: https://clerk.com/docs/deployments/overview @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:2431
+[    1225ms] [ERROR] In HTML, %s cannot be a descendant of <%s>.
+This will cause a hydration error.%s <div> p 
+
+  ...
+    <LoadingBoundary name="code/" loading={[...]}>
+      <Suspense name="code/" fallback={<Fragment>}>
+        <HTTPAccessFallbackBoundary notFound={undefined} forbidden={undefined} unauthorized={undefined}>
+          <RedirectBoundary>
+            <RedirectErrorBoundary router={{...}}>
+              <InnerLayoutRouter url="/egeuysall..." tree={[...]} params={{username:"...", ...}} ...>
+                <SegmentViewNode type="page" pagePath="[username]...">
+                  <SegmentTrieNode>
+                  <NotePage>
+                    <section className="w-full ani..." style={{--delay:"40ms"}}>
+                      <article className="mx-auto w-...">
+                        <div>
+                        <p>
+                        <div className="px-0 py-6 ...">
+                          <div className="prose pros...">
+                            <CodeBlock>
+>                           <p>
+                              <img>
+                                <MarkdownImage src="data:image..." alt="icon.png">
+                                  <figure className="not-prose ...">
+>                                   <div className="relative h-full w-full overflow-hidden rounded-md">
+                            ...
+                    ...
+                ...
+              ...
+ @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:3272
+[    1225ms] [ERROR] <%s> cannot contain a nested %s.
+See this log for the ancestor stack trace. p <div> @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:3272
+[    1226ms] [ERROR] In HTML, %s cannot be a descendant of <%s>.
+This will cause a hydration error.%s <figure> p 
+
+  ...
+    <LoadingBoundary name="code/" loading={[...]}>
+      <Suspense name="code/" fallback={<Fragment>}>
+        <HTTPAccessFallbackBoundary notFound={undefined} forbidden={undefined} unauthorized={undefined}>
+          <RedirectBoundary>
+            <RedirectErrorBoundary router={{...}}>
+              <InnerLayoutRouter url="/egeuysall..." tree={[...]} params={{username:"...", ...}} ...>
+                <SegmentViewNode type="page" pagePath="[username]...">
+                  <SegmentTrieNode>
+                  <NotePage>
+                    <section className="w-full ani..." style={{--delay:"40ms"}}>
+                      <article className="mx-auto w-...">
+                        <div>
+                        <p>
+                        <div className="px-0 py-6 ...">
+                          <div className="prose pros...">
+                            <CodeBlock>
+>                           <p>
+                              <img>
+                                <MarkdownImage src="data:image..." alt="icon.png">
+>                                 <figure
+>                                   className="not-prose my-6 aspect-video max-w-full overflow-hidden rounded-md borde..."
+>                                 >
+                            ...
+                    ...
+                ...
+              ...
+ @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:3272
+[    1226ms] [ERROR] <%s> cannot contain a nested %s.
+See this log for the ancestor stack trace. p <figure> @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:3272
+[    4756ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:2431
+[    5004ms] [LOG] [Fast Refresh] done in 315ms @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:2431
+[   22260ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:2431
+[   22292ms] [LOG] [Fast Refresh] done in 68ms @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:2431
+[   28296ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:2431
+[   28329ms] [LOG] [Fast Refresh] done in 71ms @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:2431
+[   90154ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:2431
+[   90231ms] [LOG] [Fast Refresh] done in 154ms @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:2431
+[  104903ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:2431
+[  105342ms] [LOG] [Fast Refresh] done in 503ms @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:2431
