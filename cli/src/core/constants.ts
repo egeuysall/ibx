@@ -5,7 +5,7 @@ import process from "node:process";
 export const CONFIG_FILE = join(homedir(), ".ibx", "config.json");
 export const UPDATE_CHECK_FILE = join(homedir(), ".ibx", "update-check.json");
 export const API_KEY_PREFIX = "iak_";
-export const VERSION = "0.3.0";
+export const VERSION = "0.3.1";
 export const GITHUB_REPOSITORY = "egeuysall/inbox";
 export const DEFAULT_BASE_URL =
   process.env.IBX_BASE_URL?.trim() || "https://ibx.egeuysal.com";
