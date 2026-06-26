@@ -108,7 +108,8 @@ export async function checkForCliUpdates(command: string | undefined, parsed: Pa
   }
 
   printWarn(`cli update available: ${VERSION} -> ${cache.latestVersion}`);
-  printInfo(`update with: curl -fsSL ${baseUrl}/install.sh | bash`);
+  printInfo("update with: ibx self-update");
+  printInfo(`or reinstall: curl -fsSL ${baseUrl}/install.sh | bash`);
   logEvent("warn", "cli.update.available", {
     currentVersion: VERSION,
     latestVersion: cache.latestVersion,

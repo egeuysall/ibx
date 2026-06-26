@@ -64,6 +64,7 @@ const sections: CommandSection[] = [
       { command: "ibx login --api-key iak_...", description: "Save API key for automation" },
       { command: "ibx whoami --json", description: "Check saved auth" },
       { command: "ibx logout", description: "Forget local auth" },
+      { command: "ibx self-update", description: "Update from GitHub Releases" },
     ],
   },
 ];
@@ -128,6 +129,7 @@ export default function HelpScreen() {
         <Box flexDirection="column">
           <Text color={fg}>try  ibx t l --view today --json</Text>
           <Text color={muted}>help  ibx --help</Text>
+          <Text color={muted}>update ibx self-update</Text>
           <Text color={muted}>install  curl -fsSL {DEFAULT_BASE_URL}/install.sh | bash</Text>
         </Box>
       </Box>

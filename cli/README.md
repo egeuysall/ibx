@@ -33,6 +33,7 @@ ibx td
 - `ibx auth logout`
 - `ibx logout`
 - `ibx a o` (short)
+- `ibx self-update` (download the latest `ibx` release asset from GitHub Releases)
 - `ibx add [--input "..."] [--auto-schedule|--no-auto-schedule] [--include-links|--no-include-links] [--require-descriptions|--no-require-descriptions] [--availability-notes "..."]`
 - `ibx n [--input "..."]` (short)
 - `ibx sync [--since <unix-ms>] [--json]`
@@ -69,6 +70,7 @@ warning. Use `--api-key` for automation or pre-generated keys.
 - network timeout + bounded retries are enabled for API calls.
 - structured logs are emitted to stderr (`timestamp level action=...`).
 - CLI checks once per day for updates via `GET /ibx-version.json` and prints an install command when newer.
+- `ibx self-update` updates the current executable from `https://github.com/egeuysall/inbox/releases/latest`.
 - set `IBX_DISABLE_UPDATE_CHECK=1` to disable update checks.
 - stable exit codes:
   - `2` validation/input error

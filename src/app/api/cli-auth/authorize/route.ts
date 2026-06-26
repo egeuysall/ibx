@@ -50,5 +50,5 @@ export async function POST(request: NextRequest) {
   const callbackUrl = new URL(redirectUri);
   callbackUrl.searchParams.set("code", code);
   callbackUrl.searchParams.set("state", state);
-  return NextResponse.redirect(callbackUrl);
+  return NextResponse.redirect(callbackUrl, { status: 303 });
 }

@@ -57,6 +57,7 @@ writeFileSync(
     {
       name: "@ibx/cli",
       version: cliVersion,
+      releaseUrl: "https://github.com/egeuysall/inbox/releases",
       generatedAt: new Date().toISOString(),
     },
     null,

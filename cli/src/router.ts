@@ -12,6 +12,7 @@ import { runAuthCommand } from "./commands/auth.js";
 import { runCalendarCommand } from "./commands/calendar.js";
 import { runPageCommand } from "./commands/page.js";
 import { runPublishCommand } from "./commands/publish.js";
+import { runSelfUpdateCommand } from "./commands/self-update.js";
 import { runSyncCommand } from "./commands/sync.js";
 import { runTodosCommand } from "./commands/todos.js";
 import { renderHelpUi } from "./ui/pastel.js";
@@ -108,6 +109,11 @@ export async function main(argv = process.argv.slice(2)) {
 
   if (normalizedFirst === "sync") {
     await runSyncCommand(normalizedParsed);
+    return;
+  }
+
+  if (normalizedFirst === "self-update") {
+    await runSelfUpdateCommand();
     return;
   }
 
