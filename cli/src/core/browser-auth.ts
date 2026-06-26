@@ -1,5 +1,9 @@
 import { createHash, randomBytes } from "node:crypto";
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import {
+  createServer,
+  type IncomingMessage,
+  type ServerResponse,
+} from "node:http";
 import { spawn } from "node:child_process";
 import process from "node:process";
 
@@ -19,12 +23,111 @@ function sha256Base64Url(value: string) {
   return createHash("sha256").update(value).digest("base64url");
 }
 
-function writeHtml(response: ServerResponse, status: number, body: string) {
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, (char) => {
+    switch (char) {
+      case "&":
+        return "&amp;";
+      case "<":
+        return "&lt;";
+      case ">":
+        return "&gt;";
+      case '"':
+        return "&quot;";
+      default:
+        return "&#39;";
+    }
+  });
+}
+
+function writeHtml(
+  response: ServerResponse,
+  status: number,
+  body: string,
+  action?: { label: string; href: string },
+) {
+  const actionHtml = action
+    ? `<a class="button" href="${escapeHtml(action.href)}">${escapeHtml(action.label)}</a>`
+    : "";
+
   response.writeHead(status, {
     "Content-Type": "text/html; charset=utf-8",
     "Cache-Control": "no-store",
   });
-  response.end(`<!doctype html><html><body><p>${body}</p></body></html>`);
+  response.end(`<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ibx CLI</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: #000;
+        color: #d4d4d4;
+        font: 13px/1.5 "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      }
+      main {
+        display: grid;
+        gap: 14px;
+        justify-items: start;
+        transform: translateY(-5vh);
+      }
+      .brand {
+        position: fixed;
+        top: 20px;
+        left: 20px;
+        color: #d4d4d4;
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .eyebrow {
+        color: #525252;
+        font-size: 12px;
+      }
+      p {
+        margin: 0;
+        color: #a3a3a3;
+        font-size: 13px;
+        font-weight: 500;
+        letter-spacing: 0;
+      }
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: fit-content;
+        min-width: 92px;
+        height: 30px;
+        padding: 0 12px;
+        border: 1px solid #1f1f1f;
+        border-radius: 4px;
+        background: #0a0a0a;
+        color: #d4d4d4;
+        text-decoration: none;
+        font-size: 12px;
+      }
+      .button:hover {
+        background: #111;
+        border-color: #2a2a2a;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="brand">ibx</div>
+    <main>
+      <div class="eyebrow">cli auth</div>
+      <p>${escapeHtml(body)}</p>
+      ${actionHtml}
+    </main>
+  </body>
+</html>`);
 }
 
 function openBrowser(url: string) {
@@ -34,8 +137,7 @@ function openBrowser(url: string) {
       : process.platform === "win32"
         ? "cmd"
         : "xdg-open";
-  const args =
-    process.platform === "win32" ? ["/c", "start", "", url] : [url];
+  const args = process.platform === "win32" ? ["/c", "start", "", url] : [url];
   const child = spawn(command, args, {
     detached: true,
     stdio: "ignore",
@@ -92,7 +194,9 @@ async function exchangeCode(input: {
     return {
       apiKey: payload.apiKey,
       authType:
-        typeof payload.authType === "string" ? payload.authType : "clerk-browser",
+        typeof payload.authType === "string"
+          ? payload.authType
+          : "clerk-browser",
       permission:
         typeof payload.permission === "string" ? payload.permission : "both",
     };
@@ -170,69 +274,89 @@ export async function runBrowserAuthLogin(
       );
     }, AUTH_TIMEOUT_MS);
 
-    server.on("request", (request: IncomingMessage, response: ServerResponse) => {
-      void (async () => {
-        const requestUrl = new URL(request.url ?? "/", redirectUri);
-        const hasAuthResponse =
-          requestUrl.searchParams.has("code") &&
-          requestUrl.searchParams.has("state");
+    server.on(
+      "request",
+      (request: IncomingMessage, response: ServerResponse) => {
+        void (async () => {
+          const requestUrl = new URL(request.url ?? "/", redirectUri);
+          const hasAuthResponse =
+            requestUrl.searchParams.has("code") &&
+            requestUrl.searchParams.has("state");
 
-        if (request.method !== "GET") {
-          writeHtml(response, 405, "Method not allowed.");
-          return;
-        }
+          if (request.method !== "GET") {
+            writeHtml(response, 405, "Method not allowed.");
+            return;
+          }
 
-        if (
-          !hasAuthResponse &&
-          requestUrl.pathname !== CALLBACK_PATH &&
-          requestUrl.pathname !== "/"
-        ) {
-          writeHtml(response, 404, "ibx CLI login callback is not available here.");
-          return;
-        }
+          if (
+            !hasAuthResponse &&
+            requestUrl.pathname !== CALLBACK_PATH &&
+            requestUrl.pathname !== "/"
+          ) {
+            writeHtml(
+              response,
+              404,
+              "ibx CLI login callback is not available here.",
+            );
+            return;
+          }
 
-        if (!hasAuthResponse) {
-          writeHtml(response, 200, "ibx CLI login is waiting for authorization.");
-          return;
-        }
+          if (!hasAuthResponse) {
+            writeHtml(
+              response,
+              200,
+              "ibx CLI login is waiting for authorization.",
+            );
+            return;
+          }
 
-        const returnedState = requestUrl.searchParams.get("state");
-        const code = requestUrl.searchParams.get("code");
-        if (returnedState !== state || !code) {
-          writeHtml(response, 400, "Invalid ibx CLI login response.");
-          finish(
-            reject,
-            new CliError("Invalid CLI auth callback.", {
-              exitCode: EXIT_CODE.AUTH,
-              code: "CLI_AUTH_CALLBACK_INVALID",
-            }),
-          );
-          return;
-        }
+          const returnedState = requestUrl.searchParams.get("state");
+          const code = requestUrl.searchParams.get("code");
+          if (returnedState !== state || !code) {
+            writeHtml(response, 400, "Invalid ibx CLI login response.");
+            finish(
+              reject,
+              new CliError("Invalid CLI auth callback.", {
+                exitCode: EXIT_CODE.AUTH,
+                code: "CLI_AUTH_CALLBACK_INVALID",
+              }),
+            );
+            return;
+          }
 
-        try {
-          const exchanged = await exchangeCode({
-            baseUrl,
-            code,
-            codeVerifier,
-            redirectUri,
-          });
-          writeHtml(response, 200, "ibx CLI is connected. You can close this tab.");
-          finish(resolve, exchanged);
-        } catch (error) {
-          writeHtml(response, 500, "ibx CLI login failed. Return to terminal.");
-          finish(
-            reject,
-            error instanceof Error
-              ? error
-              : new CliError("CLI auth failed.", {
-                  exitCode: EXIT_CODE.AUTH,
-                  code: "CLI_AUTH_FAILED",
-                }),
-          );
-        }
-      })();
-    });
+          try {
+            const exchanged = await exchangeCode({
+              baseUrl,
+              code,
+              codeVerifier,
+              redirectUri,
+            });
+            writeHtml(
+              response,
+              200,
+              "You're signed in and may close this tab",
+              { label: "Open ibx", href: baseUrl },
+            );
+            finish(resolve, exchanged);
+          } catch (error) {
+            writeHtml(
+              response,
+              500,
+              "ibx CLI login failed. Return to terminal.",
+            );
+            finish(
+              reject,
+              error instanceof Error
+                ? error
+                : new CliError("CLI auth failed.", {
+                    exitCode: EXIT_CODE.AUTH,
+                    code: "CLI_AUTH_FAILED",
+                  }),
+            );
+          }
+        })();
+      },
+    );
 
     onAuthorizeUrl(authorizeUrl.toString());
     openBrowser(authorizeUrl.toString());
