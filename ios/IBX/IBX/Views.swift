@@ -74,64 +74,78 @@ struct TaskRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Button {
-                withAnimation(.snappy(duration: 0.18)) {
-                    isExpanded.toggle()
-                    seedEditor()
+            HStack(alignment: .top, spacing: 12) {
+                Button(action: toggle) {
+                    let isDone = todo.status == .done
+                    ZStack {
+                        Circle()
+                            .stroke(isDone ? .blue : .secondary.opacity(0.45), lineWidth: 2)
+                            .frame(width: 24, height: 24)
+                            .background(Circle().fill(isDone ? Color.blue.opacity(0.14) : Color.clear))
+                        if isDone {
+                            Image(systemName: "checkmark")
+                                .font(.caption2.bold())
+                                .foregroundStyle(.blue)
+                        }
+                    }
+                    .contentTransition(.symbolEffect(.replace))
                 }
-            } label: {
-                HStack(alignment: .top, spacing: 12) {
-                    Button(action: toggle) {
-                        let isDone = todo.status == .done
-                        ZStack {
-                            Circle()
-                                .stroke(isDone ? .blue : .secondary.opacity(0.45), lineWidth: 2)
-                                .frame(width: 24, height: 24)
-                                .background(Circle().fill(isDone ? Color.blue.opacity(0.14) : Color.clear))
-                            if isDone {
-                                Image(systemName: "checkmark")
-                                    .font(.caption2.bold())
-                                    .foregroundStyle(.blue)
-                            }
-                        }
-                        .contentTransition(.symbolEffect(.replace))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(todo.status == .done ? "Mark open" : "Mark done")
-                    .simultaneousGesture(TapGesture().onEnded {
-                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    })
+                .buttonStyle(.plain)
+                .accessibilityLabel(todo.status == .done ? "Mark open" : "Mark done")
+                .simultaneousGesture(TapGesture().onEnded {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                })
 
-                    VStack(alignment: .leading, spacing: 4) {
-                        if isExpanded {
-                            Text("Editing task")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                        } else {
-                            Text(todo.title)
-                                .font(.body)
-                                .strikethrough(todo.status == .done)
-                                .foregroundStyle(todo.status == .done ? .secondary : .primary)
-                                .multilineTextAlignment(.leading)
+                VStack(alignment: .leading, spacing: 4) {
+                    if isExpanded {
+                        Text("Editing task")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text(todo.title)
+                            .font(.body)
+                            .strikethrough(todo.status == .done)
+                            .foregroundStyle(todo.status == .done ? .secondary : .primary)
+                            .multilineTextAlignment(.leading)
 
-                            Text(todo.metadataLine)
-                                .font(.caption)
-                                .foregroundStyle(Color(.secondaryLabel))
-                                .lineLimit(2)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
+                        Text(todo.metadataLine)
+                            .font(.caption)
+                            .foregroundStyle(Color(.secondaryLabel))
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                    Spacer(minLength: 8)
-                    Image(systemName: "chevron.down")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                        .rotationEffect(.degrees(isExpanded ? 180 : 0))
                 }
                 .contentShape(Rectangle())
-                .padding(.vertical, 12)
-                .padding(.horizontal, 12)
+                .onTapGesture {
+                    withAnimation(.snappy(duration: 0.18)) {
+                        isExpanded.toggle()
+                        seedEditor()
+                    }
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.down")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        withAnimation(.snappy(duration: 0.18)) {
+                            isExpanded.toggle()
+                            seedEditor()
+                        }
+                    }
+                    .draggable(todo.id) {
+                        Text(todo.title)
+                            .font(.caption.weight(.semibold))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(.regularMaterial, in: Capsule())
+                    }
+                    .accessibilityLabel(isExpanded ? "Collapse task" : "Expand task")
             }
-            .buttonStyle(.plain)
+            .padding(.vertical, 12)
+            .padding(.horizontal, 12)
 
             if isExpanded {
                 VStack(alignment: .leading, spacing: 12) {

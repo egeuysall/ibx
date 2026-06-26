@@ -173,8 +173,26 @@ export async function runBrowserAuthLogin(
     server.on("request", (request: IncomingMessage, response: ServerResponse) => {
       void (async () => {
         const requestUrl = new URL(request.url ?? "/", redirectUri);
-        if (request.method !== "GET" || requestUrl.pathname !== CALLBACK_PATH) {
-          writeHtml(response, 404, "Not found.");
+        const hasAuthResponse =
+          requestUrl.searchParams.has("code") &&
+          requestUrl.searchParams.has("state");
+
+        if (request.method !== "GET") {
+          writeHtml(response, 405, "Method not allowed.");
+          return;
+        }
+
+        if (
+          !hasAuthResponse &&
+          requestUrl.pathname !== CALLBACK_PATH &&
+          requestUrl.pathname !== "/"
+        ) {
+          writeHtml(response, 404, "ibx CLI login callback is not available here.");
+          return;
+        }
+
+        if (!hasAuthResponse) {
+          writeHtml(response, 200, "ibx CLI login is waiting for authorization.");
           return;
         }
 

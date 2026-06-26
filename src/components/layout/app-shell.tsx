@@ -1018,9 +1018,10 @@ export function AppShell({
   const [searchQuery, setSearchQuery] = useState("");
   const [isCommandCenterOpen, setIsCommandCenterOpen] = useState(false);
   const [isTerminalOpen, setIsTerminalOpen] = useState(false);
+  const [isTerminalRendered, setIsTerminalRendered] = useState(false);
   const [terminalInput, setTerminalInput] = useState("");
   const [terminalOutput, setTerminalOutput] = useState<string[]>([
-    "ibx terminal ready. try: list, search bread, create call mum, done 1, delete 1, open 1",
+    "ibx terminal ready. type help or ls.",
   ]);
   const [promptAutofocus, setPromptAutofocus] = useState(false);
   const [hasHydratedPreferences, setHasHydratedPreferences] = useState(false);
@@ -1049,6 +1050,9 @@ export function AppShell({
     Record<string, boolean>
   >({});
   const promptInputRef = useRef<HTMLInputElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const terminalOpenTimerRef = useRef<number | null>(null);
+  const terminalCloseTimerRef = useRef<number | null>(null);
   const hasAppliedInitialAutofocus = useRef(false);
   const isQueueFlushRunning = useRef(false);
   const holdTimerRef = useRef<number | null>(null);
@@ -1060,6 +1064,57 @@ export function AppShell({
   const isShortcutConsumeRunning = useRef(false);
   const lastUnauthorizedToastAtRef = useRef(0);
   const notifiedTimeBlocksRef = useRef<Set<string>>(new Set());
+
+  const clearTerminalCloseTimer = useCallback(() => {
+    if (terminalCloseTimerRef.current !== null) {
+      window.clearTimeout(terminalCloseTimerRef.current);
+      terminalCloseTimerRef.current = null;
+    }
+  }, []);
+
+  const clearTerminalOpenTimer = useCallback(() => {
+    if (terminalOpenTimerRef.current !== null) {
+      window.clearTimeout(terminalOpenTimerRef.current);
+      terminalOpenTimerRef.current = null;
+    }
+  }, []);
+
+  const openTerminal = useCallback(() => {
+    clearTerminalCloseTimer();
+    clearTerminalOpenTimer();
+    setIsTerminalOpen(false);
+    setIsTerminalRendered(true);
+    terminalOpenTimerRef.current = window.setTimeout(() => {
+      setIsTerminalOpen(true);
+      terminalOpenTimerRef.current = null;
+    }, 32);
+  }, [clearTerminalCloseTimer, clearTerminalOpenTimer]);
+
+  const closeTerminal = useCallback(() => {
+    clearTerminalOpenTimer();
+    setIsTerminalOpen(false);
+    clearTerminalCloseTimer();
+    terminalCloseTimerRef.current = window.setTimeout(() => {
+      setIsTerminalRendered(false);
+      terminalCloseTimerRef.current = null;
+    }, 360);
+  }, [clearTerminalCloseTimer, clearTerminalOpenTimer]);
+
+  const toggleTerminal = useCallback(() => {
+    if (isTerminalOpen || isTerminalRendered) {
+      closeTerminal();
+    } else {
+      openTerminal();
+    }
+  }, [closeTerminal, isTerminalOpen, isTerminalRendered, openTerminal]);
+
+  useEffect(
+    () => () => {
+      clearTerminalOpenTimer();
+      clearTerminalCloseTimer();
+    },
+    [clearTerminalCloseTimer, clearTerminalOpenTimer],
+  );
 
   const clearHoldTimer = useCallback(() => {
     if (holdTimerRef.current !== null) {
@@ -2589,19 +2644,31 @@ export function AppShell({
     setIsArchiveCleanupOpen(false);
 
     try {
-      for (const todo of archivedTodos) {
-        if (!isOnline || todo.id.startsWith("local-")) {
-          await enqueueOfflineOperation({
-            entity: "todo",
-            entityId: todo.id,
-            kind: "delete",
-            payload: {},
-          });
-        } else {
-          await apiClient.deleteTodo(todo.id);
-        }
+      const cleanupResults = await Promise.allSettled(
+        archivedTodos.map(async (todo) => {
+          if (!isOnline || todo.id.startsWith("local-")) {
+            await enqueueOfflineOperation({
+              entity: "todo",
+              entityId: todo.id,
+              kind: "delete",
+              payload: {},
+            });
+          } else {
+            await apiClient.deleteTodo(todo.id);
+          }
+        }),
+      );
+      const failedCleanup = cleanupResults.find(
+        (result) => result.status === "rejected",
+      );
+      if (failedCleanup?.status === "rejected") {
+        throw failedCleanup.reason;
       }
-      toast.message("archive cleaned");
+      toast.message(
+        archivedTodos.length === 1
+          ? "archive cleaned"
+          : `${archivedTodos.length} archived todos cleaned`,
+      );
       if (isOnline) {
         await refreshTodos();
       }
@@ -2814,23 +2881,81 @@ export function AppShell({
       return;
     }
 
-    const [command = "", ...rest] = input.split(/\s+/);
+    const [rawCommand = "", ...rest] = input.split(/\s+/);
+    const command = rawCommand.toLowerCase();
     const argument = rest.join(" ").trim();
     const addOutput = (line: string) =>
-      setTerminalOutput((current) => [...current.slice(-12), `> ${input}`, line]);
+      setTerminalOutput((current) => [...current.slice(-40), `$ ${input}`, line]);
     const todoAtIndex = (value: string) => {
       const index = Number(value) - 1;
       return Number.isInteger(index) && index >= 0 ? visibleTodos[index] : null;
     };
+    const todoByIndexOrId = (value: string) =>
+      todoAtIndex(value) ?? todos.find((todo) => todo.id === value) ?? null;
+    const formatTodoLine = (todo: TodoItem, index: number) =>
+      `${index + 1}\t${displayPriority(todo.priority)}\t${displayDueDate(
+        todo.dueDate,
+      )}\t${todo.status}\t${todo.title}`;
 
     setTerminalInput("");
 
-    if (command === "list") {
+    if (command === "help") {
       addOutput(
-        visibleTodos
-          .slice(0, 8)
-          .map((todo, index) => `${index + 1}. ${todo.title}`)
-          .join("\n") || "no todos",
+        [
+          "commands:",
+          "  help",
+          "  clear",
+          "  pwd",
+          "  ls [all|today|upcoming|archive]",
+          "  search <text>",
+          "  create <title>",
+          "  open <number|id>",
+          "  done <number|id>",
+          "  delete <number|id>",
+          "  cd today|upcoming|archive|zen",
+        ].join("\n"),
+      );
+      return;
+    }
+
+    if (command === "clear") {
+      setTerminalOutput([]);
+      return;
+    }
+
+    if (command === "pwd") {
+      addOutput(`/ibx/${filter}`);
+      return;
+    }
+
+    if (command === "cd") {
+      if (
+        argument === "today" ||
+        argument === "upcoming" ||
+        argument === "archive" ||
+        argument === "zen"
+      ) {
+        setActiveFilter(argument);
+        addOutput(`/ibx/${argument}`);
+        return;
+      }
+      addOutput("usage: cd today|upcoming|archive|zen");
+      return;
+    }
+
+    if (command === "ls" || command === "list") {
+      const scope =
+        argument === "all"
+          ? todos
+          : argument === "archive"
+            ? groupedTodos.archive
+            : argument === "upcoming"
+              ? groupedTodos.upcoming
+              : argument === "today"
+                ? groupedTodos.today
+                : visibleTodos;
+      addOutput(
+        scope.slice(0, 24).map(formatTodoLine).join("\n") || "no todos",
       );
       return;
     }
@@ -2841,14 +2966,14 @@ export function AppShell({
       return;
     }
 
-    if (command === "create") {
+    if (command === "create" || command === "add") {
       const saved = await createTodoFromTitle(argument);
       addOutput(saved ? `created "${argument}"` : "create failed");
       return;
     }
 
     if (command === "open") {
-      const todo = todoAtIndex(argument);
+      const todo = todoByIndexOrId(argument);
       if (todo) {
         router.push(getTodoPageHref(todo));
       }
@@ -2856,8 +2981,8 @@ export function AppShell({
       return;
     }
 
-    if (command === "done") {
-      const todo = todoAtIndex(argument);
+    if (command === "done" || command === "complete") {
+      const todo = todoByIndexOrId(argument);
       if (todo) {
         await updateTodoStatus(todo, true);
       }
@@ -2865,8 +2990,8 @@ export function AppShell({
       return;
     }
 
-    if (command === "delete") {
-      const todo = todoAtIndex(argument);
+    if (command === "delete" || command === "rm") {
+      const todo = todoByIndexOrId(argument);
       if (todo) {
         setTodoPendingDelete(todo);
       }
@@ -2874,27 +2999,100 @@ export function AppShell({
       return;
     }
 
-    addOutput("unknown command");
+    addOutput("unknown command. type help.");
   };
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const isTypingTarget =
+        !!target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable);
+
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         setIsCommandCenterOpen(true);
+        return;
       }
+
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+        return;
+      }
+
       if ((event.metaKey || event.ctrlKey) && event.key === "`") {
         event.preventDefault();
-        setIsTerminalOpen(true);
+        toggleTerminal();
+        return;
+      }
+
+      if (!isTypingTarget && event.key === "/") {
+        event.preventDefault();
+        searchInputRef.current?.focus();
       }
     };
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [toggleTerminal]);
 
   const showTaskDetails = true;
   const showZenView = filter === "zen";
+  const terminalLines = terminalOutput.flatMap((entry) => entry.split("\n"));
+  const renderTerminalLine = (line: string, index: number) => {
+    if (line.startsWith("$ ")) {
+      const [, command = "", args = ""] = line.match(/^\$ (\S+)(?:\s+(.*))?$/) ?? [];
+      return (
+        <div key={`${line}-${index}`} className="flex gap-2">
+          <span className="text-neutral-600">$</span>
+          <span className="text-neutral-100">{command}</span>
+          {args ? <span className="text-neutral-400">{args}</span> : null}
+        </div>
+      );
+    }
+
+    const columns = line.split("\t");
+    if (columns.length >= 5 && /^\d+$/.test(columns[0] ?? "")) {
+      return (
+        <div
+          key={`${line}-${index}`}
+          className="grid grid-cols-[2rem_3rem_7rem_4rem_minmax(0,1fr)] gap-2 text-neutral-400"
+        >
+          <span className="text-neutral-600">{columns[0]}</span>
+          <span className="text-neutral-300">{columns[1]}</span>
+          <span>{columns[2]}</span>
+          <span className="text-neutral-500">{columns[3]}</span>
+          <span className="truncate text-neutral-200">{columns.slice(4).join(" ")}</span>
+        </div>
+      );
+    }
+
+    if (line.endsWith(":")) {
+      return (
+        <div key={`${line}-${index}`} className="text-neutral-300">
+          {line}
+        </div>
+      );
+    }
+
+    if (/^\s{2}\S/.test(line)) {
+      return (
+        <div key={`${line}-${index}`} className="pl-4 text-neutral-500">
+          {line.trim()}
+        </div>
+      );
+    }
+
+    return (
+      <div key={`${line}-${index}`} className="text-neutral-400">
+        {line || " "}
+      </div>
+    );
+  };
 
   if (!isAuthenticated) {
     return null;
@@ -3060,6 +3258,7 @@ export function AppShell({
                 {isGenerating || isProcessingQueue ? "running..." : "run"}
               </Button>
               <Input
+                ref={searchInputRef}
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 placeholder="search"
@@ -3078,7 +3277,7 @@ export function AppShell({
                 type="button"
                 size="sm"
                 variant="ghost"
-                onClick={() => setIsTerminalOpen(true)}
+                onClick={toggleTerminal}
               >
                 term
               </Button>
@@ -3183,7 +3382,11 @@ export function AppShell({
                         <article
                           key={todo.id}
                           data-todo-article-id={todo.id}
-                          draggable={pendingTodoId !== todo.id}
+                          draggable={
+                            filter !== "archive" &&
+                            pendingTodoId !== todo.id &&
+                            holdingTodoId !== todo.id
+                          }
                           className={cn(
                             "group relative cursor-pointer overflow-hidden border-b select-none [content-visibility:auto] [contain-intrinsic-size:0_56px]",
                             index === 0 && "border-t",
@@ -3211,6 +3414,14 @@ export function AppShell({
                             setEditingLinksInput(todoMeta.linksInputValue);
                           }}
                           onDragStart={(event) => {
+                            if (
+                              filter === "archive" ||
+                              holdingTodoId === todo.id ||
+                              heldTodoIdRef.current === todo.id
+                            ) {
+                              event.preventDefault();
+                              return;
+                            }
                             setDraggedTodoId(todo.id);
                             event.dataTransfer.effectAllowed = "move";
                             event.dataTransfer.setData("text/plain", todo.id);
@@ -3220,8 +3431,7 @@ export function AppShell({
                             if (
                               pendingTodoId === todo.id ||
                               isInteractiveTarget(event.target) ||
-                              draggedTodoId === todo.id ||
-                              event.pointerType === "mouse"
+                              draggedTodoId === todo.id
                             ) {
                               return;
                             }
@@ -3323,13 +3533,13 @@ export function AppShell({
                           </div>
                           <div
                             className={cn(
-                              "relative z-10 flex flex-col gap-2 px-4 py-3 md:px-6",
-                              zenModeEnabled && "gap-1.5 py-4",
+                              "relative z-10 flex flex-col gap-1.5 px-4 py-3 md:px-6",
+                              zenModeEnabled && "py-4",
                             )}
                           >
                             <div className="flex items-start gap-3">
-                              <div className="flex min-w-0 flex-1 flex-col gap-1">
-                                <div className="flex items-start justify-between gap-2">
+                              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                                <div className="relative flex items-start justify-between gap-2">
                                   {editingTodoId === todo.id ? (
                                     <Input
                                       value={editingTitleInput}
@@ -3353,7 +3563,7 @@ export function AppShell({
                                         void updateTodoTitle(todo);
                                       }}
                                       className={cn(
-                                        "h-auto w-full border-0 bg-transparent px-0 py-0 text-sm lowercase shadow-none ring-0 focus-visible:ring-0",
+                                        "h-auto w-full border-0 bg-transparent px-0 py-0 text-sm leading-5 lowercase shadow-none ring-0 focus-visible:ring-0",
                                         zenModeEnabled &&
                                           "text-[15px] leading-6 md:text-base",
                                         isZenLeadTask &&
@@ -3368,7 +3578,7 @@ export function AppShell({
                                   ) : (
                                     <p
                                       className={cn(
-                                        "truncate text-sm lowercase",
+                                        "truncate text-sm leading-5 lowercase sm:pr-16",
                                         zenModeEnabled &&
                                           "text-[15px] leading-6 md:text-base",
                                         isZenLeadTask &&
@@ -3382,7 +3592,7 @@ export function AppShell({
                                   )}
                                   {editingTodoId !== todo.id ? (
                                     <span
-                                      className="shrink-0 opacity-100 sm:pointer-events-none sm:opacity-0 sm:group-hover:pointer-events-auto sm:group-hover:opacity-100 sm:group-focus-within:pointer-events-auto sm:group-focus-within:opacity-100"
+                                      className="shrink-0 opacity-100 sm:absolute sm:right-0 sm:top-0 sm:pointer-events-none sm:opacity-0 sm:group-hover:pointer-events-auto sm:group-hover:opacity-100 sm:group-focus-within:pointer-events-auto sm:group-focus-within:opacity-100"
                                       style={{ transition: "opacity 180ms ease" }}
                                     >
                                       <Button
@@ -3782,21 +3992,30 @@ export function AppShell({
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setActiveFilter("archive")}
+                  onClick={() => {
+                    setActiveFilter("archive");
+                    setIsCommandCenterOpen(false);
+                  }}
                 >
                   open archive
                 </Button>
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setIsArchiveCleanupOpen(true)}
+                  onClick={() => {
+                    setIsCommandCenterOpen(false);
+                    setIsArchiveCleanupOpen(true);
+                  }}
                 >
                   clean archive
                 </Button>
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setIsTerminalOpen(true)}
+                  onClick={() => {
+                    setIsCommandCenterOpen(false);
+                    openTerminal();
+                  }}
                 >
                   terminal mode
                 </Button>
@@ -3811,6 +4030,7 @@ export function AppShell({
                       setEditingLinksInput(
                         getTodoDisplayMeta(firstTodo.notes).linksInputValue,
                       );
+                      setIsCommandCenterOpen(false);
                     }
                   }}
                 >
@@ -3819,6 +4039,7 @@ export function AppShell({
                 <Button
                   type="button"
                   variant="outline"
+                  onClick={() => setIsCommandCenterOpen(false)}
                   render={<Link href="/settings" prefetch={false} />}
                 >
                   settings
@@ -3828,31 +4049,58 @@ export function AppShell({
           </DialogContent>
         </Dialog>
 
-        <Dialog open={isTerminalOpen} onOpenChange={setIsTerminalOpen}>
-          <DialogContent className="max-w-2xl gap-3">
-            <DialogHeader>
-              <DialogTitle>terminal mode</DialogTitle>
-              <DialogDescription>
-                Commands: create, list, open, done, delete, search.
-              </DialogDescription>
-            </DialogHeader>
-            <pre className="max-h-72 overflow-auto rounded-md border border-border bg-muted/30 p-3 text-xs whitespace-pre-wrap">
-              {terminalOutput.join("\n")}
-            </pre>
-            <Input
-              value={terminalInput}
-              onChange={(event) => setTerminalInput(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  void runTerminalCommand();
-                }
-              }}
-              placeholder="list"
-              autoFocus
-            />
-          </DialogContent>
-        </Dialog>
+        {isTerminalRendered ? (
+          <div
+            className="fixed inset-x-0 bottom-0 z-50 border-t border-neutral-900 bg-black shadow-2xl will-change-transform"
+            style={{
+              opacity: isTerminalOpen ? 1 : 0,
+              transform: isTerminalOpen
+                ? "translate3d(0, 0, 0)"
+                : "translate3d(0, 100%, 0)",
+              transition:
+                "transform 340ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease",
+            }}
+            role="dialog"
+            aria-label="IBX terminal"
+          >
+            <div className="flex h-[44vh] min-h-72 w-full flex-col px-4 py-3 md:px-6">
+              <div className="mb-2 flex items-center justify-between gap-3 font-mono text-[0.72rem] text-neutral-500">
+                <span>ibx terminal // help, pwd, ls, cd, search, create, open, done, delete</span>
+                <button
+                  type="button"
+                  className="text-neutral-500 transition-colors hover:text-neutral-100"
+                  onClick={closeTerminal}
+                >
+                  close
+                </button>
+              </div>
+              <div className="min-h-0 flex-1 overflow-auto font-mono text-xs leading-5 whitespace-pre-wrap text-neutral-100">
+                {terminalLines.map(renderTerminalLine)}
+                <div className="flex items-center gap-2">
+                  <span className="text-neutral-500">$</span>
+                <Input
+                  value={terminalInput}
+                  onChange={(event) => setTerminalInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      void runTerminalCommand();
+                    }
+
+                    if (event.key === "Escape") {
+                      event.preventDefault();
+                      closeTerminal();
+                    }
+                  }}
+                  placeholder="ls"
+                  autoFocus
+                    className="h-5 flex-1 border-0 bg-transparent px-0 py-0 font-mono text-xs text-neutral-100 shadow-none placeholder:text-neutral-600 focus-visible:ring-0"
+                />
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         <AlertDialog
           open={isArchiveCleanupOpen}

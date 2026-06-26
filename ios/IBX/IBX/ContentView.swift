@@ -253,7 +253,7 @@ struct TaskListView<HeaderActions: View>: View {
     var body: some View {
         VStack(spacing: 0) {
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 14, pinnedViews: [.sectionHeaders]) {
+                LazyVStack(alignment: .leading, spacing: 14) {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack(alignment: .center, spacing: 10) {
                             Menu {
@@ -335,7 +335,8 @@ struct TaskListView<HeaderActions: View>: View {
                     }
 
                     ForEach(store.sections) { section in
-                        Section {
+                        VStack(alignment: .leading, spacing: 0) {
+                            SectionHeader(title: section.title, count: section.todos.count)
                             VStack(spacing: 0) {
                                 ForEach(section.todos) { todo in
                                     TaskRow(store: store, todo: todo) {
@@ -356,13 +357,6 @@ struct TaskListView<HeaderActions: View>: View {
                                     } delete: {
                                         Task { await store.delete(todo) }
                                     }
-                                    .draggable(todo.id) {
-                                        Text(todo.title)
-                                            .font(.caption.weight(.semibold))
-                                            .padding(.horizontal, 12)
-                                            .padding(.vertical, 8)
-                                            .background(.regularMaterial, in: Capsule())
-                                    }
                                     .dropDestination(for: String.self) { items, _ in
                                         guard let sourceId = items.first else { return false }
                                         Task { await store.move(sourceId, near: todo) }
@@ -378,8 +372,6 @@ struct TaskListView<HeaderActions: View>: View {
                                 Task { await store.move(sourceId, toSection: section) }
                                 return true
                             }
-                        } header: {
-                            SectionHeader(title: section.title, count: section.todos.count)
                         }
                     }
 
@@ -396,11 +388,6 @@ struct TaskListView<HeaderActions: View>: View {
             .refreshable { await store.refresh() }
         }
         .background(Color.black.ignoresSafeArea())
-        .safeAreaInset(edge: .top, spacing: 0) {
-            Color.black
-                .frame(height: 18)
-                .allowsHitTesting(false)
-        }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
     }
