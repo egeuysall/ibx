@@ -17,6 +17,7 @@ import { Table } from "@tiptap/extension-table"
 import { TableCell } from "@tiptap/extension-table-cell"
 import { TableHeader } from "@tiptap/extension-table-header"
 import { TableRow } from "@tiptap/extension-table-row"
+import { Mathematics } from "@tiptap/extension-mathematics"
 import { Placeholder, Selection } from "@tiptap/extensions"
 
 // --- UI Primitives ---
@@ -71,6 +72,7 @@ import { useCursorVisibility } from "@/hooks/use-cursor-visibility"
 
 // --- Lib ---
 import { handleImageUpload, MAX_FILE_SIZE } from "@/lib/tiptap-utils"
+import { markdownMathToTiptapBlocks } from "@/lib/tiptap-markdown"
 
 // --- Styles ---
 import "@/components/tiptap-templates/simple/simple-editor.scss"
@@ -466,7 +468,7 @@ export function SimpleEditor({
           return false
         }
 
-        const blocks = parseMarkdownBlocks(text)
+        const blocks = markdownMathToTiptapBlocks(text) ?? parseMarkdownBlocks(text)
         if (!blocks) {
           return false
         }
@@ -508,6 +510,9 @@ export function SimpleEditor({
       TableRow,
       TableHeader,
       TableCell,
+      Mathematics.configure({
+        katexOptions: { output: "mathml", throwOnError: false },
+      }),
       ImageUploadNode.configure({
         accept: "image/*",
         maxSize: MAX_FILE_SIZE,

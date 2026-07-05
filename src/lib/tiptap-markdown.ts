@@ -12,6 +12,64 @@ function getTextContent(node: JSONContent): string {
   return (node.content ?? []).map(getTextContent).join("");
 }
 
+function mathLatex(node: JSONContent) {
+  return typeof node.attrs?.latex === "string" ? node.attrs.latex : "";
+}
+
+function inlineMathNodes(text: string): JSONContent[] {
+  const nodes: JSONContent[] = [];
+  const pattern = /\$([^$\n]+)\$/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(text))) {
+    if (match.index > lastIndex) {
+      nodes.push({ type: "text", text: text.slice(lastIndex, match.index) });
+    }
+    nodes.push({ type: "inlineMath", attrs: { latex: match[1] ?? "" } });
+    lastIndex = pattern.lastIndex;
+  }
+
+  if (lastIndex < text.length) {
+    nodes.push({ type: "text", text: text.slice(lastIndex) });
+  }
+  return nodes;
+}
+
+export function markdownMathToTiptapBlocks(markdown: string): JSONContent[] | null {
+  if (!/\$[^$\n]+\$|\$\$/.test(markdown)) {
+    return null;
+  }
+
+  const lines = markdown.replace(/\r\n/g, "\n").split("\n");
+  const blocks: JSONContent[] = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index] ?? "";
+    if (!line.trim()) continue;
+
+    if (line.trim().startsWith("$$")) {
+      const mathLines = [line.trim().slice(2)];
+      let nextIndex = index;
+      while (!mathLines.at(-1)?.endsWith("$$") && nextIndex + 1 < lines.length) {
+        nextIndex += 1;
+        mathLines.push(lines[nextIndex] ?? "");
+      }
+      if (mathLines.at(-1)?.endsWith("$$")) {
+        mathLines[mathLines.length - 1] = mathLines.at(-1)?.slice(0, -2) ?? "";
+        blocks.push({
+          type: "blockMath",
+          attrs: { latex: mathLines.join("\n").trim() },
+        });
+        index = nextIndex;
+        continue;
+      }
+    }
+
+    blocks.push({ type: "paragraph", content: inlineMathNodes(line.trim()) });
+  }
+  return blocks;
+}
+
 function renderInline(node: JSONContent): string {
   let text = typeof node.text === "string" ? escapeMarkdownText(node.text) : "";
   const marks = node.marks ?? [];
@@ -39,7 +97,9 @@ function renderInline(node: JSONContent): string {
 function renderChildren(nodes: JSONContent[] | undefined): string {
   return (nodes ?? [])
     .map((node) =>
-      typeof node.text === "string"
+      node.type === "inlineMath"
+        ? `$${mathLatex(node)}$`
+        : typeof node.text === "string"
         ? renderInline(node)
         : renderBlock(node, 0).trim(),
     )
@@ -124,6 +184,8 @@ function renderBlock(node: JSONContent, depth: number): string {
     }
     case "paragraph":
       return renderChildren(node.content);
+    case "blockMath":
+      return `$$${mathLatex(node)}$$`;
     case "blockquote":
       return renderChildren(node.content)
         .split("\n")

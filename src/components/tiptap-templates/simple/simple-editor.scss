@@ -31,6 +31,17 @@
   font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
+.tiptap-mathematics-render,
+.tiptap-mathematics-render math {
+  font-family: "IBM Plex Math", serif;
+}
+
+.tiptap-mathematics-render[data-type="block-math"] {
+  margin: 1rem 0;
+  overflow-x: auto;
+  text-align: center;
+}
+
 .simple-editor-wrapper {
   width: 100%;
   min-height: 16rem;

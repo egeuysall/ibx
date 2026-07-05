@@ -1,3 +1,5 @@
+@import "@ibm/plex-math/css/ibm-plex-math-default.css";
+@import "katex/dist/katex.min.css";
 @import "../styles/_variables.scss";
 @import "../styles/_keyframe-animations.scss";
 
