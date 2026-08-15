@@ -1,4 +1,4 @@
-import { SignInButton, SignUpButton } from "@clerk/nextjs";
+import { SignUpButton } from "@clerk/nextjs";
 import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -46,15 +46,13 @@ function LandingPage() {
         </Link>
 
         <div className="flex items-center gap-2">
-          <SignInButton
-            mode="modal"
-            fallbackRedirectUrl="/app"
-            forceRedirectUrl="/app"
+          <Button
+            variant="ghost"
+            size="sm"
+            render={<Link href="/sign-in?redirect_url=/app" prefetch={false} />}
           >
-            <Button variant="ghost" size="sm">
-              sign in
-            </Button>
-          </SignInButton>
+            sign in
+          </Button>
           <SignUpButton
             mode="modal"
             fallbackRedirectUrl="/app"
@@ -85,15 +83,13 @@ function LandingPage() {
             >
               <Button size="lg">create account</Button>
             </SignUpButton>
-            <SignInButton
-              mode="modal"
-              fallbackRedirectUrl="/app"
-              forceRedirectUrl="/app"
+            <Button
+              variant="outline"
+              size="lg"
+              render={<Link href="/sign-in?redirect_url=/app" prefetch={false} />}
             >
-              <Button variant="outline" size="lg">
-                sign in
-              </Button>
-            </SignInButton>
+              sign in
+            </Button>
           </div>
         </div>
 

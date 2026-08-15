@@ -11,5 +11,5 @@ export default async function SettingsPage() {
     redirect("/");
   }
 
-  return <SettingsView />;
+  return <SettingsView apiKeySession={session.type === "apiKey"} />;
 }

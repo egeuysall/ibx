@@ -159,7 +159,7 @@ function readStoredCalendarFeedUrl() {
   }
 }
 
-export function SettingsView() {
+export function SettingsView({ apiKeySession = false }: { apiKeySession?: boolean }) {
   const router = useRouter();
   const { signOut } = useClerk();
   const { theme, setTheme } = useTheme();
@@ -396,11 +396,13 @@ export function SettingsView() {
   }, [availabilityNotes, hasHydratedPreferences]);
 
   useEffect(() => {
-    void refreshApiKeys();
+    if (!apiKeySession) {
+      void refreshApiKeys();
+    }
     void refreshBriConnection();
     void refreshCalendarFeedStatus();
     void refreshConflictRecoveries();
-  }, []);
+  }, [apiKeySession]);
 
   useEffect(() => {
     const onUnauthorized = () => {
@@ -855,10 +857,16 @@ export function SettingsView() {
 
             <section className="border-b px-4 py-4 md:px-6">
               <p className="text-sm">api keys</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                create keys for cli usage. keys are shown once and only hashed
-                values are stored.
-              </p>
+              {apiKeySession ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  API-key sessions cannot create or revoke keys. Sign in with Clerk for key management.
+                </p>
+              ) : (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  create keys for cli usage. keys are shown once and only hashed
+                  values are stored.
+                </p>
+              )}
 
               <div className="mt-3 flex max-w-xl flex-wrap items-center gap-1.5">
                 <input
@@ -900,7 +908,7 @@ export function SettingsView() {
                   size="sm"
                   className="w-auto"
                   onClick={handleCreateApiKey}
-                  disabled={isCreatingKey}
+                  disabled={apiKeySession || isCreatingKey}
                 >
                   {isCreatingKey ? "generating..." : "generate key"}
                 </Button>
@@ -956,7 +964,7 @@ export function SettingsView() {
                         variant="outline"
                         size="sm"
                         className="w-auto"
-                        disabled={revokingKeyId === key.id}
+                        disabled={apiKeySession || revokingKeyId === key.id}
                         onClick={() => void handleRevokeApiKey(key.id)}
                       >
                         {revokingKeyId === key.id ? "revoking..." : "revoke"}

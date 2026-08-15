@@ -1,6 +1,6 @@
 import "server-only";
 
-import { createHash } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 
 import { verifyToken } from "@clerk/backend";
 import { auth } from "@clerk/nextjs/server";
@@ -9,6 +9,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { api, convex } from "@/lib/convex-server";
 import { API_KEY_PREFIX } from "@/lib/api-keys";
+import { apiKeyCanCreateBrowserSession } from "@/lib/api-key-browser-session";
 import { getAuthOwnerKey } from "@/lib/auth-owner";
 import {
   LEGACY_SESSION_COOKIE_NAME,
@@ -47,14 +48,20 @@ export type RouteAuth =
   | {
       type: "apiKey";
       apiKey: ApiKeyCheck;
+      tokenSource: "bearer" | "cookie";
     };
 
 type RouteAuthOptions = {
   allowSession?: boolean;
   allowApiKey?: boolean;
+  allowBrowserApiKey?: boolean;
   allowClerk?: boolean;
 };
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+export const BROWSER_API_KEY_COOKIE_NAME = "ibx_api_key_session";
+export const BROWSER_API_KEY_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
+const BROWSER_API_KEY_SESSION_VERSION = 1;
+const BROWSER_API_KEY_SECRET_MIN_LENGTH = 32;
 
 function readSessionTokenFromCookieStore(cookieStore: Awaited<ReturnType<typeof cookies>>) {
   const currentToken = cookieStore.get(SESSION_COOKIE_NAME)?.value;
@@ -104,12 +111,16 @@ function parseBearerToken(request: NextRequest) {
   return token.trim();
 }
 
-async function resolveApiKey(rawKey: string) {
+export async function resolveApiKey(rawKey: string) {
   if (!rawKey.startsWith(API_KEY_PREFIX) || rawKey.length <= API_KEY_PREFIX.length) {
     return null;
   }
 
   const keyHash = createHash("sha256").update(rawKey).digest("hex");
+  return resolveApiKeyHash(keyHash);
+}
+
+async function resolveApiKeyHash(keyHash: string) {
   const key = await convex.query(api.apiKeys.getActiveByHash, { keyHash });
 
   if (!key) {
@@ -125,6 +136,92 @@ async function resolveApiKey(rawKey: string) {
     ownerKey: key.ownerKey ?? null,
     createdAt: key.createdAt,
   } satisfies ApiKeyCheck;
+}
+
+function getBrowserApiKeySessionSecret() {
+  const secret = process.env.API_KEY_SESSION_SECRET || process.env.CLERK_SECRET_KEY;
+  if (!secret || secret.length < BROWSER_API_KEY_SECRET_MIN_LENGTH) {
+    return null;
+  }
+
+  return createHash("sha256").update(secret).digest();
+}
+
+function hashApiKey(rawKey: string) {
+  return createHash("sha256").update(rawKey).digest("hex");
+}
+
+export function browserApiKeySessionCookieOptions() {
+  return {
+    httpOnly: true,
+    sameSite: "lax" as const,
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: BROWSER_API_KEY_SESSION_MAX_AGE_SECONDS,
+  };
+}
+
+export function sealBrowserApiKeySession(rawKey: string) {
+  const key = getBrowserApiKeySessionSecret();
+  if (!key) {
+    return null;
+  }
+
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const payload = Buffer.from(
+    JSON.stringify({
+      v: BROWSER_API_KEY_SESSION_VERSION,
+      keyHash: hashApiKey(rawKey),
+      exp: Date.now() + BROWSER_API_KEY_SESSION_MAX_AGE_SECONDS * 1000,
+    }),
+  );
+  const encrypted = Buffer.concat([cipher.update(payload), cipher.final()]);
+  const tag = cipher.getAuthTag();
+
+  return Buffer.concat([iv, tag, encrypted]).toString("base64url");
+}
+
+async function resolveBrowserApiKeySession(sealedSession: string) {
+  const key = getBrowserApiKeySessionSecret();
+  if (!key) {
+    return null;
+  }
+
+  try {
+    const sealed = Buffer.from(sealedSession, "base64url");
+    if (sealed.length <= 28) {
+      return null;
+    }
+
+    const iv = sealed.subarray(0, 12);
+    const tag = sealed.subarray(12, 28);
+    const encrypted = sealed.subarray(28);
+    const decipher = createDecipheriv("aes-256-gcm", key, iv);
+    decipher.setAuthTag(tag);
+    const payload = JSON.parse(
+      Buffer.concat([decipher.update(encrypted), decipher.final()]).toString("utf8"),
+    ) as { v?: unknown; keyHash?: unknown; exp?: unknown };
+
+    if (
+      payload.v !== BROWSER_API_KEY_SESSION_VERSION ||
+      typeof payload.keyHash !== "string" ||
+      !/^[a-f0-9]{64}$/.test(payload.keyHash) ||
+      typeof payload.exp !== "number" ||
+      payload.exp <= Date.now()
+    ) {
+      return null;
+    }
+
+    const apiKey = await resolveApiKeyHash(payload.keyHash);
+    if (!apiKey || !apiKeyCanCreateBrowserSession(apiKey)) {
+      return null;
+    }
+
+    return apiKey;
+  } catch {
+    return null;
+  }
 }
 
 async function resolveClerkBearerToken(rawToken: string) {
@@ -169,6 +266,19 @@ export async function getServerSession() {
     };
   }
 
+  const cookieStore = await cookies();
+  const browserApiKeyCookie = cookieStore.get(BROWSER_API_KEY_COOKIE_NAME)?.value;
+  if (browserApiKeyCookie) {
+    const apiKey = await resolveBrowserApiKeySession(browserApiKeyCookie);
+    if (apiKey) {
+      return {
+        type: "apiKey" as const,
+        apiKey,
+        tokenSource: "cookie" as const,
+      };
+    }
+  }
+
   const session = await getLegacyServerSession();
   if (!session) {
     return null;
@@ -195,6 +305,7 @@ export async function getRouteAuth(
   options: RouteAuthOptions = {},
 ): Promise<RouteAuth | null> {
   const allowApiKey = options.allowApiKey ?? true;
+  const allowBrowserApiKey = options.allowBrowserApiKey ?? allowApiKey;
   const allowClerk = options.allowClerk ?? true;
   const allowSession = options.allowSession ?? true;
   const bearerToken = parseBearerToken(request);
@@ -206,7 +317,22 @@ export async function getRouteAuth(
         return {
           type: "apiKey",
           apiKey,
+          tokenSource: "bearer",
         };
+      }
+    }
+
+    if (allowBrowserApiKey) {
+      const browserApiKeyCookie = request.cookies.get(BROWSER_API_KEY_COOKIE_NAME)?.value;
+      if (browserApiKeyCookie) {
+        const apiKey = await resolveBrowserApiKeySession(browserApiKeyCookie);
+        if (apiKey) {
+          return {
+            type: "apiKey",
+            apiKey,
+            tokenSource: "cookie",
+          };
+        }
       }
     }
   }
@@ -286,8 +412,17 @@ function sameOrigin(candidate: string, requestOrigin: string) {
 export function validateCsrfForSessionAuth(request: NextRequest, auth: RouteAuth) {
   const needsCsrf =
     auth.type === "session" ||
-    (auth.type === "clerk" && auth.tokenSource === "cookie");
+    (auth.type === "clerk" && auth.tokenSource === "cookie") ||
+    (auth.type === "apiKey" && auth.tokenSource === "cookie");
   if (!needsCsrf || SAFE_METHODS.has(request.method)) {
+    return null;
+  }
+
+  return validateUnsafeRequestOrigin(request);
+}
+
+export function validateUnsafeRequestOrigin(request: NextRequest) {
+  if (SAFE_METHODS.has(request.method)) {
     return null;
   }
 
@@ -359,5 +494,11 @@ export function unauthorizedJson(message = "Unauthorized") {
       maxAge: 0,
     });
   }
+  response.cookies.set({
+    name: BROWSER_API_KEY_COOKIE_NAME,
+    value: "",
+    ...browserApiKeySessionCookieOptions(),
+    maxAge: 0,
+  });
   return response;
 }

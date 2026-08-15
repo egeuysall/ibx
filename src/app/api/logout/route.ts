@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { getRouteSession, validateCsrfForSessionAuth } from "@/lib/auth-server";
+import {
+  BROWSER_API_KEY_COOKIE_NAME,
+  browserApiKeySessionCookieOptions,
+  getRouteAuth,
+  getRouteSession,
+  validateCsrfForSessionAuth,
+} from "@/lib/auth-server";
 import { api, convex } from "@/lib/convex-server";
 import {
   LEGACY_SESSION_COOKIE_NAME,
@@ -10,8 +16,16 @@ import {
 } from "@/lib/session";
 
 export async function POST(request: NextRequest) {
+  const auth = await getRouteAuth(request, { allowClerk: false });
+  if (auth) {
+    const csrfError = validateCsrfForSessionAuth(request, auth);
+    if (csrfError) {
+      return csrfError;
+    }
+  }
+
   const session = await getRouteSession(request);
-  if (session) {
+  if (session && !auth) {
     const csrfError = validateCsrfForSessionAuth(request, { type: "session", session });
     if (csrfError) {
       return csrfError;
@@ -38,6 +52,12 @@ export async function POST(request: NextRequest) {
       maxAge: 0,
     });
   }
+  response.cookies.set({
+    name: BROWSER_API_KEY_COOKIE_NAME,
+    value: "",
+    ...browserApiKeySessionCookieOptions(),
+    maxAge: 0,
+  });
 
   return response;
 }

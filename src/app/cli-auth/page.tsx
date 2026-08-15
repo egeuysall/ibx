@@ -62,6 +62,9 @@ export default async function CliAuthPage({
   if (!session) {
     redirect(`/sign-in?redirect_url=${encodeURIComponent(currentPath)}`);
   }
+  if (session.type === "apiKey") {
+    redirect("/");
+  }
 
   return (
     <main className="flex min-h-dvh items-center justify-center bg-background p-6 text-foreground">
