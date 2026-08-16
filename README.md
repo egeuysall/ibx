@@ -234,6 +234,13 @@ The CLI is TypeScript-based and uses `flags`.
 Install (recommended, no npm publish needed):
 
 ```bash
+brew tap egeuysall/tap
+brew install --formula egeuysall/tap/ibx
+```
+
+Or use the source installer:
+
+```bash
 curl -fsSL https://ibx.egeuysal.com/install.sh | bash
 ```
 
