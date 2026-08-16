@@ -1,5 +1,7 @@
+import { realpathSync } from "node:fs";
 import { chmod, rename, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { basename, dirname, resolve, sep } from "node:path";
+import { spawnSync } from "node:child_process";
 import process from "node:process";
 
 import {
@@ -19,6 +21,29 @@ type GitHubRelease = {
     browser_download_url?: unknown;
   }>;
 };
+
+function isHomebrewManaged() {
+  return [process.argv[1], process.execPath].some((candidate) => {
+    if (!candidate || ["bun", "node", "nodejs"].includes(basename(candidate))) return false;
+    try {
+      return realpathSync(candidate).includes(`${sep}Cellar${sep}`);
+    } catch {
+      return false;
+    }
+  });
+}
+
+function runHomebrewUpgrade() {
+  for (const args of [["update"], ["upgrade", "ibx"]]) {
+    const result = spawnSync("brew", args, { stdio: "inherit" });
+    if (result.error || result.status !== 0) {
+      throw new CliError(`Homebrew ${args.join(" ")} failed`, {
+        exitCode: EXIT_CODE.NETWORK,
+        code: "SELF_UPDATE_HOMEBREW_FAILED",
+      });
+    }
+  }
+}
 
 function normalizeReleaseVersion(tagName: unknown) {
   if (typeof tagName !== "string") {
@@ -81,6 +106,13 @@ async function downloadAsset(url: string) {
 }
 
 export async function runSelfUpdateCommand() {
+  if (isHomebrewManaged()) {
+    runHomebrewUpgrade();
+    printOk("updated ibx with Homebrew");
+    printInfo("ran brew update && brew upgrade ibx");
+    return;
+  }
+
   const release = await fetchLatestRelease();
   const latestVersion = normalizeReleaseVersion(release.tag_name);
   if (!latestVersion) {
