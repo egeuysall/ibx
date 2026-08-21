@@ -133,4 +133,26 @@ final class IBXTests: XCTestCase {
 
         try? FileManager.default.removeItem(at: fileURL)
     }
+
+    func testClientRequestsFailFastForOfflineFallback() async throws {
+        let session = CapturingURLSession()
+        let client = IBXClient(baseURL: URL(string: "https://example.com")!, urlSession: session)
+
+        let response = try await client.session()
+        let timeoutInterval = await session.timeoutInterval
+
+        XCTAssertFalse(response.authenticated)
+        XCTAssertEqual(timeoutInterval, 6)
+    }
+}
+
+private actor CapturingURLSession: URLSessionProtocol {
+    private(set) var timeoutInterval: TimeInterval?
+
+    func data(for request: URLRequest) async throws -> (Data, URLResponse) {
+        timeoutInterval = request.timeoutInterval
+        let url = request.url ?? URL(string: "https://example.com")!
+        let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!
+        return (#"{"authenticated":false}"#.data(using: .utf8)!, response)
+    }
 }

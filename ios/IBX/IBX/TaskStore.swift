@@ -141,6 +141,7 @@ final class TaskStore {
             }
             return
         }
+        guard !isLoading else { return }
 
         isLoading = true
         errorMessage = nil
@@ -555,6 +556,7 @@ final class TaskStore {
 
     private func syncQueuedChanges(successMessage: String?) async {
         guard isAuthenticated else { return }
+        guard !isLoading else { return }
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }

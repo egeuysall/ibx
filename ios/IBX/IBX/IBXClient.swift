@@ -4,6 +4,7 @@ struct IBXClient: Sendable {
     var baseURL: URL
     var authTokenProvider: (@Sendable () async throws -> String?)?
     var urlSession: URLSessionProtocol = URLSession.shared
+    private let requestTimeout: TimeInterval = 6
 
     func session() async throws -> SessionResponse {
         try await request("/api/session")
@@ -121,7 +122,7 @@ struct IBXClient: Sendable {
         let url = URL(string: path, relativeTo: baseURL)!
         var request = URLRequest(url: url)
         request.httpMethod = method
-        request.timeoutInterval = 15
+        request.timeoutInterval = requestTimeout
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let token = try await authTokenProvider?(), !token.isEmpty {
