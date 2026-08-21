@@ -89,6 +89,7 @@ import {
 } from "@/lib/offline/db";
 import { flushPendingPublicationOperations } from "@/lib/offline/publication-sync";
 import {
+  appendTodoResourceLink,
   getTodoLinksInputValue,
   getTodoResourceLinks,
   parseTodoLinksInput,
@@ -751,6 +752,14 @@ function getTodoDisplayMeta(notes: string | null): TodoDisplayMeta {
     descriptionPreview: description ? getPreviewNotes(description) : null,
     links,
     linksInputValue: links.map((link) => link.url).join(", "),
+  };
+}
+
+function getTodoDisplayMetaWithBri(todo: TodoItem): TodoDisplayMeta {
+  const meta = getTodoDisplayMeta(todo.notes);
+  return {
+    ...meta,
+    links: appendTodoResourceLink(meta.links, todo.briUrl, "bri"),
   };
 }
 
@@ -2881,7 +2890,7 @@ export function AppShell({
   const todoDisplayMetaById = useMemo(() => {
     const map = new Map<string, TodoDisplayMeta>();
     for (const todo of visibleTodos) {
-      map.set(todo.id, getTodoDisplayMeta(todo.notes));
+      map.set(todo.id, getTodoDisplayMetaWithBri(todo));
     }
     return map;
   }, [visibleTodos]);
@@ -3390,7 +3399,7 @@ export function AppShell({
                     {section.todos.map((todo, index) => {
                       const todoMeta =
                         todoDisplayMetaById.get(todo.id) ??
-                        getTodoDisplayMeta(todo.notes);
+                        getTodoDisplayMetaWithBri(todo);
                       const resourceLinks = todoMeta.links;
                       const notesDescription = todoMeta.description;
                       const previewNotesDescription =

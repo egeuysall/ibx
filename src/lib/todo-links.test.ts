@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import {
+  appendTodoResourceLink,
   getTodoLinksInputValue,
   getTodoResourceLinks,
   normalizeNoteUrl,
@@ -44,5 +45,15 @@ describe("todo links", () => {
         "read this links: https://mail.google.com/mail/u/0/#inbox/FMfcgzQbf",
       ),
     ).toBe("read this");
+  });
+
+  it("appends a derived Bri link without duplicating saved links", () => {
+    const url = "https://bri.fyi/egeuysall/code";
+    const links = getTodoResourceLinks(`published ${url}`);
+
+    expect(appendTodoResourceLink(links, url, "bri")).toEqual(links);
+    expect(appendTodoResourceLink([], url, "bri")).toEqual([
+      { url, label: "bri" },
+    ]);
   });
 });

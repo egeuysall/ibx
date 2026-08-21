@@ -67,6 +67,19 @@ export function getTodoResourceLinks(notes: string | null): TodoResourceLink[] {
   return links;
 }
 
+export function appendTodoResourceLink(
+  links: TodoResourceLink[],
+  rawUrl: string | null | undefined,
+  label: string,
+) {
+  const normalized = rawUrl ? normalizeNoteUrl(rawUrl) : null;
+  if (!normalized || links.some((link) => link.url === normalized)) {
+    return links;
+  }
+
+  return [...links, { url: normalized, label }];
+}
+
 export function parseTodoLinksInput(value: string) {
   const tokens = value
     .split(/[\s,]+/g)

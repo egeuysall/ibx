@@ -23,6 +23,36 @@ export const getBySource = query({
   },
 });
 
+export const listPublishedBriBySources = query({
+  args: {
+    ownerKey: v.union(v.string(), v.null()),
+    sourceKind: sourceKindValidator,
+    sourceIds: v.array(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const rows = [];
+    const sourceIds = [...new Set(args.sourceIds)].slice(0, 500);
+
+    for (const sourceId of sourceIds) {
+      const publication = await ctx.db
+        .query("publications")
+        .withIndex("by_ownerKey_and_sourceKind_and_sourceId", (q) =>
+          q
+            .eq("ownerKey", args.ownerKey)
+            .eq("sourceKind", args.sourceKind)
+            .eq("sourceId", sourceId),
+        )
+        .unique();
+
+      if (publication?.status === "published") {
+        rows.push({ sourceId, url: publication.url });
+      }
+    }
+
+    return rows;
+  },
+});
+
 export const upsertBriPublication = mutation({
   args: {
     ownerKey: v.union(v.string(), v.null()),

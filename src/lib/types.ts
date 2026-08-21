@@ -29,6 +29,7 @@ export type TodoItem = {
   priority: TodoPriority;
   recurrence: TodoRecurrence;
   source: TodoSource;
+  briUrl?: string | null;
   createdAt: number;
 };
 

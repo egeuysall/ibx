@@ -46,6 +46,20 @@ export async function GET(request: NextRequest) {
   }
 
   const todos = await convex.query(api.todos.listAll, { ownerKey });
+  const publications = await convex.query(
+    api.publications.listPublishedBriBySources,
+    {
+      ownerKey,
+      sourceKind: "todo",
+      sourceIds: todos.map((todo) => todo._id),
+    },
+  );
+  const briUrlByTodoId = new Map(
+    publications.map((publication) => [
+      publication.sourceId,
+      publication.url,
+    ]),
+  );
 
   return NextResponse.json({
     todos: todos.map((todo) => ({
@@ -64,6 +78,7 @@ export async function GET(request: NextRequest) {
       priority: todo.priority ?? 2,
       recurrence: todo.recurrence ?? "none",
       source: todo.source ?? "manual",
+      briUrl: briUrlByTodoId.get(todo._id) ?? null,
       createdAt: todo.createdAt,
     })),
   });
