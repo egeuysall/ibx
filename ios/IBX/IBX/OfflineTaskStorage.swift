@@ -80,6 +80,39 @@ struct PendingTodoOperation: Identifiable, Codable, Hashable {
 struct OfflineTaskSnapshot: Codable, Hashable {
     var todos: [TodoItem] = []
     var pendingOperations: [PendingTodoOperation] = []
+
+    mutating func appendCreateOperation(_ operation: PendingTodoOperation, duplicateWindow: Double = 10_000) {
+        guard operation.kind == .create, let payload = operation.payload else {
+            pendingOperations.append(operation)
+            return
+        }
+
+        let duplicates = pendingOperations.filter {
+            $0.kind == .create &&
+            $0.payload?.dedupeKey == payload.dedupeKey &&
+            abs($0.createdAt - operation.createdAt) <= duplicateWindow
+        }
+        let duplicateIds = Set(duplicates.compactMap(\.todoId))
+        if !duplicateIds.isEmpty {
+            todos.removeAll { duplicateIds.contains($0.id) }
+        }
+        pendingOperations.removeAll { duplicateIds.contains($0.todoId ?? "") }
+        pendingOperations.append(operation)
+    }
+}
+
+private extension OfflineTodoPatch {
+    var dedupeKey: String {
+        var parts: [String] = []
+        parts.append(title?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? "")
+        parts.append(notes?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "")
+        parts.append(dueDate ?? "")
+        parts.append(estimatedHours.map { String($0) } ?? "")
+        parts.append(timeBlockStart.map { String($0) } ?? "")
+        parts.append(recurrence?.rawValue ?? "")
+        parts.append(priority.map { String($0) } ?? "")
+        return parts.joined(separator: "|")
+    }
 }
 
 actor OfflineTaskStorage {
@@ -139,7 +172,7 @@ actor OfflineTaskStorage {
         var snapshot = try loadSnapshot()
         snapshot.todos.removeAll { $0.id == todo.id }
         snapshot.todos.append(todo)
-        snapshot.pendingOperations.append(PendingTodoOperation(
+        snapshot.appendCreateOperation(PendingTodoOperation(
             id: UUID().uuidString,
             kind: .create,
             todoId: todo.id,

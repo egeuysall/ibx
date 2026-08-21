@@ -92,6 +92,7 @@ export async function POST(request: NextRequest) {
     timeBlockStart?: unknown;
     recurrence?: unknown;
     priority?: unknown;
+    localId?: unknown;
   } | null;
 
   const title =
@@ -109,6 +110,10 @@ export async function POST(request: NextRequest) {
   const recurrenceInput =
     typeof body?.recurrence === "string" ? body.recurrence : "none";
   const priorityInput = body?.priority;
+  const localId =
+    typeof body?.localId === "string" && /^local-[A-Za-z0-9-]{1,80}$/.test(body.localId)
+      ? body.localId
+      : null;
 
   if (!title) {
     return NextResponse.json({ error: "Todo title is required." }, { status: 400 });
@@ -188,6 +193,7 @@ export async function POST(request: NextRequest) {
     ownerKey,
     thoughtId,
     thoughtExternalId: externalId,
+    ...(localId ? { externalId: localId } : {}),
     title,
     notes,
     dueDate,

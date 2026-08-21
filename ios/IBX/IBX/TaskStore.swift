@@ -514,6 +514,8 @@ final class TaskStore {
             snapshot.todos = todos
             if operation.kind == .delete, let todoId = operation.todoId, todoId.hasPrefix("local-") {
                 snapshot.pendingOperations.removeAll { $0.todoId == todoId }
+            } else if operation.kind == .create {
+                snapshot.appendCreateOperation(operation)
             } else {
                 snapshot.pendingOperations.append(operation)
             }
@@ -579,17 +581,19 @@ final class TaskStore {
             return
         }
 
-        var remaining: [PendingTodoOperation] = []
-        for operation in snapshot.pendingOperations {
+        while let operation = snapshot.pendingOperations.first {
             do {
-                try await apply(operation)
-            } catch {
-                remaining.append(operation)
-                let pendingTail = snapshot.pendingOperations.drop { $0.id != operation.id }.dropFirst()
-                remaining.append(contentsOf: pendingTail)
-                snapshot.pendingOperations = remaining
+                let serverTodoId = try await apply(operation)
+                snapshot.pendingOperations.removeFirst()
+                if let localTodoId = operation.todoId, let serverTodoId {
+                    snapshot.todos.replaceTodoId(localTodoId, with: serverTodoId)
+                    snapshot.pendingOperations.replaceTodoId(localTodoId, with: serverTodoId)
+                }
                 try await offlineStorage.saveSnapshot(snapshot)
-                pendingOfflineCount = remaining.count
+                pendingOfflineCount = snapshot.pendingOperations.count
+            } catch {
+                try await offlineStorage.saveSnapshot(snapshot)
+                pendingOfflineCount = snapshot.pendingOperations.count
                 throw error
             }
         }
@@ -599,26 +603,29 @@ final class TaskStore {
         pendingOfflineCount = 0
     }
 
-    private func apply(_ operation: PendingTodoOperation) async throws {
+    private func apply(_ operation: PendingTodoOperation) async throws -> String? {
         switch operation.kind {
         case .create:
             guard let payload = operation.payload,
                   let title = payload.title?.trimmingCharacters(in: .whitespacesAndNewlines),
-                  !title.isEmpty else { return }
-            _ = try await client.createTodo(title: title, payload: payload)
+                  !title.isEmpty else { return nil }
+            return try await client.createTodo(title: title, payload: payload, localId: operation.todoId).id
         case .generate:
             guard let text = operation.text?.trimmingCharacters(in: .whitespacesAndNewlines),
-                  !text.isEmpty else { return }
+                  !text.isEmpty else { return nil }
             _ = try await client.generateTodos(from: text)
+            return nil
         case .update:
             guard let todoId = operation.todoId,
                   !todoId.hasPrefix("local-"),
                   let body = operation.payload?.requestBody,
-                  !body.isEmpty else { return }
+                  !body.isEmpty else { return nil }
             try await client.updateTodo(todoId, payload: body)
+            return nil
         case .delete:
-            guard let todoId = operation.todoId, !todoId.hasPrefix("local-") else { return }
+            guard let todoId = operation.todoId, !todoId.hasPrefix("local-") else { return nil }
             try await client.deleteTodo(todoId)
+            return nil
         }
     }
 
@@ -709,6 +716,36 @@ final class TaskStore {
     nonisolated static func dateOnlyMilliseconds(_ date: Date) -> Double {
         let key = dateKey(date)
         return (Date.localNoon(forDateKey: key) ?? date).millisecondsSince1970
+    }
+}
+
+private extension Array where Element == PendingTodoOperation {
+    mutating func replaceTodoId(_ localTodoId: String, with serverTodoId: String) {
+        for index in indices where self[index].todoId == localTodoId {
+            self[index].todoId = serverTodoId
+        }
+    }
+}
+
+private extension Array where Element == TodoItem {
+    mutating func replaceTodoId(_ localTodoId: String, with serverTodoId: String) {
+        for index in indices where self[index].id == localTodoId {
+            let todo = self[index]
+            self[index] = TodoItem(
+                id: serverTodoId,
+                thoughtId: todo.thoughtId,
+                title: todo.title,
+                notes: todo.notes,
+                status: todo.status,
+                dueDate: todo.dueDate,
+                estimatedHours: todo.estimatedHours,
+                timeBlockStart: todo.timeBlockStart,
+                priority: todo.priority,
+                recurrence: todo.recurrence,
+                source: todo.source,
+                createdAt: todo.createdAt
+            )
+        }
     }
 }
 

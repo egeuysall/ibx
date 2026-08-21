@@ -93,7 +93,7 @@ final class IBXTests: XCTestCase {
         let fileURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("ibx-offline-rich-\(UUID().uuidString).json")
         let storage = OfflineTaskStorage(fileURL: fileURL)
-        let dueDate = Date(timeIntervalSince1970: 1782000000)
+        let dueDate = Date.localNoon(forDateKey: "2026-06-21")!
 
         let todo = try await storage.addShortcutTodo(
             title: "write launch note",
@@ -114,6 +114,22 @@ final class IBXTests: XCTestCase {
         XCTAssertEqual(payload?.dueDate, "2026-06-21")
         XCTAssertEqual(payload?.estimatedHours, 1.5)
         XCTAssertEqual(payload?.priority, 3)
+
+        try? FileManager.default.removeItem(at: fileURL)
+    }
+
+    func testOfflineShortcutTodoDedupesImmediateRepeatedCreates() async throws {
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ibx-offline-dedupe-\(UUID().uuidString).json")
+        let storage = OfflineTaskStorage(fileURL: fileURL)
+
+        _ = try await storage.addShortcutTodo(title: "offline capture")
+        let todo = try await storage.addShortcutTodo(title: "offline capture")
+        let snapshot = try await storage.loadSnapshot()
+
+        XCTAssertEqual(snapshot.todos, [todo])
+        XCTAssertEqual(snapshot.pendingOperations.count, 1)
+        XCTAssertEqual(snapshot.pendingOperations.first?.todoId, todo.id)
 
         try? FileManager.default.removeItem(at: fileURL)
     }

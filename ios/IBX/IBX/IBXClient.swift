@@ -14,9 +14,12 @@ struct IBXClient: Sendable {
         return response.todos
     }
 
-    func createTodo(title: String, payload: OfflineTodoPatch? = nil) async throws -> CreateTodoResponse {
+    func createTodo(title: String, payload: OfflineTodoPatch? = nil, localId: String? = nil) async throws -> CreateTodoResponse {
         var body = payload?.requestBody ?? [:]
         body["title"] = .string(title)
+        if let localId {
+            body["localId"] = .string(localId)
+        }
         if body["priority"] == nil {
             body["priority"] = .int(1)
         }

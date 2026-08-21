@@ -332,6 +332,7 @@ export const createOne = mutation({
     ownerKey: v.union(v.string(), v.null()),
     thoughtId: v.id("thoughts"),
     thoughtExternalId: v.string(),
+    externalId: v.optional(v.string()),
     title: v.string(),
     notes: v.union(v.string(), v.null()),
     dueDate: v.union(v.number(), v.null()),
@@ -342,6 +343,18 @@ export const createOne = mutation({
     source: v.union(v.literal("ai"), v.literal("manual")),
   },
   handler: async (ctx, args) => {
+    if (args.externalId) {
+      const existing = await ctx.db
+        .query("todos")
+        .withIndex("by_ownerKey_and_externalId", (q) =>
+          q.eq("ownerKey", args.ownerKey).eq("externalId", args.externalId),
+        )
+        .take(1);
+      if (existing[0] && isActiveTodo(existing[0])) {
+        return existing[0]._id;
+      }
+    }
+
     const todayStartUtc = getStartOfConfiguredDay(Date.now());
     const normalizedPriority = args.priority ?? (args.source === "manual" ? 1 : 2);
     const normalizedEstimatedHours =
@@ -374,6 +387,7 @@ export const createOne = mutation({
       ownerKey: args.ownerKey,
       thoughtId: args.thoughtId,
       thoughtExternalId: args.thoughtExternalId,
+      externalId: args.externalId,
       title: args.title,
       notes: args.notes,
       status: "open",
