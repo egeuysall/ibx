@@ -757,9 +757,11 @@ function getTodoDisplayMeta(notes: string | null): TodoDisplayMeta {
 
 function getTodoDisplayMetaWithBri(todo: TodoItem): TodoDisplayMeta {
   const meta = getTodoDisplayMeta(todo.notes);
+  const links = appendTodoResourceLink(meta.links, todo.briUrl);
   return {
     ...meta,
-    links: appendTodoResourceLink(meta.links, todo.briUrl, "bri"),
+    links,
+    linksInputValue: links.map((link) => link.url).join(", "),
   };
 }
 

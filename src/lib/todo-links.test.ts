@@ -52,8 +52,8 @@ describe("todo links", () => {
     const links = getTodoResourceLinks(`published ${url}`);
 
     expect(appendTodoResourceLink(links, url, "bri")).toEqual(links);
-    expect(appendTodoResourceLink([], url, "bri")).toEqual([
-      { url, label: "bri" },
+    expect(appendTodoResourceLink([], url)).toEqual([
+      { url, label: "bri.fyi/egeuysall/code" },
     ]);
   });
 });

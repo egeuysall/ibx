@@ -70,14 +70,15 @@ export function getTodoResourceLinks(notes: string | null): TodoResourceLink[] {
 export function appendTodoResourceLink(
   links: TodoResourceLink[],
   rawUrl: string | null | undefined,
-  label: string,
+  label?: string,
 ) {
   const normalized = rawUrl ? normalizeNoteUrl(rawUrl) : null;
   if (!normalized || links.some((link) => link.url === normalized)) {
     return links;
   }
 
-  return [...links, { url: normalized, label }];
+  const derivedLabel = label ?? getTodoResourceLinks(normalized)[0]?.label ?? normalized;
+  return [...links, { url: normalized, label: derivedLabel }];
 }
 
 export function parseTodoLinksInput(value: string) {
