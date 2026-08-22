@@ -159,11 +159,12 @@ struct HeaderActionCapsule<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        HStack(spacing: 18) {
+        HStack(spacing: 14) {
             content()
         }
-        .frame(height: 44)
-        .padding(.horizontal, 8)
+        .frame(height: 42)
+        .padding(.leading, 6)
+        .padding(.trailing, 10)
         .background(Color(.secondarySystemGroupedBackground).opacity(0.72), in: Capsule())
         .overlay {
             Capsule()
@@ -181,7 +182,7 @@ struct AccountToolbarButton: View {
     var body: some View {
         if isSignedIn {
             UserButton()
-                .frame(width: 36, height: 36)
+                .frame(width: 34, height: 34)
         } else {
             Button {
                 showingAuth = true

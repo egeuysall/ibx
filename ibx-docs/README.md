@@ -16,4 +16,4 @@ The **API Reference tab** is generated from **src/api.yaml**. The older Markdown
 
 ## Hosting
 
-The **docs bundle** is self-hostable with the generated server entry under dist/rsc/index.js. A production domain and deployment target are intentionally not configured in this scaffold; choose the host before adding a release workflow or public URL.
+The **public docs URL** is [ibx.egeuysal.com/docs](https://ibx.egeuysal.com/docs). The IBX Next app rewrites that path to the production `ibx-docs` Vercel project. Deploy the docs bundle with **bun run docs:deploy** from the repository root; set `IBX_DOCS_URL` only when using a different deployment target.
