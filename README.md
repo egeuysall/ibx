@@ -141,8 +141,11 @@ ibx API is available for external integrations using API keys (`iak_...`).
 
 Detailed docs:
 
-- [API Reference](/Users/egeuysal/Developer/ibx/docs/API.md)
-- [Authentication Guide](/Users/egeuysal/Developer/ibx/docs/API_AUTH.md)
+- [Holocron documentation site source](./ibx-docs)
+- [API Reference](./docs/API.md)
+- [Authentication Guide](./docs/API_AUTH.md)
+
+Build the documentation site locally with **bun run docs:dev** or **bun run docs:build**.
 
 Auth/session:
 

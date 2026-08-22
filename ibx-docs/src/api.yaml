@@ -1,0 +1,886 @@
+openapi: 3.0.3
+info:
+  title: IBX HTTP API
+  version: 1.0.0
+  description: |
+    The IBX API turns captured thoughts into owner-scoped todos, supports
+    offline clients, and exposes authenticated task operations for the web
+    app, CLI, Shortcut, and server integrations.
+  contact:
+    url: https://ibx.egeuysal.com
+servers:
+  - url: https://ibx.egeuysal.com
+    description: Production
+  - url: http://localhost:3000
+    description: Local development
+tags:
+  - name: auth
+    description: Session state, password login, and logout.
+  - name: thoughts
+    description: Capture, sync, and generate from thoughts.
+  - name: todos
+    description: List, create, update, and delete todos.
+  - name: api-keys
+    description: Create and revoke integration keys from a session.
+security:
+  - bearerAuth: []
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: IBX API key
+      description: Send the full secret as Authorization Bearer iak_....
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+    Timestamp:
+      type: integer
+      format: int64
+      description: Unix timestamp in milliseconds.
+    Thought:
+      type: object
+      required: [externalId, rawText, createdAt, status, synced, aiRunId]
+      properties:
+        externalId:
+          type: string
+          minLength: 16
+          maxLength: 64
+        rawText:
+          type: string
+          maxLength: 12000
+        createdAt:
+          $ref: '#/components/schemas/Timestamp'
+        status:
+          type: string
+          enum: [pending, processing, done, failed]
+        synced:
+          type: boolean
+        aiRunId:
+          type: string
+          nullable: true
+    Todo:
+      type: object
+      required:
+        - id
+        - thoughtId
+        - title
+        - notes
+        - notesJson
+        - notesHtml
+        - status
+        - dueDate
+        - estimatedHours
+        - timeBlockStart
+        - priority
+        - recurrence
+        - source
+        - createdAt
+      properties:
+        id:
+          type: string
+        thoughtId:
+          type: string
+        title:
+          type: string
+          maxLength: 140
+        notes:
+          type: string
+          nullable: true
+          maxLength: 4000
+        notesJson:
+          nullable: true
+          oneOf:
+            - type: string
+            - type: object
+              additionalProperties: true
+        notesHtml:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [open, done]
+        dueDate:
+          allOf:
+            - $ref: '#/components/schemas/Timestamp'
+          nullable: true
+        estimatedHours:
+          type: number
+          minimum: 0.25
+          maximum: 24
+          nullable: true
+        timeBlockStart:
+          allOf:
+            - $ref: '#/components/schemas/Timestamp'
+          nullable: true
+        priority:
+          type: integer
+          enum: [1, 2, 3]
+        recurrence:
+          type: string
+          enum: [none, daily, weekly, monthly]
+        source:
+          type: string
+          enum: [ai, manual]
+        briUrl:
+          type: string
+          nullable: true
+        createdAt:
+          $ref: '#/components/schemas/Timestamp'
+    GenerationPreferences:
+      type: object
+      properties:
+        autoSchedule:
+          type: boolean
+          default: true
+        includeRelevantLinks:
+          type: boolean
+          default: true
+        requireTaskDescriptions:
+          type: boolean
+          default: true
+        availabilityNotes:
+          type: string
+          maxLength: 640
+          nullable: true
+        executionSpeedMultiplier:
+          type: number
+          minimum: 1
+          maximum: 8
+          default: 4
+    GenerateRequest:
+      type: object
+      required: [text]
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 8000
+        today:
+          type: string
+          format: date
+          description: Optional date key used for scheduling.
+        preferences:
+          $ref: '#/components/schemas/GenerationPreferences'
+    GenerateResponse:
+      type: object
+      required: [ok, runId, created, updated, deleted, mode, droppedMutationOps]
+      properties:
+        ok:
+          type: boolean
+          enum: [true]
+        runId:
+          type: string
+        created:
+          type: integer
+        updated:
+          type: integer
+        deleted:
+          type: integer
+        mode:
+          type: string
+          enum: [create, mutate]
+        message:
+          type: string
+          nullable: true
+        droppedMutationOps:
+          type: integer
+        deduped:
+          type: boolean
+          description: Present for an already-processed Shortcut capture.
+    SyncThought:
+      type: object
+      required: [externalId, rawText, createdAt, status, aiRunId]
+      properties:
+        externalId:
+          type: string
+          minLength: 16
+          maxLength: 64
+        rawText:
+          type: string
+          minLength: 1
+          maxLength: 12000
+        createdAt:
+          $ref: '#/components/schemas/Timestamp'
+        status:
+          type: string
+          enum: [pending, processing, done, failed]
+        aiRunId:
+          type: string
+          nullable: true
+    TodoCreateRequest:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 140
+        notes:
+          type: string
+          nullable: true
+          maxLength: 640
+        dueDate:
+          type: string
+          format: date
+          nullable: true
+        estimatedHours:
+          type: number
+          minimum: 0.25
+          maximum: 24
+          nullable: true
+        timeBlockStart:
+          allOf:
+            - $ref: '#/components/schemas/Timestamp'
+          nullable: true
+        recurrence:
+          type: string
+          enum: [none, daily, weekly, monthly]
+          default: none
+        priority:
+          type: integer
+          enum: [1, 2, 3]
+          default: 1
+        localId:
+          type: string
+          pattern: '^local-[A-Za-z0-9-]{1,80}$'
+          description: Optional offline client identifier.
+    TodoPatchRequest:
+      type: object
+      minProperties: 1
+      properties:
+        status:
+          type: string
+          enum: [open, done]
+        title:
+          type: string
+          minLength: 1
+          maxLength: 140
+        notes:
+          type: string
+          nullable: true
+          maxLength: 4000
+        notesJson:
+          nullable: true
+          oneOf:
+            - type: string
+            - type: object
+              additionalProperties: true
+        notesHtml:
+          type: string
+          nullable: true
+        dueDate:
+          type: string
+          format: date
+          nullable: true
+        estimatedHours:
+          type: number
+          minimum: 0.25
+          maximum: 24
+          nullable: true
+        timeBlockStart:
+          allOf:
+            - $ref: '#/components/schemas/Timestamp'
+          nullable: true
+        recurrence:
+          type: string
+          enum: [none, daily, weekly, monthly]
+        priority:
+          type: integer
+          enum: [1, 2, 3]
+    ApiKeyMetadata:
+      type: object
+      required: [id, name, prefix, last4, permission, createdAt]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        prefix:
+          type: string
+          example: iak
+        last4:
+          type: string
+        permission:
+          type: string
+          enum: [read, write, both]
+        createdAt:
+          $ref: '#/components/schemas/Timestamp'
+    ApiKeyCreateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 64
+          default: default
+        permission:
+          type: string
+          enum: [read, write, both]
+          default: both
+    ApiKeyCreateResponse:
+      type: object
+      required: [ok, apiKey, key]
+      properties:
+        ok:
+          type: boolean
+          enum: [true]
+        apiKey:
+          type: string
+          description: Full secret returned only at creation time.
+        key:
+          $ref: '#/components/schemas/ApiKeyMetadata'
+    AuthState:
+      type: object
+      required: [authenticated, expiresAt]
+      properties:
+        authenticated:
+          type: boolean
+        authType:
+          type: string
+          enum: [apiKey, clerk, session]
+          nullable: true
+        permission:
+          type: string
+          enum: [read, write, both]
+          nullable: true
+        expiresAt:
+          allOf:
+            - $ref: '#/components/schemas/Timestamp'
+          nullable: true
+  responses:
+    BadRequest:
+      description: The body, date, enum, or identifier is invalid.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: No valid session, Clerk credential, or API key was supplied.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: The request failed the origin check or the API key lacks the required method permission.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: The owner-scoped resource does not exist.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    RateLimited:
+      description: Too many password login attempts.
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  parameters:
+    ExternalId:
+      name: externalId
+      in: path
+      required: true
+      schema:
+        type: string
+        maxLength: 64
+    TodoId:
+      name: todoId
+      in: path
+      required: true
+      schema:
+        type: string
+        maxLength: 64
+    KeyId:
+      name: keyId
+      in: path
+      required: true
+      schema:
+        type: string
+        maxLength: 96
+paths:
+  /api/session:
+    get:
+      tags: [auth]
+      summary: Check session
+      description: Return authentication state without failing unauthenticated callers.
+      security: []
+      responses:
+        '200':
+          description: Current authentication state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthState'
+  /api/login:
+    post:
+      tags: [auth]
+      summary: Start password session
+      description: Authenticate with the configured app password and set the ibx_session cookie. Login is rate limited per client address.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password:
+                  type: string
+                  minLength: 1
+                  maxLength: 512
+      responses:
+        '200':
+          description: Session cookie set.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok:
+                    type: boolean
+                    enum: [true]
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /api/logout:
+    post:
+      tags: [auth]
+      summary: End session
+      description: Revoke the current legacy session and clear session and browser API-key cookies.
+      security: []
+      responses:
+        '200':
+          description: Session cleared.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok:
+                    type: boolean
+                    enum: [true]
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/api-keys:
+    get:
+      tags: [api-keys]
+      summary: List API keys
+      description: List active key metadata for a signed-in session or Clerk user. Bearer API keys cannot list or create keys.
+      security: []
+      responses:
+        '200':
+          description: Active key metadata.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [keys]
+                properties:
+                  keys:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ApiKeyMetadata'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [api-keys]
+      summary: Create API key
+      description: Create an API key from a signed-in session or Clerk user. The raw apiKey is returned once.
+      security: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApiKeyCreateRequest'
+      responses:
+        '200':
+          description: Key created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKeyCreateResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/api-keys/{keyId}:
+    delete:
+      tags: [api-keys]
+      summary: Revoke API key
+      description: Revoke an owner-scoped API key.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/KeyId'
+      responses:
+        '200':
+          description: Key revoked.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok:
+                    type: boolean
+                    enum: [true]
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/thoughts:
+    get:
+      tags: [thoughts]
+      summary: List thoughts
+      description: List owner-scoped thought records.
+      responses:
+        '200':
+          description: Thought records.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [thoughts]
+                properties:
+                  thoughts:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Thought'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/thoughts/sync:
+    post:
+      tags: [thoughts]
+      summary: Sync thoughts
+      description: Upsert valid client thoughts for offline-first clients. Invalid entries are discarded before the response is built.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [thoughts]
+              properties:
+                thoughts:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/SyncThought'
+      responses:
+        '200':
+          description: Synced owner thoughts.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [thoughts]
+                properties:
+                  thoughts:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Thought'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/thoughts/{externalId}/todos:
+    get:
+      tags: [thoughts]
+      summary: List thought todos
+      description: List todos attached to one client externalId. An unknown thought returns an empty todos array.
+      parameters:
+        - $ref: '#/components/parameters/ExternalId'
+        - name: today
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Thought todos.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [todos]
+                properties:
+                  todos:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Todo'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [thoughts]
+      summary: Add thought todo
+      description: Add one manual todo under an existing thought.
+      parameters:
+        - $ref: '#/components/parameters/ExternalId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TodoCreateRequest'
+      responses:
+        '200':
+          description: Todo created.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok:
+                    type: boolean
+                    enum: [true]
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/thoughts/{externalId}/generate:
+    post:
+      tags: [thoughts]
+      summary: Generate thought todos
+      description: Run the AI planner for an existing thought and reconcile its todos.
+      parameters:
+        - $ref: '#/components/parameters/ExternalId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                today:
+                  type: string
+                  format: date
+                preferences:
+                  $ref: '#/components/schemas/GenerationPreferences'
+      responses:
+        '200':
+          description: Generation completed.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, created]
+                properties:
+                  ok:
+                    type: boolean
+                    enum: [true]
+                  created:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          description: AI generation failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/todos:
+    get:
+      tags: [todos]
+      summary: List todos
+      description: List all owner-scoped todos and attach Bri publication URLs when available.
+      parameters:
+        - name: today
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+          description: Optional day boundary used for due-date enforcement.
+      responses:
+        '200':
+          description: Todo records.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [todos]
+                properties:
+                  todos:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Todo'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [todos]
+      summary: Create todo
+      description: Create a manual todo and a corresponding completed thought record.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TodoCreateRequest'
+      responses:
+        '200':
+          description: Todo identifiers.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, id, thoughtId]
+                properties:
+                  ok:
+                    type: boolean
+                    enum: [true]
+                  id:
+                    type: string
+                  thoughtId:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/todos/generate:
+    post:
+      tags: [todos]
+      summary: Generate todos
+      description: Turn raw text into todos and reconcile matching owner-scoped work.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateRequest'
+      responses:
+        '200':
+          description: Generation and reconciliation counts.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          description: AI generation or persistence failure.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/todos/{todoId}:
+    get:
+      tags: [todos]
+      summary: Get todo
+      description: Read one owner-scoped todo.
+      parameters:
+        - $ref: '#/components/parameters/TodoId'
+      responses:
+        '200':
+          description: Todo record.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [todo]
+                properties:
+                  todo:
+                    $ref: '#/components/schemas/Todo'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [todos]
+      summary: Update todo
+      description: Update one or more fields and resync its time-block reminder.
+      parameters:
+        - $ref: '#/components/parameters/TodoId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TodoPatchRequest'
+      responses:
+        '200':
+          description: Todo updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok:
+                    type: boolean
+                    enum: [true]
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    delete:
+      tags: [todos]
+      summary: Delete todo
+      description: Permanently delete one owner-scoped todo and cancel its reminder.
+      parameters:
+        - $ref: '#/components/parameters/TodoId'
+      responses:
+        '200':
+          description: Todo deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok:
+                    type: boolean
+                    enum: [true]
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'

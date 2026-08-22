@@ -1,0 +1,51 @@
+---
+"$schema": https://holocron.so/frontmatter.json
+title: Understand the offline-first workflow
+sidebarTitle: Offline First
+description: Follow IBX local capture, queued generation, reconnect sync, and owner-scoped conflict behavior.
+icon: lucide:cloud-off
+---
+
+# Understand the offline-first workflow
+
+The **offline-first model** keeps capture available when the network is unavailable, then flushes durable local work when the browser becomes online and authenticated.
+
+## What is stored locally
+
+The **IndexedDB adapter** is exposed through src/lib/indexedDb.ts and uses the offline database module underneath:
+
+- **localThoughts** keeps captured thoughts with local sync status and the last error.
+- **queuedPrompts** keeps raw text waiting for AI generation.
+- **cachedTodos** keeps the last todo list available for a fast offline view.
+
+The **browser queue** is local device state, not a second server database. Clearing site data removes it, so export or reconnect before clearing storage if a capture matters.
+
+## Capture and flush
+
+The **capture path** writes a prompt to queuedPrompts first, then tries to call the generation API when the app is online:
+
+```text
+capture -> IndexedDB queuedPrompts -> POST /api/todos/generate -> Convex todos
+```
+
+The **reconnect path** runs when authentication or network state changes. Successful generation removes the queued item and refreshes the server-backed todo list; failures keep the item with an error and retry state.
+
+## Manual offline changes
+
+The **offline mutation queue** also covers todo edits, attachment operations, and Bri publication changes. The app flushes accepted operations through the sync route and reports rejected or conflicting operations instead of silently dropping them.
+
+Use **stable identifiers** for integrations: thought externalId values and todo IDs let IBX reconcile retries without creating an unrelated record.
+
+## Shortcuts and PWA
+
+The **Apple Shortcut** sends a direct generation request when online. An offline Shortcut capture opens the app with a shortcut payload so the browser can place it in the same local queue.
+
+The **PWA shell** can reopen without a network connection, but AI generation and server persistence still require a later authenticated flush. Offline availability protects capture; it does not make remote AI or Convex queries local.
+
+## Recovery checklist
+
+- **Stay open:** leave the app signed in until the queued count reaches zero.
+- **Inspect errors:** open the queue state and read the last error before retrying.
+- **Avoid duplicates:** do not resubmit the same thought manually while a queued item is pending.
+- **Re-authenticate:** an expired session prevents flushing even when the browser is online.
+- **Preserve evidence:** keep the raw thought text and external ID when reporting a failed sync.

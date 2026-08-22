@@ -1,0 +1,129 @@
+---
+"$schema": https://holocron.so/frontmatter.json
+title: Use the IBX HTTP API
+sidebarTitle: HTTP API
+description: Integrate IBX thoughts, todos, AI generation, sessions, and API-key management over JSON.
+icon: lucide:braces
+---
+
+# Use the IBX HTTP API
+
+The **IBX API** is JSON over HTTPS at https://ibx.egeuysal.com. The API Reference tab is generated from the OpenAPI file in this docs project; this page explains auth, common payloads, and the owner-scoped workflow.
+
+## Authenticate
+
+The **Bearer header** carries an iak_ API key:
+
+```bash
+curl -sS https://ibx.egeuysal.com/api/todos \
+  -H "Authorization: Bearer iak_your_key_here" \
+  -H "Accept: application/json"
+```
+
+The **permission model** is method-based:
+
+- **read** allows GET, HEAD, and OPTIONS.
+- **write** allows POST, PATCH, and DELETE.
+- **both** allows both classes.
+
+Session cookies and Clerk sessions also work on the routes that allow them. Unsafe cookie-authenticated requests must include a same-origin Origin or Referer; a server-side Bearer request does not need that browser CSRF signal.
+
+## Check auth state
+
+The **session endpoint** always returns JSON. An unauthenticated caller receives authenticated false instead of a 401:
+
+```bash
+curl -sS https://ibx.egeuysal.com/api/session \
+  -H "Authorization: Bearer iak_your_key_here"
+```
+
+The response includes **authType**, the API-key permission when applicable, and a session expiry when the legacy password session is active.
+
+## Generate todos from a thought
+
+The **generation endpoint** accepts one normalized text input and optional scheduling preferences:
+
+```bash
+curl -sS -X POST https://ibx.egeuysal.com/api/todos/generate \
+  -H "Authorization: Bearer iak_your_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "Finish the landing page and email two leads",
+    "preferences": {
+      "autoSchedule": true,
+      "includeRelevantLinks": true,
+      "requireTaskDescriptions": true,
+      "availabilityNotes": "No meetings after 4pm",
+      "executionSpeedMultiplier": 4
+    }
+  }'
+```
+
+The **generation result** includes runId, created, updated, deleted, mode, message, and droppedMutationOps. AI reconciliation can update or remove matching open todos, so treat generation as a mutation rather than a read.
+
+The **input limit** is 8,000 characters. The endpoint returns 400 for empty input and 500 when the AI or Convex mutation fails. Retrying is bounded inside the server for transient mutations; clients should avoid duplicate retries after an unknown response.
+
+## Read and edit todos
+
+The **todo list** returns all owner-scoped todos:
+
+```bash
+curl -sS "https://ibx.egeuysal.com/api/todos?today=2026-08-21" \
+  -H "Authorization: Bearer iak_your_key_here"
+```
+
+The **today query** asks the server to enforce due-date rescheduling before returning the list. Each todo includes status, schedule fields, priority, recurrence, source, and a Bri publication URL when one exists.
+
+Create a **manual todo** with POST /api/todos:
+
+```bash
+curl -sS -X POST https://ibx.egeuysal.com/api/todos \
+  -H "Authorization: Bearer iak_your_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Email Pat",
+    "notes": "Send a concise follow-up",
+    "dueDate": "2026-08-22",
+    "estimatedHours": 0.5,
+    "priority": 1,
+    "recurrence": "none"
+  }'
+```
+
+Update a **todo by stable ID**:
+
+```bash
+curl -sS -X PATCH https://ibx.egeuysal.com/api/todos/<todo-id> \
+  -H "Authorization: Bearer iak_your_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{"status":"done"}'
+```
+
+The **PATCH route** can change status, title, plain notes, rich notes, dueDate, estimatedHours, timeBlockStart, recurrence, and priority. DELETE permanently removes the owner-scoped todo.
+
+## Sync thoughts
+
+The **thought endpoints** support clients that keep a local capture log:
+
+```text
+GET  /api/thoughts
+POST /api/thoughts/sync
+GET  /api/thoughts/<external-id>/todos
+POST /api/thoughts/<external-id>/todos
+POST /api/thoughts/<external-id>/generate
+```
+
+The **externalId** is the client-owned reconciliation key. Sync accepts pending, processing, done, and failed statuses; invalid entries are ignored and an empty valid batch returns an empty thoughts array.
+
+## Errors
+
+An **error response** normally contains an error string. The most useful statuses are:
+
+- **400** invalid input, date, recurrence, priority, or resource ID.
+- **401** missing or invalid session, Clerk token, or API key.
+- **403** CSRF/origin rejection or a permission mismatch.
+- **404** a requested todo or thought does not exist.
+- **429** password login rate limiting.
+- **500** AI, Convex, attachment, or internal server failure.
+
+The **API is owner-scoped**: a valid credential can only read and mutate the records associated with its owner key. Keep raw keys out of URLs, logs, browser bundles, and public Shortcut files.

@@ -1,0 +1,66 @@
+---
+"$schema": https://holocron.so/frontmatter.json
+title: Develop and release IBX
+sidebarTitle: Development
+description: Run checks, build the web app and CLI, and verify the generated documentation site without touching user state.
+icon: lucide:wrench
+---
+
+# Develop and release IBX
+
+The **repository** contains the web app, Convex functions, CLI, Apple Shortcut generator, public installer assets, and the standalone ibx-docs Holocron site.
+
+## Daily commands
+
+The **web development loop** is:
+
+```bash
+bun install
+bunx convex dev
+bun run dev
+```
+
+The **quality checks** are:
+
+```bash
+bun run lint
+bun run build
+```
+
+The **build script** bundles the CLI-facing server assets before running next build. Keep Convex development running when a route or generated type depends on the active deployment.
+
+## Build the CLI and Shortcut
+
+The **CLI artifacts** are built with:
+
+```bash
+bun run cli:build
+bun run cli:bundle
+```
+
+The **Shortcut artifact** is generated with:
+
+```bash
+bun run shortcut:build
+```
+
+Generated outputs under cli/dist, scripts-produced bundles, and shortcut/dist are build products. Review the source and the public serving path before committing an artifact.
+
+## Build the docs
+
+The **Holocron site** lives in ibx-docs and can be run independently:
+
+```bash
+bun run --cwd ibx-docs dev
+bun run --cwd ibx-docs build
+```
+
+The **docs build** validates MDX, navigation, OpenAPI processing, and the standalone production bundle. A successful build is the release gate for docs content; deployment is intentionally separate so the host and domain can be chosen explicitly.
+
+## Safe release checklist
+
+- **Check environment:** use .env.local for secrets and verify production variables in the deployment system.
+- **Run lint/build:** do not claim a release from a docs-only check when app code changed.
+- **Verify auth:** test missing, read-only, write-only, and both API-key cases.
+- **Verify the public app:** exercise capture, generation, todo update, and offline reconnect.
+- **Inspect user changes:** keep unrelated iOS or local workspace files out of a docs commit.

@@ -1,0 +1,80 @@
+---
+"$schema": https://holocron.so/frontmatter.json
+title: Use the IBX CLI
+sidebarTitle: CLI
+description: Authenticate the ibx binary, capture thoughts, manage todos, publish to Bri, and inspect automation output.
+icon: lucide:terminal
+---
+
+# Use the IBX CLI
+
+The **ibx CLI** is a TypeScript terminal client with browser authentication, API-key fallback, bounded retries, structured stderr logs, and stable exit codes.
+
+## Authenticate
+
+The **interactive login** opens a browser for Clerk approval:
+
+```bash
+ibx login
+ibx auth status
+ibx whoami
+```
+
+Use an **API key** for CI or headless automation:
+
+```bash
+ibx login --api-key iak_your_key_here --url https://ibx.egeuysal.com
+```
+
+The **credential store** prefers macOS Keychain, Windows Credential Manager, or Linux Secret Service. When no OS store is available, the CLI uses a local config file with 0600 permissions and prints a warning.
+
+## Capture and list
+
+The **capture command** sends raw text for generation:
+
+```bash
+ibx add "finish the landing page and email two leads" --auto-schedule
+ibx todos list --view today
+ibx todos list --view upcoming
+ibx td
+```
+
+The **short aliases** are ibx n for capture, ibx t l for list, and ibx td for completed tasks in the America/Chicago timezone unless IBX_TIMEZONE overrides it.
+
+## Manage a todo
+
+The **manual todo command** creates a task without AI:
+
+```bash
+ibx todos add "email Pat" --notes "Send a concise follow-up" --due 2026-08-22 --priority 1
+ibx todos done --id <todoId-or-prefix>
+ibx todos set --id <todoId-or-prefix> --recurrence weekly
+ibx todos delete --id <todoId-or-prefix>
+```
+
+The **prefix lookup** is convenient for humans, but stable full IDs are safer in scripts. Add --json to commands that support machine-readable output.
+
+## Publish and attach
+
+The **Bri integration** can publish a todo or thought when IBX has a configured Bri connection:
+
+```bash
+ibx publish <todoId-or-prefix>
+ibx publish --private <todoId-or-prefix>
+ibx publish unpublish <todoId-or-prefix>
+ibx attach <todoId-or-prefix> ./design.png
+```
+
+The **publication URL** is stored with the source record and appears as briUrl in todo API responses. A missing Bri connection is a configuration issue, not a reason to retry the same publish indefinitely.
+
+## Reliability and exit codes
+
+- **2** means validation or input error.
+- **3** means authentication error.
+- **4** means network or timeout error.
+- **5** means server error.
+- **6** means the target was not found.
+- **7** means the target was ambiguous or conflicted.
+- **8** means rate limiting.
+
+The **update check** runs once per day against ibx-version.json; set IBX_DISABLE_UPDATE_CHECK=1 in isolated automation. Use ibx self-update to fetch the latest GitHub release asset.

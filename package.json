@@ -16,7 +16,9 @@
     "cli:build": "tsc -p cli/tsconfig.json",
     "cli:start": "node cli/dist/index.js",
     "cli:bundle": "node scripts/build-ibx-bundle.mjs",
-    "shortcut:build": "cd shortcut && bun run build"
+    "shortcut:build": "cd shortcut && bun run build",
+    "docs:dev": "bun run --cwd ibx-docs dev",
+    "docs:build": "bun run --cwd ibx-docs build"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

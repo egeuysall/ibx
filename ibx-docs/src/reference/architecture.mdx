@@ -1,0 +1,42 @@
+---
+"$schema": https://holocron.so/frontmatter.json
+title: Understand the IBX architecture
+sidebarTitle: Architecture
+description: Map the Next.js app, Convex backend, offline queue, AI planner, CLI, and integrations.
+icon: lucide:layers-3
+---
+
+# Understand the IBX architecture
+
+The **IBX architecture** is deliberately split between a thin Next.js route layer, owner-scoped Convex functions, local browser persistence, and a reusable terminal client.
+
+## Runtime boundaries
+
+- **Next.js App Router:** src/app owns pages, API route handlers, the PWA manifest, and the service-worker registration.
+- **Auth boundary:** src/lib/auth-server.ts resolves Clerk, legacy session, and API-key credentials, then applies CSRF and method permissions.
+- **Convex boundary:** convex/ contains schema, queries, mutations, sessions, API keys, todos, thoughts, reminders, memories, attachments, and publications.
+- **AI boundary:** src/lib/ai.ts calls the Vercel AI Gateway; src/lib/todo-planning.ts normalizes and reconciles generated work.
+- **Offline boundary:** src/lib/offline/ and src/lib/indexedDb.ts persist queued prompts, local thoughts, cached todos, and pending mutations.
+- **CLI boundary:** cli/src/index.ts uses the same HTTP API with browser approval or an API key.
+
+## Data flow
+
+The **normal browser path** is capture, local persistence, authenticated API call, Convex mutation, and UI refresh. A failed network call stays visible to the local queue instead of being treated as a successful server write.
+
+The **AI path** stores the raw thought, loads profile and recent-run context, asks the model for a plan, reconciles creates/updates/deletes, then marks the thought done or failed.
+
+The **integration path** keeps external publication metadata in publications and stores Bri credentials encrypted when the secure connection configuration is available. The raw Bri key should not cross into client bundles.
+
+## Ownership model
+
+The **owner key** is the isolation boundary shared by Clerk users, legacy sessions, and API keys. Every data query and mutation receives the resolved owner key before it reaches Convex.
+
+The **API key record** stores a hash, display metadata, permission, and revocation timestamp. The raw iak_ secret is only available at creation and is never needed by Convex after hashing.
+
+## Client surfaces
+
+- **Web app:** best for interactive capture, review, scheduling, and settings.
+- **PWA:** best for reopening the capture surface when connectivity is intermittent.
+- **CLI:** best for scripts, terminal workflows, and automation.
+- **Apple Shortcut:** best for one-tap capture that falls back to the web app when offline.
+- **HTTP API:** best for server-to-server integrations and custom clients.

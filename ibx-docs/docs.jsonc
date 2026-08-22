@@ -1,0 +1,86 @@
+{
+  "$schema": "https://holocron.so/docs.json",
+  "name": "IBX",
+  "description": "Turn raw thoughts into executable todos with an offline-first app, API, and CLI.",
+  "favicon": "/favicon.ico",
+  "colors": {
+    "primary": "#d4d4d4"
+  },
+  "icons": {
+    "library": "lucide"
+  },
+  "navbar": {
+    "links": [
+      {
+        "type": "github",
+        "href": "https://github.com/egeuysall/ibx"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Open IBX",
+      "href": "https://ibx.egeuysal.com"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/egeuysall/ibx"
+    }
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting started",
+            "icon": "lucide:rocket",
+            "pages": [
+              "index",
+              "getting-started/installation"
+            ]
+          },
+          {
+            "group": "Guides",
+            "icon": "lucide:map",
+            "pages": [
+              "guides/offline-first",
+              "guides/cli",
+              "guides/api-keys"
+            ]
+          },
+          {
+            "group": "Reference",
+            "icon": "lucide:book-open",
+            "pages": [
+              "reference/http-api",
+              "reference/architecture",
+              "reference/development"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "openapi": "api.yaml",
+        "base": "api"
+      }
+    ],
+    "global": {
+      "anchors": [
+        {
+          "anchor": "IBX",
+          "href": "https://ibx.egeuysal.com",
+          "icon": "lucide:home",
+          "placement": "tabs"
+        },
+        {
+          "anchor": "GitHub",
+          "href": "https://github.com/egeuysall/ibx",
+          "icon": "lucide:github",
+          "placement": "tabs"
+        }
+      ]
+    }
+  }
+}

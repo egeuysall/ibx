@@ -1,0 +1,60 @@
+---
+"$schema": https://holocron.so/frontmatter.json
+title: Use IBX API keys safely
+sidebarTitle: API Keys
+description: Create, scope, store, verify, and revoke iak_ keys for the IBX API and CLI.
+icon: lucide:key-round
+---
+
+# Use IBX API keys safely
+
+An **IBX API key** starts with iak_ and authenticates CLI or server-to-server requests with Authorization: Bearer. The raw secret is returned once when the key is created.
+
+## Choose a permission
+
+- **read** allows GET, HEAD, and OPTIONS.
+- **write** allows POST, PATCH, and DELETE.
+- **both** allows every method and is the default for newly created keys.
+
+The **permission check** runs on every API-key request. A read key cannot generate or edit, and a write key cannot list or fetch resources.
+
+## Create and revoke a key
+
+Key management is **session-authenticated**. Use the signed-in web session or Clerk session for these endpoints; an API key cannot create another API key:
+
+```text
+GET    /api/api-keys
+POST   /api/api-keys
+DELETE /api/api-keys/<key-id>
+```
+
+Create a **scoped key**:
+
+```bash
+curl -sS -X POST https://ibx.egeuysal.com/api/api-keys \
+  -H "Content-Type: application/json" \
+  -H "Cookie: ibx_session=your_session_cookie" \
+  -d '{"name":"release-bot","permission":"write"}'
+```
+
+The **response** contains apiKey plus non-secret metadata. Store apiKey in a secret manager immediately; list and revoke endpoints never return it again.
+
+## Use a key
+
+The **Bearer request** looks like this:
+
+```bash
+curl -sS https://ibx.egeuysal.com/api/todos \
+  -H "Authorization: Bearer iak_your_key_here" \
+  -H "Accept: application/json"
+```
+
+The **session cookie** remains useful for the first-party browser. Unsafe cookie-authenticated requests require a same-origin Origin or Referer; Bearer API-key requests do not use the browser CSRF path.
+
+## Keep keys out of clients
+
+- **Server only:** read keys from runtime environment variables or a secret manager.
+- **Never log:** redact Authorization headers and raw create responses.
+- **Scope narrowly:** use read for reporting, write for mutation-only workers, both only when needed.
+- **Revoke quickly:** delete an exposed key and create a replacement.
+- **Avoid URLs:** never put a key in a query parameter or public Shortcut text.

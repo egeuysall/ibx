@@ -1,0 +1,56 @@
+---
+"$schema": https://holocron.so/frontmatter.json
+title: Turn thoughts into executable todos
+sidebarTitle: Home
+description: Build momentum with IBX, an offline-first task execution app, API, and CLI.
+icon: lucide:home
+---
+
+# Turn thoughts into executable todos
+
+**IBX** is an offline-first task execution app that turns one raw thought into a small, scheduled set of actionable todos.
+
+<Aside>
+<Tip>
+**Start here:** run the web app locally, capture one thought, then use the API or CLI when the workflow needs automation.
+</Tip>
+</Aside>
+
+## Choose a path
+
+<CardGroup cols={2}>
+  <Card title='Install and run IBX' icon='lucide:download' href='./getting-started/installation.mdx'>
+    **Set up** the environment, Convex development process, and local web app.
+  </Card>
+  <Card title='Understand offline mode' icon='lucide:cloud-off' href='./guides/offline-first.mdx'>
+    **Trace** local capture, queued prompts, reconnect, and server sync.
+  </Card>
+  <Card title='Use the CLI' icon='lucide:terminal' href='./guides/cli.mdx'>
+    **Capture**, schedule, publish, attach, and inspect todos from a terminal.
+  </Card>
+  <Card title='Call the API' icon='lucide:braces' href='./reference/http-api.mdx'>
+    **Integrate** thoughts, todos, AI generation, and API-key management.
+  </Card>
+</CardGroup>
+
+## The core workflow
+
+1. **Capture** a thought in the prompt input, CLI, Shortcut, or API.
+2. **Queue** it locally when the browser is offline.
+3. **Generate** at most 30 actionable todos with dates, priorities, recurrence, and optional time blocks.
+4. **Review** the today, upcoming, and archive views.
+5. **Execute** with status changes, notes, attachments, Bri publication, and reminders.
+
+The **same owner-scoped data model** powers the web app, CLI, Shortcut, API, Convex backend, and optional Bri integration.
+
+## Production surfaces
+
+- **Web:** https://ibx.egeuysal.com
+- **API:** JSON routes under https://ibx.egeuysal.com/api
+- **CLI:** the ibx binary with browser login or an iak_ API key
+- **PWA:** installable shell with local IndexedDB state
+- **Shortcut:** hosted at https://ibx.egeuysal.com/shortcuts/ibx-capture.shortcut
+
+<Check>
+**Keep credentials server-side:** API keys are for trusted runtimes, not browser bundles, public Shortcut exports, or committed files.
+</Check>
