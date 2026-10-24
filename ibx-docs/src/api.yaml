@@ -22,6 +22,8 @@ tags:
     description: List, create, update, and delete todos.
   - name: api-keys
     description: Create and revoke integration keys from a session.
+  - name: attachments
+    description: Owner-scoped uploads and management, with public file downloads.
 security:
   - bearerAuth: []
 components:
@@ -38,6 +40,92 @@ components:
       properties:
         error:
           type: string
+    AttachmentContentType:
+      type: string
+      enum:
+        - application/pdf
+        - image/gif
+        - image/jpeg
+        - image/png
+        - image/webp
+        - text/markdown
+        - text/plain
+        - audio/mpeg
+        - audio/mp3
+        - audio/mp4
+        - audio/wav
+        - audio/x-wav
+        - audio/ogg
+        - audio/webm
+        - video/mp4
+        - video/webm
+        - video/quicktime
+        - video/ogg
+        - video/x-m4v
+    AttachmentCreateRequest:
+      type: object
+      required: [parentKind, parentId, storageId, fileName, contentType, size]
+      properties:
+        parentKind:
+          type: string
+          enum: [thought, todo]
+        parentId:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: Full todo ID or thought externalId belonging to the authenticated owner.
+        storageId:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: Returned by the binary POST to the Convex uploadUrl.
+        fileName:
+          type: string
+          minLength: 1
+          description: Trimmed and truncated to 180 characters, then normalized to a lowercase URL-safe name. Owner-wide duplicates get -2 through -100 suffixes; deleted names remain reserved.
+        contentType:
+          $ref: '#/components/schemas/AttachmentContentType'
+        size:
+          type: integer
+          minimum: 1
+          maximum: 31457280
+          description: Bytes (30 MiB cap). Storage metadata determines the actual saved size and content type, with the supplied type used only when storage has none.
+    Attachment:
+      type: object
+      required: [id, parentKind, parentId, fileName, contentType, size, status, createdAt, updatedAt, url, publicUrl]
+      properties:
+        id:
+          type: string
+        parentKind:
+          type: string
+          enum: [thought, todo]
+        parentId:
+          type: string
+        fileName:
+          type: string
+          maxLength: 180
+        contentType:
+          $ref: '#/components/schemas/AttachmentContentType'
+        size:
+          type: integer
+          minimum: 1
+          maximum: 31457280
+        status:
+          type: string
+          enum: [uploaded]
+        createdAt:
+          $ref: '#/components/schemas/Timestamp'
+        updatedAt:
+          $ref: '#/components/schemas/Timestamp'
+        url:
+          type: string
+          format: uri
+          description: Public username/fileName URL, or authenticated /api/attachments/{id}/file fallback when no username exists.
+        publicUrl:
+          type: string
+          format: uri
+          nullable: true
+          description: Public download URL, or null without a username. Anyone who knows or guesses this URL can download without authentication.
     Timestamp:
       type: integer
       format: int64
@@ -387,6 +475,14 @@ components:
           schema:
             $ref: '#/components/schemas/Error'
   parameters:
+    AttachmentId:
+      name: attachmentId
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
     ExternalId:
       name: externalId
       in: path
@@ -409,6 +505,298 @@ components:
         type: string
         maxLength: 96
 paths:
+  /api/attachments/upload-url:
+    post:
+      tags: [attachments]
+      summary: Get upload URL
+      description: |
+        Requires write permission. No request body is required. Cookie-authenticated
+        writes require a same-origin Origin or Referer.
+        POST raw binary bytes to the returned Convex uploadUrl with the file's
+        Content-Type (not multipart). Do not send the IBX Bearer key or session
+        cookies to storage. Convex returns JSON containing storageId; then POST
+        metadata to /api/attachments. Check limits before uploading.
+      responses:
+        '200':
+          description: Upload URL and current limits.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [uploadUrl, limits]
+                properties:
+                  uploadUrl:
+                    type: string
+                    format: uri
+                  limits:
+                    type: object
+                    required: [maxBytes, allowedContentTypes]
+                    properties:
+                      maxBytes:
+                        type: integer
+                        enum: [31457280]
+                        description: 30 MiB; files must also be nonempty.
+                      allowedContentTypes:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/AttachmentContentType'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/attachments:
+    post:
+      tags: [attachments]
+      summary: Save attachment
+      description: |
+        Requires write permission and an existing owner-scoped parent. Save metadata
+        after uploading bytes to Convex. Cookie-authenticated writes require a
+        same-origin Origin or Referer. Storage size and type are validated.
+        Names are normalized and suffixed on duplicates, including deleted names.
+        Public username/fileName links expose the file without authentication;
+        notes and management remain private. Without a username, url uses the
+        authenticated /api/attachments/{id}/file fallback.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AttachmentCreateRequest'
+      responses:
+        '200':
+          description: Saved attachment and its resolved filename and URL.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, id, fileName, url]
+                properties:
+                  ok:
+                    type: boolean
+                    enum: [true]
+                  id:
+                    type: string
+                  fileName:
+                    type: string
+                  url:
+                    type: string
+                    format: uri
+        '400':
+          description: Invalid metadata, inaccessible parent, missing storage file, unsupported type, invalid stored size, or exhausted duplicate names.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    get:
+      tags: [attachments]
+      summary: List attachments
+      description: Requires read permission. Supply parentKind and parentId unless all=true, which ignores parent filters. Newest first; inspects at most 50 records per parent or 100 owner-wide, then filters deleted records. No pagination.
+      parameters:
+        - name: parentKind
+          in: query
+          schema:
+            type: string
+            enum: [thought, todo]
+        - name: parentId
+          in: query
+          description: Full todo ID or thought externalId; required with parentKind unless all=true.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 128
+        - name: all
+          in: query
+          description: Only the literal query value true enables owner-wide listing.
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Owner-scoped uploaded attachments.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [attachments]
+                properties:
+                  attachments:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Attachment'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/attachments/{attachmentId}:
+    delete:
+      tags: [attachments]
+      summary: Delete attachment
+      description: Requires write permission. Deletes the owner-scoped attachment and stored bytes; its filename stays reserved. Cookie-authenticated writes require a same-origin Origin or Referer.
+      parameters:
+        - $ref: '#/components/parameters/AttachmentId'
+      responses:
+        '200':
+          description: Attachment and stored file deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok:
+                    type: boolean
+                    enum: [true]
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/attachments/{attachmentId}/url:
+    get:
+      tags: [attachments]
+      summary: Get file URL
+      description: Requires read permission and ownership. Returns the public username/fileName URL when a username exists; otherwise returns a Convex storage URL.
+      parameters:
+        - $ref: '#/components/parameters/AttachmentId'
+      responses:
+        '200':
+          description: Resolved download URL.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [url]
+                properties:
+                  url:
+                    type: string
+                    format: uri
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/attachments/{attachmentId}/file:
+    get:
+      tags: [attachments]
+      summary: Get file
+      description: Requires read permission and ownership. Redirects to the public URL when a username exists; otherwise streams storage bytes inline with private, no-store caching and nosniff. Range forwarding is supported by the public route, not this fallback stream.
+      parameters:
+        - $ref: '#/components/parameters/AttachmentId'
+      responses:
+        '200':
+          description: File bytes when no username exists; Content-Type is taken from storage.
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '307':
+          description: Redirect to public username/fileName URL.
+          headers:
+            Location:
+              schema:
+                type: string
+                format: uri
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '502':
+          description: Storage file could not be loaded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /{username}/{fileName}:
+    get:
+      tags: [attachments]
+      summary: Get public file
+      security: []
+      description: |
+        No authentication required. Anyone who knows or guesses the URL can download.
+        Resolves the username's owner and normalized filename, not the viewer's session.
+        Streams inline with no-store caching, nosniff, wildcard CORS, and noindex,
+        nofollow (not access control). Forwards Range and If-Range to storage and
+        preserves Content-Length, Content-Range, Accept-Ranges, ETag, Last-Modified,
+        Content-Type, and storage status, supporting audio/video seeking.
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 180
+        - name: fileName
+          in: path
+          required: true
+          description: Use the returned normalized filename, including any duplicate suffix. Path segments cannot contain slashes, backslashes, or control characters.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 180
+        - name: Range
+          in: header
+          schema:
+            type: string
+          example: bytes=0-1023
+        - name: If-Range
+          in: header
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Full file bytes; Content-Type is taken from storage.
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '206':
+          description: Partial file bytes from storage.
+          headers:
+            Content-Range:
+              schema:
+                type: string
+            Accept-Ranges:
+              schema:
+                type: string
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '416':
+          description: Requested range is not satisfiable; status, body, and Content-Range are forwarded from storage.
+          headers:
+            Content-Range:
+              schema:
+                type: string
+        '502':
+          description: Storage file could not be loaded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/session:
     get:
       tags: [auth]

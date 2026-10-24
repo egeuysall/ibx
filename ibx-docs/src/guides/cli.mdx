@@ -4,6 +4,9 @@ title: Use the IBX CLI
 sidebarTitle: CLI
 description: Authenticate the ibx binary, capture thoughts, manage todos, publish to Bri, and inspect automation output.
 icon: lucide:terminal
+prompt: |
+  Document CLI authentication and commands from @/cli/src/, including attachment
+  uploads and lists, and the in-app terminal attachment file chooser.
 ---
 
 # Use the IBX CLI
@@ -63,9 +66,28 @@ ibx publish <todoId-or-prefix>
 ibx publish --private <todoId-or-prefix>
 ibx publish unpublish <todoId-or-prefix>
 ibx attach <todoId-or-prefix> ./design.png
+ibx attach list <todoId-or-prefix>
+ibx attach list --all
 ```
 
 The **publication URL** is stored with the source record and appears as briUrl in todo API responses. A missing Bri connection is a configuration issue, not a reason to retry the same publish indefinitely.
+
+**Attachment uploads** read a local file: `ibx attach <todoId> <file>`. `ibx attach list <todoId>` lists that todo's attachments; `ibx attach list --all` lists attachments across your owner account (up to 100 records before deleted entries are filtered). Each prints file URLs; add `--json` for structured output. Files must be nonempty and at most **30 MiB (31,457,280 bytes)**: PDF, GIF/JPEG/PNG/WebP, Markdown/plain text, MP3/M4A/WAV/OGG, or MP4/M4V/MOV/WebM/OGV. Duplicate names receive suffixes such as `design-2.png`.
+
+### In-app terminal
+
+The **browser terminal** uses a file chooser instead of a shell path:
+
+```text
+attach <number|id>
+attach list <number|id>
+```
+
+**`attach`** targets a todo by its displayed number or ID, opens the browser file chooser, and prints the public URL after upload. **`attach list`** lists that todo's attachments. Browsers cannot read arbitrary shell paths; use the installed `ibx` CLI when you need `./file.mp3` uploads.
+
+<Warning>
+**Attachment links are public** when your account has a username: anyone with or able to guess the URL can download without signing in. Notes and attachment writes remain owner-scoped. Without a username, create/list URLs use an authenticated file route. See [attachment API details](../reference/http-api.mdx#upload-and-manage-attachments).
+</Warning>
 
 ## Reliability and exit codes
 

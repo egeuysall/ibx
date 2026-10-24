@@ -63,6 +63,8 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useOfflineStatus } from "@/hooks/useOfflineStatus";
 import { useTheme } from "@/hooks/useTheme";
 import { UNAUTHORIZED_EVENT_NAME, apiClient, ApiError } from "@/lib/apiClient";
+import { ATTACHMENT_CONTENT_TYPES } from "@/lib/attachment-policy";
+import { parseTerminalState, resolveTerminalTodo } from "@/lib/terminal-state";
 import {
   addQueuedPrompt,
   getCachedTodos,
@@ -107,6 +109,7 @@ import type {
 } from "@/lib/types";
 
 type AppShellProps = {
+  terminalStorageKey: string;
   initialAuthenticated: boolean;
   initialFilter?: TodoFilter;
 };
@@ -1014,6 +1017,7 @@ function clearShortcutPayloadFromLocation(
 export function AppShell({
   initialAuthenticated,
   initialFilter = "today",
+  terminalStorageKey,
 }: AppShellProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1033,6 +1037,16 @@ export function AppShell({
   const [isTerminalOpen, setIsTerminalOpen] = useState(false);
   const [isTerminalRendered, setIsTerminalRendered] = useState(false);
   const [terminalInput, setTerminalInput] = useState("");
+  const [terminalHistory, setTerminalHistory] = useState<string[]>([]);
+  const [terminalListedIds, setTerminalListedIds] = useState<string[] | null>(
+    null,
+  );
+  const [terminalHydrated, setTerminalHydrated] = useState(false);
+  const [isTerminalUploading, setIsTerminalUploading] = useState(false);
+  const terminalHistoryIndex = useRef(-1);
+  const terminalHistoryDraft = useRef("");
+  const terminalFileInputRef = useRef<HTMLInputElement>(null);
+  const terminalAttachmentTarget = useRef<TodoItem | null>(null);
   const [terminalOutput, setTerminalOutput] = useState<string[]>([
     "ibx terminal ready. type help or ls.",
   ]);
@@ -1120,6 +1134,55 @@ export function AppShell({
       openTerminal();
     }
   }, [closeTerminal, isTerminalOpen, isTerminalRendered, openTerminal]);
+
+  useEffect(() => {
+    try {
+      const saved = parseTerminalState(
+        localStorage.getItem(terminalStorageKey),
+      );
+      if (saved) {
+        setIsTerminalOpen(saved.open);
+        setIsTerminalRendered(saved.open);
+        setTerminalInput(saved.input);
+        setTerminalOutput(saved.output);
+        setTerminalHistory(saved.history);
+        setTerminalListedIds(saved.listedIds);
+        setSearchQuery(saved.search);
+      }
+    } catch {
+      // Storage may be unavailable in private browsing.
+    }
+    setTerminalHydrated(true);
+  }, [terminalStorageKey]);
+
+  useEffect(() => {
+    if (!terminalHydrated || !isAuthenticated) return;
+    try {
+      localStorage.setItem(
+        terminalStorageKey,
+        JSON.stringify({
+          open: isTerminalOpen,
+          input: terminalInput,
+          output: terminalOutput,
+          history: terminalHistory,
+          listedIds: terminalListedIds,
+          search: searchQuery,
+        }),
+      );
+    } catch {
+      // A full or blocked store must not break terminal commands.
+    }
+  }, [
+    terminalHydrated,
+    terminalStorageKey,
+    isAuthenticated,
+    isTerminalOpen,
+    terminalInput,
+    terminalOutput,
+    terminalHistory,
+    terminalListedIds,
+    searchQuery,
+  ]);
 
   useEffect(
     () => () => {
@@ -2914,18 +2977,19 @@ export function AppShell({
         `$ ${input}`,
         line,
       ]);
-    const todoAtIndex = (value: string) => {
-      const index = Number(value) - 1;
-      return Number.isInteger(index) && index >= 0 ? visibleTodos[index] : null;
-    };
     const todoByIndexOrId = (value: string) =>
-      todoAtIndex(value) ?? todos.find((todo) => todo.id === value) ?? null;
+      resolveTerminalTodo(value, todos, visibleTodos, terminalListedIds);
     const formatTodoLine = (todo: TodoItem, index: number) =>
       `${index + 1}\t${displayPriority(todo.priority)}\t${displayDueDate(
         todo.dueDate,
       )}\t${todo.status}\t${todo.title}`;
 
     setTerminalInput("");
+    setTerminalHistory((current) => [
+      ...current.slice(-49),
+      input.slice(0, 2_000),
+    ]);
+    terminalHistoryIndex.current = -1;
 
     if (command === "help") {
       addOutput(
@@ -2940,6 +3004,8 @@ export function AppShell({
           "  open <number|id>",
           "  done <number|id>",
           "  delete <number|id>",
+          "  attach <number|id> (choose a file, up to 30 MB)",
+          "  attach list <number|id>",
           "  cd today|upcoming|archive|zen",
         ].join("\n"),
       );
@@ -2982,9 +3048,52 @@ export function AppShell({
               : argument === "today"
                 ? groupedTodos.today
                 : visibleTodos;
+      setTerminalListedIds(scope.slice(0, 24).map((todo) => todo.id));
       addOutput(
         scope.slice(0, 24).map(formatTodoLine).join("\n") || "no todos",
       );
+      return;
+    }
+
+    if (command === "attach") {
+      const listing = rest[0] === "list";
+      const target = listing ? rest[1] : rest[0];
+      if (!target || rest.length !== (listing ? 2 : 1)) {
+        addOutput("usage: attach <number|id> or attach list <number|id>");
+        return;
+      }
+      const todo = todoByIndexOrId(target);
+      if (!todo) {
+        addOutput("todo not found");
+        return;
+      }
+      if (!isOnline || todo.id.startsWith("local")) {
+        addOutput("attachments require an online, synced todo");
+        return;
+      }
+      if (listing) {
+        try {
+          const { attachments: files } = await apiClient.listAttachments(
+            "todo",
+            todo.id,
+          );
+          addOutput(
+            files
+              .map((file) => `${file.fileName}\n${file.publicUrl ?? file.url}`)
+              .join("\n") || "no attachments",
+          );
+        } catch (error) {
+          addOutput(
+            error instanceof Error
+              ? error.message
+              : "could not list attachments",
+          );
+        }
+      } else {
+        terminalAttachmentTarget.current = todo;
+        addOutput(`choose a file for ${todo.title}`);
+        terminalFileInputRef.current?.click();
+      }
       return;
     }
 
@@ -3030,6 +3139,31 @@ export function AppShell({
     }
 
     addOutput("unknown command. type help.");
+  };
+
+  const uploadTerminalAttachment = async (file: File) => {
+    const todo = terminalAttachmentTarget.current;
+    terminalAttachmentTarget.current = null;
+    if (!todo) return;
+    setIsTerminalUploading(true);
+    try {
+      const saved = await apiClient.uploadAttachmentFile({
+        parentKind: "todo",
+        parentId: todo.id,
+        file,
+      });
+      setTerminalOutput((current) => [
+        ...current.slice(-40),
+        `attached ${saved.fileName} to ${todo.title}\n${saved.url}`,
+      ]);
+    } catch (error) {
+      setTerminalOutput((current) => [
+        ...current.slice(-40),
+        error instanceof Error ? error.message : "upload failed",
+      ]);
+    } finally {
+      setIsTerminalUploading(false);
+    }
   };
 
   useEffect(() => {
@@ -3079,11 +3213,9 @@ export function AppShell({
         line.match(/^\$ (\S+)(?:\s+(.*))?$/) ?? [];
       return (
         <div key={`${line}-${index}`} className="flex gap-2">
-          <span className="text-neutral-600">$</span>
-          <span className="text-neutral-900 dark:text-neutral-100">
-            {command}
-          </span>
-          {args ? <span className="text-neutral-400">{args}</span> : null}
+          <span className="text-muted-foreground">$</span>
+          <span className="text-foreground">{command}</span>
+          {args ? <span className="text-foreground">{args}</span> : null}
         </div>
       );
     }
@@ -3093,13 +3225,13 @@ export function AppShell({
       return (
         <div
           key={`${line}-${index}`}
-          className="grid grid-cols-[2rem_3rem_7rem_4rem_minmax(0,1fr)] gap-2 text-neutral-400"
+          className="grid grid-cols-[2rem_3rem_7rem_4rem_minmax(0,1fr)] gap-2 text-muted-foreground"
         >
-          <span className="text-neutral-600">{columns[0]}</span>
-          <span className="text-neutral-300">{columns[1]}</span>
+          <span>{columns[0]}</span>
+          <span className="text-foreground">{columns[1]}</span>
           <span>{columns[2]}</span>
-          <span className="text-neutral-500">{columns[3]}</span>
-          <span className="truncate text-neutral-200">
+          <span>{columns[3]}</span>
+          <span className="truncate text-foreground">
             {columns.slice(4).join(" ")}
           </span>
         </div>
@@ -3108,7 +3240,7 @@ export function AppShell({
 
     if (line.endsWith(":")) {
       return (
-        <div key={`${line}-${index}`} className="text-neutral-300">
+        <div key={`${line}-${index}`} className="text-foreground">
           {line}
         </div>
       );
@@ -3116,14 +3248,28 @@ export function AppShell({
 
     if (/^\s{2}\S/.test(line)) {
       return (
-        <div key={`${line}-${index}`} className="pl-4 text-neutral-500">
+        <div key={`${line}-${index}`} className="pl-4 text-muted-foreground">
           {line.trim()}
         </div>
       );
     }
 
+    if (/^https?:\/\/\S+$/.test(line)) {
+      return (
+        <div key={`${line}-${index}`}>
+          <a
+            className="break-all text-foreground underline underline-offset-2"
+            href={line}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {line}
+          </a>
+        </div>
+      );
+    }
     return (
-      <div key={`${line}-${index}`} className="text-neutral-400">
+      <div key={`${line}-${index}`} className="text-foreground">
         {line || " "}
       </div>
     );
@@ -3135,6 +3281,18 @@ export function AppShell({
 
   return (
     <>
+      <input
+        ref={terminalFileInputRef}
+        type="file"
+        className="hidden"
+        aria-label="Terminal attachment"
+        accept={ATTACHMENT_CONTENT_TYPES.join(",")}
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (file) void uploadTerminalAttachment(file);
+        }}
+      />
       <SidebarProvider>
         <Sidebar collapsible="icon">
           <SidebarHeader className="h-12 border-b p-0">
@@ -4102,7 +4260,7 @@ export function AppShell({
 
         {isTerminalRendered ? (
           <div
-            className="fixed inset-x-0 bottom-0 z-50 border-t dark:border-neutral-800 bg-white dark:bg-black will-change-transform"
+            className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background text-foreground will-change-transform"
             style={{
               opacity: isTerminalOpen ? 1 : 0,
               transform: isTerminalOpen
@@ -4115,27 +4273,55 @@ export function AppShell({
             aria-label="IBX terminal"
           >
             <div className="flex h-[44vh] min-h-72 w-full flex-col px-4 py-3 md:px-6">
-              <div className="mb-2 flex items-center justify-between gap-3 font-mono text-[0.72rem] text-neutral-500">
+              <div className="mb-2 flex items-center justify-between gap-3 font-mono text-[0.72rem] text-muted-foreground">
                 <span>
                   ibx terminal // help, pwd, ls, cd, search, create, open, done,
-                  delete
+                  delete, attach
                 </span>
                 <button
                   type="button"
-                  className="text-neutral-500 transition-colors hover:text-neutral-100"
+                  className="text-muted-foreground transition-colors hover:text-foreground"
                   onClick={closeTerminal}
                 >
                   close
                 </button>
               </div>
-              <div className="min-h-0 flex-1 overflow-auto font-mono text-xs leading-5 whitespace-pre-wrap text-neutral-900 dark:text-neutral-100">
+              <div className="min-h-0 flex-1 overflow-auto font-mono text-xs leading-5 whitespace-pre-wrap text-foreground">
                 {terminalLines.map(renderTerminalLine)}
                 <div className="flex items-center gap-2">
-                  <span className="text-neutral-500">$</span>
+                  <span className="text-muted-foreground">$</span>
                   <Input
+                    aria-label="Terminal command"
+                    disabled={isTerminalUploading}
                     value={terminalInput}
-                    onChange={(event) => setTerminalInput(event.target.value)}
+                    onChange={(event) => {
+                      setTerminalInput(event.target.value);
+                      terminalHistoryIndex.current = -1;
+                    }}
                     onKeyDown={(event) => {
+                      if (
+                        (event.key === "ArrowUp" ||
+                          event.key === "ArrowDown") &&
+                        terminalHistory.length
+                      ) {
+                        event.preventDefault();
+                        if (terminalHistoryIndex.current === -1)
+                          terminalHistoryDraft.current = terminalInput;
+                        const next =
+                          event.key === "ArrowUp"
+                            ? terminalHistoryIndex.current === -1
+                              ? terminalHistory.length - 1
+                              : Math.max(0, terminalHistoryIndex.current - 1)
+                            : terminalHistoryIndex.current === -1
+                              ? -1
+                              : terminalHistoryIndex.current + 1;
+                        terminalHistoryIndex.current =
+                          next >= terminalHistory.length ? -1 : next;
+                        setTerminalInput(
+                          terminalHistory[terminalHistoryIndex.current] ??
+                            terminalHistoryDraft.current,
+                        );
+                      }
                       if (event.key === "Enter") {
                         event.preventDefault();
                         void runTerminalCommand();
@@ -4148,7 +4334,7 @@ export function AppShell({
                     }}
                     placeholder="ls"
                     autoFocus
-                    className="h-5 flex-1 border-0 bg-transparent px-0 py-0 font-mono text-xs text-neutral-900 dark:text-neutral-100 shadow-none placeholder:text-neutral-500 dark:placeholder:text-neutral-600 focus-visible:ring-0"
+                    className="h-5 flex-1 border-0 bg-transparent px-0 py-0 font-mono text-xs text-foreground shadow-none placeholder:text-muted-foreground focus-visible:ring-0"
                   />
                 </div>
               </div>

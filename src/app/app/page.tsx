@@ -32,5 +32,19 @@ export default async function AppPage({
   const resolvedSearchParams = await searchParams;
   const initialFilter = normalizeFilter(resolvedSearchParams.view);
 
-  return <AppShell initialAuthenticated initialFilter={initialFilter} />;
+  const ownerKey =
+    session.type === "clerk"
+      ? session.ownerKey
+      : session.type === "apiKey"
+        ? session.apiKey.ownerKey
+        : "legacy";
+
+  return (
+    <AppShell
+      key={ownerKey}
+      initialAuthenticated
+      initialFilter={initialFilter}
+      terminalStorageKey={`ibx:terminal:v1:${ownerKey}`}
+    />
+  );
 }

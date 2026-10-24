@@ -52,10 +52,20 @@ Manager, or Linux Secret Service. If no OS credential store is available, ibx
 falls back to the local config file with `0600` permissions and prints a
 warning. Use `--api-key` for automation or pre-generated keys.
 
-Attachment uploads accept files up to 30 MB, including PDF/images/text, MP3 audio,
-and MP4/MOV/WebM video. `attach` and `attach list` return public file URLs; anyone
-with a URL can download the file without signing in. Notes and file management
-remain private.
+Attachment uploads accept nonempty files up to 30 MiB (31,457,280 bytes): PDF,
+GIF/JPEG/PNG/WebP, Markdown/plain text, MP3/M4A/WAV/OGG audio, and
+MP4/M4V/MOV/WebM/OGV video. `ibx attach <todoId> <file>` reads a local path;
+`ibx attach list <todoId>` lists that todo's files, and `ibx attach list --all`
+lists across your owner account (at most 100 records before deleted entries are
+filtered). Duplicate names receive suffixes such as `demo-2.mp3`.
+With a username, returned file URLs are public: anyone with or able to guess a
+URL can download without signing in. Without a username, create/list URLs fall
+back to an authenticated file route. Notes and file management remain owner-scoped.
+
+The separate in-app browser terminal uses `attach <number|id>` to open a file
+chooser and print the public URL, and `attach list <number|id>` to list a todo's
+attachments. It cannot read arbitrary shell paths; use the installed CLI for that.
+
 - `ibx todos add "title" [--notes "..."] [--due YYYY-MM-DD] [--hours 1.5|90m|1h] [--start HH:mm|HH:mm am/pm] [--priority 1|2|3, defaults to 1] [--recurrence none|daily|weekly|monthly] [--json]`
 - `ibx t a "title" [same flags]` (short)
 - `ibx td` (today's completed tasks in `America/Chicago`, override with `IBX_TIMEZONE`)

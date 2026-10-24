@@ -4,6 +4,10 @@ title: Use the IBX HTTP API
 sidebarTitle: HTTP API
 description: Integrate IBX thoughts, todos, AI generation, sessions, and API-key management over JSON.
 icon: lucide:braces
+prompt: |
+  Document authentication and owner-scoped HTTP workflows from @/src/app/api/,
+  attachment policy from @/src/lib/attachment-policy.ts and @/convex/attachments.ts,
+  and public downloads from @/src/app/[username]/[fileName]/route.ts.
 ---
 
 # Use the IBX HTTP API
@@ -114,6 +118,58 @@ POST /api/thoughts/<external-id>/generate
 ```
 
 The **externalId** is the client-owned reconciliation key. Sync accepts pending, processing, done, and failed statuses; invalid entries are ignored and an empty valid batch returns an empty thoughts array.
+
+## Upload and manage attachments
+
+**Attachments** belong to a todo or thought. Uploading, saving metadata, and deleting require write permission; listing and resolving files require read permission. Cookie-authenticated writes also require the same-origin CSRF signal described above.
+
+1. **Request an upload URL** with authenticated `POST /api/attachments/upload-url` (no body required). The 200 JSON response is `{ uploadUrl, limits: { maxBytes, allowedContentTypes } }`.
+2. **Upload raw bytes** with `POST` to that exact Convex `uploadUrl`, setting the file's `Content-Type`, not multipart form data. Convex returns JSON containing `storageId`. Do **not** send your IBX Bearer key or session cookies to storage.
+3. **Save metadata** with authenticated `POST /api/attachments`:
+
+```bash
+curl -sS -X POST https://ibx.egeuysal.com/api/attachments \
+  -H "Authorization: Bearer iak_your_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{"parentKind":"todo","parentId":"<todo-id>","storageId":"<storage-id>","fileName":"demo.mp3","contentType":"audio/mpeg","size":12345}'
+```
+
+For the **binary upload** in step 2, set `UPLOAD_URL` to the returned URL and send only the file MIME header:
+
+```bash
+curl -sS -X POST "$UPLOAD_URL" \
+  -H "Content-Type: audio/mpeg" \
+  --data-binary @./demo.mp3
+```
+
+The **200 response** is `{ ok: true, id, fileName, url }`. For `parentKind: "todo"`, use the full todo ID; for `"thought"`, use its externalId. The parent must exist and belong to the authenticated owner. Invalid metadata, a missing parent or stored file, an unsupported type, or an invalid stored size returns **400**. Storage metadata determines the saved size and content type (falling back to the supplied type if storage has none).
+
+The **size limit** is 1 byte through **30 MiB (31,457,280 bytes)**. Allowed MIME types are `application/pdf`; `image/gif`, `image/jpeg`, `image/png`, `image/webp`; `text/markdown`, `text/plain`; `audio/mpeg`, `audio/mp3`, `audio/mp4`, `audio/wav`, `audio/x-wav`, `audio/ogg`, `audio/webm`; and `video/mp4`, `video/webm`, `video/quicktime`, `video/ogg`, `video/x-m4v`. Check the returned limits before uploading.
+
+**Filenames** are normalized to lowercase URL-safe names, up to 180 characters. Duplicate names within an owner receive suffixes such as `demo-2.mp3`; deleted names remain reserved so an old link cannot point at a new upload. Use the returned fileName and URL, not a URL built from the original filename. If names through `-100` are taken, rename the file.
+
+**List and delete** through the owner-scoped API:
+
+```text
+GET    /api/attachments?parentKind=todo&parentId=<todo-id>
+GET    /api/attachments?parentKind=thought&parentId=<external-id>
+GET    /api/attachments?all=true
+DELETE /api/attachments/<attachment-id>
+```
+
+The **list response** is `{ attachments: [...] }`, newest first. Each item includes id, parentKind, parentId, fileName, contentType, size, status, createdAt, updatedAt, url, and nullable publicUrl. Per-parent queries inspect at most 50 records; `all=true` inspects at most 100 across the owner, ignoring parent filters. Deleted records are filtered after that limit, so fewer items may be returned. Deletion returns `{ ok: true }` with **200**, or **404** when no accessible attachment exists, and removes the stored file.
+
+### Resolve and share files
+
+**Authenticated resolution** uses `GET /api/attachments/<attachment-id>/url`, returning `{ url }` with 200. With a username, this is the public URL; without one, it is a Convex storage URL. `GET /api/attachments/<attachment-id>/file` redirects to the public URL with **307** when a username exists; otherwise it streams bytes with **200** and `Cache-Control: private, no-store`. Both routes return 400 for an empty or overlong ID, 401/403 for auth failures, and 404 for an inaccessible attachment; malformed Convex IDs can cause an unhandled server error. The streaming route can return **502** if storage fails.
+
+**Public downloads** use `GET /{username}/{fileName}` without authentication. The route streams bytes inline with `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`, wildcard CORS, and `X-Robots-Tag: noindex, nofollow`. It forwards `Range` and `If-Range` and preserves storage's **200**, **206**, or **416** response and range headers, supporting audio/video seeking. Invalid paths return 400, missing owners/files return 404, and storage failures return 502.
+
+<Aside>
+<Warning>
+**Public links are not private storage.** Anyone with or able to guess a username/file URL can download it without signing in; noindex is not access control. Notes and attachment management remain owner-scoped. Without a username, create/list URLs fall back to the authenticated `/file` route and publicUrl is null.
+</Warning>
+</Aside>
 
 ## Errors
 
