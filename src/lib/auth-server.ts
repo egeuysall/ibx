@@ -3,7 +3,7 @@ import "server-only";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 
 import { verifyToken } from "@clerk/backend";
-import { auth } from "@clerk/nextjs/server";
+import { auth, clerkClient } from "@clerk/nextjs/server";
 import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
 
@@ -482,6 +482,28 @@ export function getRouteAuthOwnerKey(auth: RouteAuth) {
   }
 
   return null;
+}
+
+export async function getRouteAuthUsername(routeAuth: RouteAuth) {
+  const userId =
+    routeAuth.type === "clerk"
+      ? routeAuth.userId
+      : routeAuth.type === "apiKey" && routeAuth.apiKey.ownerKey?.startsWith("clerk:")
+        ? routeAuth.apiKey.ownerKey.slice("clerk:".length)
+        : null;
+
+  if (!userId) {
+    return null;
+  }
+
+  try {
+    const user = await (await clerkClient()).users.getUser(userId);
+    return typeof user.username === "string" && user.username.length > 0
+      ? user.username
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 export function unauthorizedJson(message = "Unauthorized") {

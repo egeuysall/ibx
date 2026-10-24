@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   getRouteAuth,
   getRouteAuthOwnerKey,
+  getRouteAuthUsername,
   unauthorizedJson,
   validateApiKeyPermission,
   validateCsrfForSessionAuth,
@@ -24,7 +25,21 @@ function normalizeParentId(input: string | null | undefined) {
   return value;
 }
 
-function serializeAttachment(attachment: {
+function attachmentUrl(
+  origin: string,
+  username: string | null,
+  attachmentId: string,
+  fileName: string,
+) {
+  if (!username) {
+    return `${origin}/api/attachments/${encodeURIComponent(attachmentId)}/file`;
+  }
+
+  return `${origin}/${encodeURIComponent(username)}/${encodeURIComponent(fileName)}`;
+}
+
+function serializeAttachment(
+  attachment: {
   _id: string;
   parentKind: "thought" | "todo";
   parentId: string;
@@ -34,7 +49,10 @@ function serializeAttachment(attachment: {
   status: "uploaded" | "pendingDelete" | "deleted";
   createdAt: number;
   updatedAt: number;
-}) {
+  },
+  origin: string,
+  username: string | null,
+) {
   return {
     id: attachment._id,
     parentKind: attachment.parentKind,
@@ -45,6 +63,7 @@ function serializeAttachment(attachment: {
     status: attachment.status,
     createdAt: attachment.createdAt,
     updatedAt: attachment.updatedAt,
+    url: attachmentUrl(origin, username, attachment._id, attachment.fileName),
   };
 }
 
@@ -76,9 +95,12 @@ export async function GET(request: NextRequest) {
     parentId,
     limit: 50,
   });
+  const username = await getRouteAuthUsername(auth);
 
   return NextResponse.json({
-    attachments: attachments.map(serializeAttachment),
+    attachments: attachments.map((attachment) =>
+      serializeAttachment(attachment, request.nextUrl.origin, username),
+    ),
   });
 }
 
@@ -137,9 +159,9 @@ export async function POST(request: NextRequest) {
   }
 
   const ownerKey = getRouteAuthOwnerKey(auth);
-  let attachmentId: string;
+  let attachment: { id: string; fileName: string };
   try {
-    attachmentId = await convex.mutation(api.attachments.createAttachment, {
+    attachment = await convex.mutation(api.attachments.createAttachment, {
       ownerKey,
       parentKind,
       parentId,
@@ -155,5 +177,16 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  return NextResponse.json({ ok: true, id: attachmentId });
+  const username = await getRouteAuthUsername(auth);
+  return NextResponse.json({
+    ok: true,
+    id: attachment.id,
+    fileName: attachment.fileName,
+    url: attachmentUrl(
+      request.nextUrl.origin,
+      username,
+      attachment.id,
+      attachment.fileName,
+    ),
+  });
 }

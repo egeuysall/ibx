@@ -157,12 +157,13 @@ export const createAttachment = mutation({
     }
 
     const now = Date.now();
-    return await ctx.db.insert("attachments", {
+    const fileName = normalizeFileName(args.fileName);
+    const id = await ctx.db.insert("attachments", {
       ownerKey: args.ownerKey,
       parentKind: args.parentKind,
       parentId: args.parentId,
       storageId: args.storageId,
-      fileName: normalizeFileName(args.fileName),
+      fileName,
       contentType,
       size,
       status: "uploaded",
@@ -170,6 +171,8 @@ export const createAttachment = mutation({
       updatedAt: now,
       deletedAt: null,
     });
+
+    return { id, fileName };
   },
 });
 

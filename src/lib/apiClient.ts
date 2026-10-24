@@ -439,7 +439,7 @@ export const apiClient = {
     contentType: string;
     size: number;
   }) {
-    return requestJson<{ ok: true; id: string }>("/api/attachments", {
+    return requestJson<{ ok: true; id: string; fileName: string; url: string }>("/api/attachments", {
       method: "POST",
       body: JSON.stringify(input),
     });

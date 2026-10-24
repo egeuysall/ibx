@@ -47,6 +47,7 @@ const sections: CommandSection[] = [
       { command: 'ibx page create "launch notes"', description: "Create task page" },
       { command: "ibx sync", description: "Pull latest sync state" },
       { command: "ibx attach <todoId> ./file.pdf", description: "Attach file" },
+      { command: "ibx attach list <todoId>", description: "List attachment URLs" },
       { command: "ibx publish <todoId>", description: "Publish page to Bri" },
     ],
   },

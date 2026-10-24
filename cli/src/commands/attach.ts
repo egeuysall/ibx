@@ -10,6 +10,19 @@ import { logEvent, printJson, printOk } from "../core/output.js";
 import type { ParsedArgs } from "../core/types.js";
 import { resolveTodoId } from "./todos.js";
 
+type AttachmentResult = {
+  id: string;
+  parentKind: "thought" | "todo";
+  parentId: string;
+  fileName: string;
+  contentType: string;
+  size: number;
+  status: "uploaded";
+  createdAt: number;
+  updatedAt: number;
+  url: string;
+};
+
 const MIME_BY_EXTENSION: Record<string, string> = {
   ".gif": "image/gif",
   ".jpeg": "image/jpeg",
@@ -28,6 +41,36 @@ function inferContentType(path: string) {
 export async function runAttachCommand(parsed: ParsedArgs) {
   const outputJson = hasFlag(parsed, "json");
   const config = await requireConfig();
+
+  if (parsed.positionals[1] === "list") {
+    const todoIdInput = getStringOption(parsed, "id") ?? parsed.positionals[2] ?? null;
+    if (!todoIdInput) {
+      throw new CliError("Usage: ibx attach list <todoId>.", {
+        exitCode: EXIT_CODE.VALIDATION,
+        code: "ATTACH_LIST_INPUT_REQUIRED",
+      });
+    }
+
+    const todoId = await resolveTodoId(config, todoIdInput);
+    const query = new URLSearchParams({ parentKind: "todo", parentId: todoId });
+    const { attachments } = await requestJson<{ attachments: AttachmentResult[] }>(
+      config,
+      `/api/attachments?${query.toString()}`,
+      { method: "GET" },
+      { action: "list attachments" },
+    );
+
+    if (outputJson) {
+      printJson({ todoId, attachments });
+      return;
+    }
+
+    for (const attachment of attachments) {
+      printOk(`${attachment.fileName} ${attachment.url}`);
+    }
+    return;
+  }
+
   const todoIdInput = getStringOption(parsed, "id") ?? parsed.positionals[1] ?? null;
   const filePath = getStringOption(parsed, "file") ?? parsed.positionals[2] ?? null;
 
@@ -91,7 +134,12 @@ export async function runAttachCommand(parsed: ParsedArgs) {
     });
   }
 
-  const result = await requestJson<{ ok: true; id: string }>(
+  const result = await requestJson<{
+    ok: true;
+    id: string;
+    fileName: string;
+    url: string;
+  }>(
     config,
     "/api/attachments",
     {
@@ -109,7 +157,7 @@ export async function runAttachCommand(parsed: ParsedArgs) {
   );
 
   if (outputJson) {
-    printJson({ ...result, todoId, fileName: basename(filePath), contentType });
+    printJson({ ...result, todoId, contentType });
     return;
   }
 
@@ -119,5 +167,5 @@ export async function runAttachCommand(parsed: ParsedArgs) {
     contentType,
     size: fileStats.size,
   });
-  printOk(`attached ${basename(filePath)} to ${todoId}`);
+  printOk(`attached ${basename(filePath)} to ${todoId}: ${result.url}`);
 }

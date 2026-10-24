@@ -67,6 +67,7 @@ export type AttachmentRecord = {
   status: "uploaded";
   createdAt: number;
   updatedAt: number;
+  url?: string;
 };
 
 export type PublicationRecord = {
