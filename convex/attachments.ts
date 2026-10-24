@@ -213,6 +213,32 @@ export const listAttachments = query({
   },
 });
 
+export const listAllAttachments = query({
+  args: {
+    ownerKey: v.union(v.string(), v.null()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit =
+      typeof args.limit === "number" &&
+      Number.isFinite(args.limit) &&
+      args.limit > 0 &&
+      args.limit <= 100
+        ? Math.floor(args.limit)
+        : 100;
+
+    return (await ctx.db
+      .query("attachments")
+      .withIndex("by_ownerKey_and_createdAt", (q) => q.eq("ownerKey", args.ownerKey))
+      .order("desc")
+      .take(limit))
+      .filter(
+        (attachment) =>
+          isActive(attachment) && attachment.status === "uploaded",
+      );
+  },
+});
+
 export const getAttachmentUrl = query({
   args: {
     ownerKey: v.union(v.string(), v.null()),

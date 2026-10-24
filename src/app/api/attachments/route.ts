@@ -77,24 +77,30 @@ export async function GET(request: NextRequest) {
     return permissionError;
   }
 
+  const all = request.nextUrl.searchParams.get("all") === "true";
   const parentKind = normalizeParentKind(
     request.nextUrl.searchParams.get("parentKind"),
   );
   const parentId = normalizeParentId(request.nextUrl.searchParams.get("parentId"));
-  if (!parentKind || !parentId) {
+  if (!all && (!parentKind || !parentId)) {
     return NextResponse.json(
-      { error: "parentKind and parentId are required." },
+      { error: "parentKind and parentId are required unless all=true." },
       { status: 400 },
     );
   }
 
   const ownerKey = getRouteAuthOwnerKey(auth);
-  const attachments = await convex.query(api.attachments.listAttachments, {
-    ownerKey,
-    parentKind,
-    parentId,
-    limit: 50,
-  });
+  const attachments = all
+    ? await convex.query(api.attachments.listAllAttachments, {
+        ownerKey,
+        limit: 100,
+      })
+    : await convex.query(api.attachments.listAttachments, {
+        ownerKey,
+        parentKind: parentKind as "thought" | "todo",
+        parentId: parentId as string,
+        limit: 50,
+      });
   const username = await getRouteAuthUsername(auth);
 
   return NextResponse.json({

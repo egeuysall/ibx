@@ -43,16 +43,19 @@ export async function runAttachCommand(parsed: ParsedArgs) {
   const config = await requireConfig();
 
   if (parsed.positionals[1] === "list") {
+    const listAll = hasFlag(parsed, "all");
     const todoIdInput = getStringOption(parsed, "id") ?? parsed.positionals[2] ?? null;
-    if (!todoIdInput) {
+    if (!listAll && !todoIdInput) {
       throw new CliError("Usage: ibx attach list <todoId>.", {
         exitCode: EXIT_CODE.VALIDATION,
         code: "ATTACH_LIST_INPUT_REQUIRED",
       });
     }
 
-    const todoId = await resolveTodoId(config, todoIdInput);
-    const query = new URLSearchParams({ parentKind: "todo", parentId: todoId });
+    const todoId = listAll ? null : await resolveTodoId(config, todoIdInput as string);
+    const query = listAll
+      ? new URLSearchParams({ all: "true" })
+      : new URLSearchParams({ parentKind: "todo", parentId: todoId as string });
     const { attachments } = await requestJson<{ attachments: AttachmentResult[] }>(
       config,
       `/api/attachments?${query.toString()}`,
@@ -61,7 +64,7 @@ export async function runAttachCommand(parsed: ParsedArgs) {
     );
 
     if (outputJson) {
-      printJson({ todoId, attachments });
+      printJson({ ...(todoId ? { todoId } : { all: true }), attachments });
       return;
     }
 
