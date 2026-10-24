@@ -145,6 +145,11 @@ export default defineSchema({
       "createdAt",
     ])
     .index("by_ownerKey_and_storageId", ["ownerKey", "storageId"])
+    .index("by_ownerKey_and_fileName_and_createdAt", [
+      "ownerKey",
+      "fileName",
+      "createdAt",
+    ])
     .index("by_ownerKey_and_createdAt", ["ownerKey", "createdAt"]),
   publications: defineTable({
     ownerKey: v.optional(v.union(v.string(), v.null())),

@@ -1,6 +1,7 @@
 "use client";
 
 import type { JSONContent } from "@tiptap/core";
+import { useUser } from "@clerk/nextjs";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -366,7 +367,14 @@ function isImageAttachment(attachment: AttachmentRecord) {
   return attachment.contentType.toLowerCase().startsWith("image/");
 }
 
-function getAttachmentViewUrl(attachment: AttachmentRecord) {
+function getAttachmentViewUrl(
+  attachment: AttachmentRecord,
+  username: string | null,
+) {
+  if (username) {
+    return `/${encodeURIComponent(username)}/${encodeURIComponent(attachment.fileName)}`;
+  }
+
   return `/api/attachments/${encodeURIComponent(attachment.id)}/file`;
 }
 
@@ -390,6 +398,8 @@ function getAttachmentKindLabel(attachment: AttachmentRecord) {
 }
 
 export function TodoPageEditor({ todoId }: TodoPageEditorProps) {
+  const { user } = useUser();
+  const attachmentUsername = user?.username ?? null;
   const router = useRouter();
   const isOnline = useOfflineStatus();
   useTheme();
@@ -1156,7 +1166,7 @@ export function TodoPageEditor({ todoId }: TodoPageEditorProps) {
       return;
     }
 
-    const url = getAttachmentViewUrl(attachment);
+    const url = getAttachmentViewUrl(attachment, attachmentUsername);
     if (isImageAttachment(attachment)) {
       setAttachmentPreview({ attachment, url, isBlobUrl: false });
       return;
@@ -1588,7 +1598,7 @@ export function TodoPageEditor({ todoId }: TodoPageEditorProps) {
                             !attachment.id.startsWith("local-attachment-") ? (
                               // eslint-disable-next-line @next/next/no-img-element
                               <img
-                                src={getAttachmentViewUrl(attachment)}
+                                src={getAttachmentViewUrl(attachment, attachmentUsername)}
                                 alt=""
                                 className="size-full object-cover"
                                 loading="lazy"

@@ -229,6 +229,32 @@ export const getAttachmentUrl = query({
   },
 });
 
+export const getAttachmentUrlByOwnerAndFileName = query({
+  args: {
+    ownerKey: v.union(v.string(), v.null()),
+    fileName: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const attachment = await ctx.db
+      .query("attachments")
+      .withIndex("by_ownerKey_and_fileName_and_createdAt", (q) =>
+        q.eq("ownerKey", args.ownerKey).eq("fileName", args.fileName),
+      )
+      .order("desc")
+      .first();
+
+    if (
+      !attachment ||
+      !isActive(attachment) ||
+      attachment.status !== "uploaded"
+    ) {
+      return null;
+    }
+
+    return await ctx.storage.getUrl(attachment.storageId);
+  },
+});
+
 export const deleteAttachment = mutation({
   args: {
     ownerKey: v.union(v.string(), v.null()),
