@@ -41,6 +41,8 @@ ibx td
 - `ibx publish [publish] <todoId|prefix> [--title "..."] [--private] [--json]`
 - `ibx publish unpublish <todoId|prefix> [--json]`
 - `ibx attach <todoId|prefix> <file> [--json]`
+- `ibx attach list <todoId|prefix> [--json]`
+- `ibx attach list --all [--json]`
 - `ibx todos list [--view today|upcoming|archive|all] [--json]`
 - `ibx t l [--view today|upcoming|archive|all] [--json]` (short)
 
@@ -49,6 +51,11 @@ API key in secure OS storage when available: macOS Keychain, Windows Credential
 Manager, or Linux Secret Service. If no OS credential store is available, ibx
 falls back to the local config file with `0600` permissions and prints a
 warning. Use `--api-key` for automation or pre-generated keys.
+
+Attachment uploads accept files up to 30 MB, including PDF/images/text, MP3 audio,
+and MP4/MOV/WebM video. `attach` and `attach list` return public file URLs; anyone
+with a URL can download the file without signing in. Notes and file management
+remain private.
 - `ibx todos add "title" [--notes "..."] [--due YYYY-MM-DD] [--hours 1.5|90m|1h] [--start HH:mm|HH:mm am/pm] [--priority 1|2|3, defaults to 1] [--recurrence none|daily|weekly|monthly] [--json]`
 - `ibx t a "title" [same flags]` (short)
 - `ibx td` (today's completed tasks in `America/Chicago`, override with `IBX_TIMEZONE`)

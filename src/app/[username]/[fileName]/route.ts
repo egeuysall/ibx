@@ -1,11 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-
-import {
-  getRouteAuth,
-  getRouteAuthOwnerKey,
-  unauthorizedJson,
-  validateApiKeyPermission,
-} from "@/lib/auth-server";
+import { clerkClient } from "@clerk/nextjs/server";
 import { api, convex } from "@/lib/convex-server";
 
 function isPathSegment(value: string) {
@@ -16,30 +10,36 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ username: string; fileName: string }> },
 ) {
-  const auth = await getRouteAuth(request);
-  if (!auth) {
-    return unauthorizedJson();
-  }
-  const permissionError = validateApiKeyPermission(request, auth);
-  if (permissionError) {
-    return permissionError;
-  }
-
   const { username, fileName } = await params;
   if (!isPathSegment(username) || !isPathSegment(fileName)) {
     return NextResponse.json({ error: "Invalid attachment path." }, { status: 400 });
   }
 
+  // Public downloads resolve the URL's owner, never the viewer's session.
+  const { data: users } = await (await clerkClient()).users.getUserList({
+    username: [username],
+    limit: 1,
+  });
+  const owner = users.find((user) => user.username === username);
+  if (!owner) {
+    return NextResponse.json({ error: "Attachment not found." }, { status: 404 });
+  }
+
   const url = await convex.query(api.attachments.getAttachmentUrlByOwnerAndFileName, {
-    ownerKey: getRouteAuthOwnerKey(auth),
+    ownerKey: `clerk:${owner.id}`,
     fileName,
   });
   if (!url) {
     return NextResponse.json({ error: "Attachment not found." }, { status: 404 });
   }
 
-  const storageResponse = await fetch(url, { cache: "no-store" });
-  if (!storageResponse.ok || !storageResponse.body) {
+  const storageHeaders = new Headers();
+  for (const name of ["range", "if-range"]) {
+    const value = request.headers.get(name);
+    if (value) storageHeaders.set(name, value);
+  }
+  const storageResponse = await fetch(url, { cache: "no-store", headers: storageHeaders });
+  if (!storageResponse.ok && storageResponse.status !== 416) {
     return NextResponse.json(
       { error: "Attachment file could not be loaded." },
       { status: 502 },
@@ -47,16 +47,18 @@ export async function GET(
   }
 
   const headers = new Headers({
-    "Cache-Control": "private, no-store",
+    "Cache-Control": "no-store",
     "Content-Disposition": "inline",
     "Content-Type":
       storageResponse.headers.get("content-type") ?? "application/octet-stream",
     "X-Content-Type-Options": "nosniff",
+    "Access-Control-Allow-Origin": "*",
+    "X-Robots-Tag": "noindex, nofollow",
   });
-  const contentLength = storageResponse.headers.get("content-length");
-  if (contentLength) {
-    headers.set("Content-Length", contentLength);
+  for (const name of ["content-length", "content-range", "accept-ranges", "etag", "last-modified"]) {
+    const value = storageResponse.headers.get(name);
+    if (value) headers.set(name, value);
   }
 
-  return new NextResponse(storageResponse.body, { status: 200, headers });
+  return new NextResponse(storageResponse.body, { status: storageResponse.status, headers });
 }

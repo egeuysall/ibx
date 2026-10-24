@@ -473,11 +473,14 @@ export const apiClient = {
     file: File;
   }) {
     const { uploadUrl, limits } = await this.createAttachmentUploadUrl();
-    if (input.file.size > limits.maxBytes) {
-      throw new ApiError("Attachment file is too large.", 400);
+    if (input.file.size <= 0 || input.file.size > limits.maxBytes) {
+      throw new ApiError(`Attachment must be between 1 byte and ${limits.maxBytes / 1024 / 1024} MB.`, 400);
     }
 
     const contentType = input.file.type || "application/octet-stream";
+    if (!limits.allowedContentTypes.includes(contentType)) {
+      throw new ApiError("This attachment file type is not supported.", 400);
+    }
     const uploadResponse = await fetch(uploadUrl, {
       method: "POST",
       headers: { "Content-Type": contentType },

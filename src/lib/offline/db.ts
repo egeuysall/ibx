@@ -37,6 +37,7 @@ export type OfflineAttachment = {
   createdAt: number;
   updatedAt: number;
   url?: string;
+  publicUrl?: string | null;
   lastError: string | null;
 };
 

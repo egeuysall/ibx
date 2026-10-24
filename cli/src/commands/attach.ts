@@ -32,6 +32,15 @@ const MIME_BY_EXTENSION: Record<string, string> = {
   ".png": "image/png",
   ".txt": "text/plain",
   ".webp": "image/webp",
+  ".mp3": "audio/mpeg",
+  ".m4a": "audio/mp4",
+  ".wav": "audio/wav",
+  ".ogg": "audio/ogg",
+  ".mp4": "video/mp4",
+  ".m4v": "video/x-m4v",
+  ".mov": "video/quicktime",
+  ".webm": "video/webm",
+  ".ogv": "video/ogg",
 };
 
 function inferContentType(path: string) {

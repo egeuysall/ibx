@@ -34,6 +34,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { useOfflineStatus } from "@/hooks/useOfflineStatus";
 import { useTheme } from "@/hooks/useTheme";
 import { ApiError, apiClient } from "@/lib/apiClient";
+import { ATTACHMENT_CONTENT_TYPES, MAX_ATTACHMENT_BYTES } from "@/lib/attachment-policy";
 import { getCachedTodos, setCachedTodos } from "@/lib/indexedDb";
 import {
   enqueueOfflineOperation,
@@ -55,16 +56,7 @@ import type {
   TodoStatus,
 } from "@/lib/types";
 
-const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
-const ATTACHMENT_ACCEPT = [
-  "application/pdf",
-  "image/gif",
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "text/markdown",
-  "text/plain",
-].join(",");
+const ATTACHMENT_ACCEPT = ATTACHMENT_CONTENT_TYPES.join(",");
 
 type EditorValue = {
   text: string;
@@ -175,6 +167,7 @@ function attachmentRecordFromOffline(
     createdAt: attachment.createdAt,
     updatedAt: attachment.updatedAt,
     url: attachment.url,
+    publicUrl: attachment.publicUrl,
   };
 }
 
@@ -193,6 +186,7 @@ function offlineAttachmentFromRecord(
     createdAt: attachment.createdAt,
     updatedAt: attachment.updatedAt,
     url: attachment.url,
+    publicUrl: attachment.publicUrl,
     lastError: null,
   };
 }
@@ -373,12 +367,16 @@ function getAttachmentViewUrl(
   attachment: AttachmentRecord,
   username: string | null,
 ) {
-  if (attachment.url) {
-    return attachment.url;
+  if (attachment.publicUrl) {
+    return attachment.publicUrl;
   }
 
   if (username) {
     return `/${encodeURIComponent(username)}/${encodeURIComponent(attachment.fileName)}`;
+  }
+
+  if (attachment.url) {
+    return attachment.url;
   }
 
   return `/api/attachments/${encodeURIComponent(attachment.id)}/file`;
@@ -397,6 +395,12 @@ function getAttachmentKindLabel(attachment: AttachmentRecord) {
   }
   if (contentType.startsWith("image/")) {
     return "IMG";
+  }
+  if (contentType.startsWith("audio/")) {
+    return "AUDIO";
+  }
+  if (contentType.startsWith("video/")) {
+    return "VIDEO";
   }
 
   const extension = attachment.fileName.split(".").pop()?.trim();
@@ -936,7 +940,7 @@ export function TodoPageEditor({ todoId }: TodoPageEditorProps) {
     }
 
     if (file.size > MAX_ATTACHMENT_BYTES) {
-      toast.error("attachment must be 10 MB or smaller");
+      toast.error("attachment must be 30 MB or smaller");
       return;
     }
 
@@ -1018,7 +1022,7 @@ export function TodoPageEditor({ todoId }: TodoPageEditorProps) {
       throw new Error("Save this todo online before adding editor images.");
     }
     if (file.size > MAX_ATTACHMENT_BYTES) {
-      throw new Error("Image must be 10 MB or smaller.");
+      throw new Error("Image must be 30 MB or smaller.");
     }
     if (!file.type.startsWith("image/")) {
       throw new Error("Only image files can be inserted.");
@@ -1162,23 +1166,13 @@ export function TodoPageEditor({ todoId }: TodoPageEditorProps) {
         .catch(() => null);
       if (localAttachment?.blob) {
         const url = URL.createObjectURL(localAttachment.blob);
-        if (isImageAttachment(attachment)) {
-          setAttachmentPreview({ attachment, url, isBlobUrl: true });
-          return;
-        }
-
-        window.open(url, "_blank", "noopener");
+        setAttachmentPreview({ attachment, url, isBlobUrl: true });
       }
       return;
     }
 
     const url = getAttachmentViewUrl(attachment, attachmentUsername);
-    if (isImageAttachment(attachment)) {
-      setAttachmentPreview({ attachment, url, isBlobUrl: false });
-      return;
-    }
-
-    window.open(url, "_blank", "noopener");
+    setAttachmentPreview({ attachment, url, isBlobUrl: false });
   };
 
   const deleteAttachment = async (attachment: AttachmentRecord) => {
@@ -1613,19 +1607,28 @@ export function TodoPageEditor({ todoId }: TodoPageEditorProps) {
                               getAttachmentKindLabel(attachment)
                             )}
                           </button>
-                          <button
-                            type="button"
-                            className="min-w-0 flex-1 text-left"
-                            onClick={() => void openAttachment(attachment)}
-                          >
-                            <span className="block truncate text-foreground underline-offset-2 group-hover:underline">
+                          <div className="min-w-0 flex-1 text-left">
+                            <button
+                              type="button"
+                              className="block w-full truncate text-left text-foreground underline-offset-2 group-hover:underline"
+                              onClick={() => void openAttachment(attachment)}
+                            >
                               {attachment.fileName}
-                            </span>
-                            <span className="block text-xs text-muted-foreground">
+                            </button>
+                            <div className="text-xs text-muted-foreground">
                               {getAttachmentKindLabel(attachment)} /{" "}
                               {formatBytes(attachment.size)}
-                            </span>
-                          </button>
+                              {!attachment.id.startsWith("local-attachment-") && (attachment.publicUrl || attachmentUsername) ? (
+                                <> / <a
+                                  href={getAttachmentViewUrl(attachment, attachmentUsername)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="underline underline-offset-2"
+                                  aria-label={`Public link for ${attachment.fileName}`}
+                                >public link</a></>
+                              ) : null}
+                            </div>
+                          </div>
                           <button
                             type="button"
                             className="shrink-0 rounded px-1.5 py-1 text-xs text-muted-foreground opacity-100 hover:bg-background hover:text-foreground sm:opacity-0 sm:group-hover:opacity-100"
@@ -1668,24 +1671,33 @@ export function TodoPageEditor({ todoId }: TodoPageEditorProps) {
         <DialogContent className="max-w-[min(56rem,calc(100%-2rem))] gap-3 p-3 sm:max-w-3xl">
           <DialogHeader className="pe-8">
             <DialogTitle className="truncate text-sm">
-              {attachmentPreview?.attachment.fileName ?? "Image"}
+              {attachmentPreview?.attachment.fileName ?? "File"}
             </DialogTitle>
             <DialogDescription>
-              {attachmentPreview
-                ? `${getAttachmentKindLabel(attachmentPreview.attachment)} / ${formatBytes(
-                    attachmentPreview.attachment.size,
-                  )}`
-                : ""}
+              {attachmentPreview ? (
+                <>
+                  {getAttachmentKindLabel(attachmentPreview.attachment)} / {formatBytes(attachmentPreview.attachment.size)}
+                  {!attachmentPreview.isBlobUrl && (attachmentPreview.attachment.publicUrl || attachmentUsername) ? (
+                    <> / <a href={attachmentPreview.url} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">public link</a></>
+                  ) : null}
+                </>
+              ) : null}
             </DialogDescription>
           </DialogHeader>
           {attachmentPreview ? (
             <div className="overflow-hidden rounded-lg border border-border bg-background">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={attachmentPreview.url}
-                alt={attachmentPreview.attachment.fileName}
-                className="max-h-[70vh] w-full object-contain"
-              />
+              {isImageAttachment(attachmentPreview.attachment) ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={attachmentPreview.url} alt={attachmentPreview.attachment.fileName} className="max-h-[70vh] w-full object-contain" />
+              ) : attachmentPreview.attachment.contentType.startsWith("video/") ? (
+                <video src={attachmentPreview.url} controls playsInline preload="metadata" aria-label={attachmentPreview.attachment.fileName} className="max-h-[70vh] w-full" />
+              ) : attachmentPreview.attachment.contentType.startsWith("audio/") ? (
+                <audio src={attachmentPreview.url} controls preload="metadata" aria-label={attachmentPreview.attachment.fileName} className="w-full" />
+              ) : attachmentPreview.attachment.contentType === "application/pdf" ? (
+                <iframe src={attachmentPreview.url} title={attachmentPreview.attachment.fileName} className="h-[70vh] w-full" />
+              ) : (
+                <a href={attachmentPreview.url} target="_blank" rel="noopener noreferrer" className="block p-4 underline">open file</a>
+              )}
             </div>
           ) : null}
         </DialogContent>

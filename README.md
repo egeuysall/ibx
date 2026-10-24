@@ -2,6 +2,12 @@
 
 `ibx` is a private, offline-first task execution app for quickly turning raw thoughts into prioritized todos.
 
+Attachments have public, shareable URLs at `/{username}/{lowercase-filename.ext}`.
+Anyone with the URL can view the file; notes and attachment management still require sign-in.
+Uploads are limited to 30 MB per file and support PDF, PNG/JPEG/GIF/WebP images,
+Markdown/text, MP3/M4A/WAV/OGG audio, and MP4/MOV/WebM/M4V/OGV video.
+Playback depends on the browser's codec support. Deleted attachment URLs stop working.
+
 - Web app: Next.js 16 + React 19 + shadcn/ui
 - Backend/data: Convex
 - AI: Vercel AI Gateway

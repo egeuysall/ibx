@@ -1,18 +1,10 @@
 import { v } from "convex/values";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
+import { ATTACHMENT_CONTENT_TYPES, isAllowedAttachmentSize, MAX_ATTACHMENT_BYTES } from "../src/lib/attachment-policy";
 
-const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 const MAX_FILE_NAME_LENGTH = 180;
-const ALLOWED_CONTENT_TYPES = new Set([
-  "application/pdf",
-  "image/gif",
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "text/markdown",
-  "text/plain",
-]);
+const ALLOWED_CONTENT_TYPES = new Set(ATTACHMENT_CONTENT_TYPES);
 
 const parentKindValidator = v.union(v.literal("thought"), v.literal("todo"));
 
@@ -165,8 +157,8 @@ export const createAttachment = mutation({
 
     const contentType = metadata.contentType ?? args.contentType;
     const size = metadata.size;
-    if (!Number.isFinite(size) || size <= 0 || size > MAX_ATTACHMENT_BYTES) {
-      throw new Error("Attachment file is too large.");
+    if (!isAllowedAttachmentSize(size)) {
+      throw new Error("Attachment must be between 1 byte and 30 MB.");
     }
 
     if (!isAllowedContentType(contentType)) {
@@ -174,7 +166,22 @@ export const createAttachment = mutation({
     }
 
     const now = Date.now();
-    const fileName = normalizeFileName(args.fileName);
+    const baseName = normalizeFileName(args.fileName);
+    let fileName = baseName;
+    // Reserve deleted names too so a shared URL never points at a later upload.
+    for (let suffix = 2; ; suffix += 1) {
+      const existing = await ctx.db.query("attachments")
+        .withIndex("by_ownerKey_and_fileName_and_createdAt", (q) =>
+          q.eq("ownerKey", args.ownerKey).eq("fileName", fileName),
+        ).first();
+      if (!existing) break;
+      if (suffix > 100) throw new Error("Too many files with this name. Rename the file.");
+      const dot = baseName.lastIndexOf(".");
+      const extension = dot > 0 ? baseName.slice(dot) : "";
+      const stem = dot > 0 ? baseName.slice(0, dot) : baseName;
+      const ending = `-${suffix}${extension}`;
+      fileName = `${stem.slice(0, MAX_FILE_NAME_LENGTH - ending.length)}${ending}`;
+    }
     const id = await ctx.db.insert("attachments", {
       ownerKey: args.ownerKey,
       parentKind: args.parentKind,

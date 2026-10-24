@@ -14,7 +14,8 @@ import {
   type NodeWithPos,
 } from "@tiptap/react"
 
-export const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
+export { MAX_ATTACHMENT_BYTES as MAX_FILE_SIZE } from "./attachment-policy"
+import { MAX_ATTACHMENT_BYTES as MAX_FILE_SIZE } from "./attachment-policy"
 
 export const MAC_SYMBOLS: Record<string, string> = {
   mod: "⌘",

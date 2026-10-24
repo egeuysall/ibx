@@ -52,6 +52,7 @@ function serializeAttachment(
     createdAt: attachment.createdAt,
     updatedAt: attachment.updatedAt,
     url: buildAttachmentUrl(origin, username, attachment._id, attachment.fileName),
+    publicUrl: username ? buildAttachmentUrl(origin, username, attachment._id, attachment.fileName) : null,
   };
 }
 
