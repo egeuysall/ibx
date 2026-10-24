@@ -3,7 +3,7 @@
 import type { JSONContent } from "@tiptap/core";
 import { useUser } from "@clerk/nextjs";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -411,6 +411,7 @@ export function TodoPageEditor({ todoId }: TodoPageEditorProps) {
   const { user } = useUser();
   const attachmentUsername = user?.username ?? null;
   const router = useRouter();
+  const pathname = usePathname();
   const isOnline = useOfflineStatus();
   useTheme();
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
@@ -648,7 +649,10 @@ export function TodoPageEditor({ todoId }: TodoPageEditorProps) {
       if (!options.silent) {
         toast.message(publication ? "page saved and Bri updated" : "page saved");
       }
-      router.replace(getTodoPageHref(nextTodo));
+      const nextHref = getTodoPageHref(nextTodo);
+      if (pathname !== nextHref) {
+        router.replace(nextHref);
+      }
     } catch (error) {
       if (error instanceof ApiError && error.isNetworkError) {
         await queueUpdate();
