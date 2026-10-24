@@ -9,6 +9,7 @@ import {
   validateCsrfForSessionAuth,
 } from "@/lib/auth-server";
 import { api, convex } from "@/lib/convex-server";
+import { buildAttachmentUrl } from "@/lib/attachment-url";
 
 const MAX_FILE_NAME_LENGTH = 180;
 
@@ -23,19 +24,6 @@ function normalizeParentId(input: string | null | undefined) {
   }
 
   return value;
-}
-
-function attachmentUrl(
-  origin: string,
-  username: string | null,
-  attachmentId: string,
-  fileName: string,
-) {
-  if (!username) {
-    return `${origin}/api/attachments/${encodeURIComponent(attachmentId)}/file`;
-  }
-
-  return `${origin}/${encodeURIComponent(username)}/${encodeURIComponent(fileName)}`;
 }
 
 function serializeAttachment(
@@ -63,7 +51,7 @@ function serializeAttachment(
     status: attachment.status,
     createdAt: attachment.createdAt,
     updatedAt: attachment.updatedAt,
-    url: attachmentUrl(origin, username, attachment._id, attachment.fileName),
+    url: buildAttachmentUrl(origin, username, attachment._id, attachment.fileName),
   };
 }
 
@@ -188,7 +176,7 @@ export async function POST(request: NextRequest) {
     ok: true,
     id: attachment.id,
     fileName: attachment.fileName,
-    url: attachmentUrl(
+    url: buildAttachmentUrl(
       request.nextUrl.origin,
       username,
       attachment.id,

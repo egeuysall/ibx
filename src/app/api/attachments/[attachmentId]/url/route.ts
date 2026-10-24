@@ -3,10 +3,12 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   getRouteAuth,
   getRouteAuthOwnerKey,
+  getRouteAuthUsername,
   unauthorizedJson,
   validateApiKeyPermission,
 } from "@/lib/auth-server";
 import { api, convex } from "@/lib/convex-server";
+import { buildAttachmentUrl } from "@/lib/attachment-url";
 
 export async function GET(
   request: NextRequest,
@@ -28,6 +30,26 @@ export async function GET(
   }
 
   const ownerKey = getRouteAuthOwnerKey(auth);
+  const details = await convex.query(api.attachments.getAttachmentDetails, {
+    ownerKey,
+    attachmentId: attachmentId as never,
+  });
+  if (!details) {
+    return NextResponse.json({ error: "Attachment not found." }, { status: 404 });
+  }
+
+  const username = await getRouteAuthUsername(auth);
+  if (username) {
+    return NextResponse.json({
+      url: buildAttachmentUrl(
+        request.nextUrl.origin,
+        username,
+        attachmentId,
+        details.fileName,
+      ),
+    });
+  }
+
   const url = await convex.query(api.attachments.getAttachmentUrl, {
     ownerKey,
     attachmentId: attachmentId as never,

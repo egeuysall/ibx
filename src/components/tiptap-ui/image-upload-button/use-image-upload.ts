@@ -42,7 +42,7 @@ export function canInsertImage(editor: Editor | null): boolean {
   if (!editor || !editor.isEditable) return false
   if (!isExtensionAvailable(editor, "imageUpload")) return false
 
-  return editor.can().insertContent({ type: "imageUpload" })
+  return editor.can().setImageUploadNode()
 }
 
 /**
@@ -61,13 +61,7 @@ export function insertImage(editor: Editor | null): boolean {
   if (!canInsertImage(editor)) return false
 
   try {
-    return editor
-      .chain()
-      .focus()
-      .insertContent({
-        type: "imageUpload",
-      })
-      .run()
+    return editor.chain().focus().setImageUploadNode().run()
   } catch {
     return false
   }

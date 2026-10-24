@@ -275,6 +275,29 @@ export const getAttachmentUrl = query({
   },
 });
 
+export const getAttachmentDetails = query({
+  args: {
+    ownerKey: v.union(v.string(), v.null()),
+    attachmentId: v.id("attachments"),
+  },
+  handler: async (ctx, args) => {
+    const attachment = await getActiveAttachment(
+      ctx,
+      args.ownerKey,
+      args.attachmentId,
+    );
+    if (!attachment) {
+      return null;
+    }
+
+    return {
+      fileName: attachment.fileName,
+      contentType: attachment.contentType,
+      size: attachment.size,
+    };
+  },
+});
+
 export const getAttachmentUrlByOwnerAndFileName = query({
   args: {
     ownerKey: v.union(v.string(), v.null()),
