@@ -709,6 +709,7 @@ function offlineAttachmentFromRecord(
     status: "uploaded",
     createdAt: attachment.createdAt,
     updatedAt: attachment.updatedAt,
+    url: attachment.url,
     lastError: null,
   };
 }

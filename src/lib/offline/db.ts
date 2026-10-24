@@ -36,6 +36,7 @@ export type OfflineAttachment = {
   status: "local" | "uploading" | "uploaded" | "error";
   createdAt: number;
   updatedAt: number;
+  url?: string;
   lastError: string | null;
 };
 

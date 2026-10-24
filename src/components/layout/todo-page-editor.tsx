@@ -174,6 +174,7 @@ function attachmentRecordFromOffline(
     status: "uploaded",
     createdAt: attachment.createdAt,
     updatedAt: attachment.updatedAt,
+    url: attachment.url,
   };
 }
 
@@ -191,6 +192,7 @@ function offlineAttachmentFromRecord(
     status: "uploaded",
     createdAt: attachment.createdAt,
     updatedAt: attachment.updatedAt,
+    url: attachment.url,
     lastError: null,
   };
 }
@@ -371,6 +373,10 @@ function getAttachmentViewUrl(
   attachment: AttachmentRecord,
   username: string | null,
 ) {
+  if (attachment.url) {
+    return attachment.url;
+  }
+
   if (username) {
     return `/${encodeURIComponent(username)}/${encodeURIComponent(attachment.fileName)}`;
   }
@@ -1033,7 +1039,7 @@ export function TodoPageEditor({ todoId }: TodoPageEditorProps) {
 
     onProgress?.({ progress: 100 });
     await loadAttachments();
-    return `/api/attachments/${encodeURIComponent(result.id)}/file`;
+    return result.url;
   };
 
   const publishPage = async () => {

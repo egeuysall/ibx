@@ -30,12 +30,29 @@ function isActive(row: { deletedAt?: number | null }) {
 }
 
 function normalizeFileName(fileName: string) {
-  const normalized = fileName
+  const cleaned = fileName
     .replace(/[\u0000-\u001f\u007f]/g, "")
     .replace(/[\\/]/g, "-")
-    .trim()
-    .slice(0, MAX_FILE_NAME_LENGTH);
-  return normalized || "attachment";
+    .trim();
+  const extensionMatch = cleaned.match(/\.([^.]+)$/);
+  const extension = extensionMatch ? slugify(extensionMatch[1]) : "";
+  const base = extensionMatch
+    ? cleaned.slice(0, -(extensionMatch[1].length + 1))
+    : cleaned;
+  const suffix = extension ? `.${extension}` : "";
+  const normalizedBase = slugify(base) || "attachment";
+  const maxBaseLength = Math.max(1, MAX_FILE_NAME_LENGTH - suffix.length);
+
+  return `${normalizedBase.slice(0, maxBaseLength)}${suffix}`;
+}
+
+function slugify(value: string) {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
 function isAllowedContentType(contentType: string) {
