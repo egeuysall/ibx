@@ -33,7 +33,7 @@ export async function GET(
     return NextResponse.json({ error: "Attachment not found." }, { status: 404 });
   }
 
-  const storageHeaders = new Headers();
+  const storageHeaders = new Headers({ "Accept-Encoding": "identity" });
   for (const name of ["range", "if-range"]) {
     const value = request.headers.get(name);
     if (value) storageHeaders.set(name, value);
@@ -55,7 +55,8 @@ export async function GET(
     "Access-Control-Allow-Origin": "*",
     "X-Robots-Tag": "noindex, nofollow",
   });
-  for (const name of ["content-length", "content-range", "accept-ranges", "etag", "last-modified"]) {
+  // fetch may decompress storage bytes; its original length would truncate the stream.
+  for (const name of ["content-range", "accept-ranges", "etag", "last-modified"]) {
     const value = storageResponse.headers.get(name);
     if (value) headers.set(name, value);
   }

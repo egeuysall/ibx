@@ -60,7 +60,10 @@ export async function GET(
     return NextResponse.json({ error: "Attachment not found." }, { status: 404 });
   }
 
-  const storageResponse = await fetch(url, { cache: "no-store" });
+  const storageResponse = await fetch(url, {
+    cache: "no-store",
+    headers: { "Accept-Encoding": "identity" },
+  });
   if (!storageResponse.ok || !storageResponse.body) {
     return NextResponse.json(
       { error: "Attachment file could not be loaded." },
@@ -75,10 +78,7 @@ export async function GET(
       storageResponse.headers.get("content-type") ?? "application/octet-stream",
     "X-Content-Type-Options": "nosniff",
   });
-  const contentLength = storageResponse.headers.get("content-length");
-  if (contentLength) {
-    headers.set("Content-Length", contentLength);
-  }
+  // Do not forward the compressed length after fetch decompresses the body.
 
   return new NextResponse(storageResponse.body, {
     status: 200,
