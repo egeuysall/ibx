@@ -5,6 +5,7 @@ import { ATTACHMENT_CONTENT_TYPES, isAllowedAttachmentSize } from "./attachment-
 const uploadMetadataShape = z.object({
   parentKind: z.enum(["todo", "thought", "file"]),
   parentId: z.string().trim().min(1).max(128),
+  folderId: z.string().regex(/^[a-z0-9]{20,64}$/).optional(),
   fileName: z.string().trim().min(1).max(180),
   contentType: z.string().refine((value) => ATTACHMENT_CONTENT_TYPES.includes(value)),
   size: z.number().int().min(1),

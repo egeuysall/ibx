@@ -43,6 +43,9 @@ export async function streamStoredFile(file: Doc<"attachments">, request: Reques
     "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff",
     "X-Robots-Tag": "noindex, nofollow",
   });
+  if (file.contentType === "image/svg+xml") {
+    headers.set("Content-Security-Policy", "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:");
+  }
   if (publicAccess) headers.set("Access-Control-Allow-Origin", "*");
   for (const name of ["content-range", "accept-ranges", "etag", "last-modified"]) {
     const value = upstream.headers.get(name);

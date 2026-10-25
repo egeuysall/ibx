@@ -36,7 +36,8 @@ export async function runFilesCommand(parsed: ParsedArgs) {
   if (action === "tree" || action === "list") {
     const result = await requestJson<{ tree: Node[]; truncated: boolean }>(config, "/api/files/tree", { method: "GET" }, { action: "read file tree" });
     if (action === "list") {
-      const files = flattenFiles(result.tree);
+      const directory = getStringOption(parsed, "directory")?.replace(/^\/+|\/+$/g, "") ?? null;
+      const files = flattenFiles(result.tree).filter(({ path }) => !directory || path.join("/").toLowerCase() === directory.toLowerCase());
       if (outputJson) printJson({ files, truncated: result.truncated });
       else for (const { file, path } of files) print(`${path.join("/") || "drive"}\t${file.visibility}\t${file.fileName}`);
     } else if (outputJson) printJson(result);
@@ -50,9 +51,9 @@ export async function runFilesCommand(parsed: ParsedArgs) {
 
   if (action === "mkdir") {
     const name = parsed.positionals[2] ?? getStringOption(parsed, "name");
-    if (!name) throw new CliError("Usage: ibx files mkdir <name> [--parent <folderId>].", { exitCode: EXIT_CODE.VALIDATION, code: "FILES_FOLDER_NAME_REQUIRED" });
+    if (!name) throw new CliError("Usage: ibx files mkdir <name|/path> [--parent <folderId>].", { exitCode: EXIT_CODE.VALIDATION, code: "FILES_FOLDER_NAME_REQUIRED" });
     const folder = await requestJson<{ folder: { id: string; name: string; parentFolderId: string | null } }>(config, "/api/files", {
-      method: "POST", body: JSON.stringify({ name, parentFolderId: getStringOption(parsed, "parent") ?? null }),
+      method: "POST", body: JSON.stringify(name.includes("/") ? { path: name } : { name, parentFolderId: getStringOption(parsed, "parent") ?? null }),
     }, { action: "create folder" });
     if (outputJson) printJson(folder); else printOk(`created ${folder.folder.name}/ (${folder.folder.id})`);
     return;
@@ -78,17 +79,12 @@ export async function runFilesCommand(parsed: ParsedArgs) {
     const info = await stat(filePath).catch(() => null);
     if (!info?.isFile()) throw new CliError(`File not found: ${filePath}`, { exitCode: EXIT_CODE.NOT_FOUND, code: "FILES_UPLOAD_NOT_FOUND" });
     validateAttachmentSize(info.size);
-    const metadata: AttachmentMetadata = { parentKind: "file", parentId: "library", fileName: basename(filePath), contentType: inferContentType(filePath), size: info.size };
+    const folderId = getStringOption(parsed, "folder");
+    const metadata: AttachmentMetadata = { parentKind: "file", parentId: "library", ...(folderId ? { folderId } : {}), fileName: basename(filePath), contentType: inferContentType(filePath), size: info.size };
     const upload = await requestJson<AttachmentUpload>(config, "/api/attachments/upload-url", { method: "POST", body: JSON.stringify(metadata) }, { action: "create file upload URL" });
     validateAttachmentSize(info.size, upload.limits.maxBytes);
     const completion = await uploadAttachmentBytes(upload, metadata, await readFile(filePath));
     const result = await requestJson<{ id: string; fileName: string }>(config, "/api/attachments", { method: "POST", body: JSON.stringify(completion) }, { action: "save file" });
-    const folderId = getStringOption(parsed, "folder");
-    if (folderId) {
-      await requestJson(config, `/api/files/${encodeURIComponent(result.id)}`, {
-        method: "PATCH", body: JSON.stringify({ folderId }),
-      }, { action: "move uploaded file" });
-    }
     if (hasFlag(parsed, "public")) {
       await requestJson(config, `/api/files/${encodeURIComponent(result.id)}`, {
         method: "PATCH", body: JSON.stringify({ visibility: "public" }),

@@ -162,6 +162,9 @@ export default defineSchema({
       "fileName",
       "createdAt",
     ])
+    .index("by_ownerKey_and_folderId_and_fileName_and_createdAt", [
+      "ownerKey", "folderId", "fileName", "createdAt",
+    ])
     .index("by_ownerKey_and_createdAt", ["ownerKey", "createdAt"]),
   fileFolders: defineTable({
     ownerKey: v.optional(v.union(v.string(), v.null())),

@@ -42,6 +42,22 @@ export async function POST(request: NextRequest) {
   const denied = validateCsrfForSessionAuth(request, auth) ?? validateApiKeyPermission(request, auth);
   if (denied) return denied;
   const body = await request.json().catch(() => null);
+  if (typeof body?.path === "string") {
+    const path = body.path.trim().replace(/^\/+|\/+$/g, "").split("/");
+    if (path.length > 20 || path.some((part: string) => !part || part.length > 64 || part === "." || part === ".." || /[\\\\\u0000-\u001f\u007f]/.test(part))) {
+      return NextResponse.json({ error: "Folder path contains an invalid name." }, { status: 400 });
+    }
+    try {
+      const id = await convex.mutation(api.attachments.ensureFileFolderPath, {
+        ownerKey: getRouteAuthOwnerKey(auth), path,
+      });
+      const folders = await convex.query(api.attachments.listFileFolders, { ownerKey: getRouteAuthOwnerKey(auth) });
+      const folder = folders.find((item) => item._id === id);
+      return NextResponse.json({ folder: folder && { id, name: folder.name, parentFolderId: folder.parentFolderId ?? null } }, { status: 201, headers: { "Cache-Control": "private, no-store" } });
+    } catch (error) {
+      return NextResponse.json({ error: error instanceof Error ? error.message : "Could not create folder path." }, { status: 400 });
+    }
+  }
   if (typeof body?.name !== "string" || body.name.length > 64) {
     return NextResponse.json({ error: "Folder names must be 1–64 characters." }, { status: 400 });
   }

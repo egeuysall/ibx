@@ -133,8 +133,9 @@ describe("attachment privacy", () => {
       });
     });
     const todoFile = await t.mutation(api.attachments.createR2Attachment, {
-      ...upload, parentKind: "todo", parentId: todoId, fileName: "todo.pdf", r2Key: "objects/todo",
+      ...upload, parentKind: "todo", parentId: todoId, folderId: nestedId, fileName: "todo.pdf", r2Key: "objects/todo",
     });
+    expect(await t.query(api.attachments.getAttachmentDetails, { ...auth, attachmentId: todoFile.id })).toMatchObject({ folderId: nestedId });
 
     expect(await t.query(api.attachments.listFileFolders, auth)).toEqual(expect.arrayContaining([
       expect.objectContaining({ _id: folderId, name: "Projects" }),
@@ -171,6 +172,35 @@ describe("attachment privacy", () => {
     expect(await t.query(api.attachments.getPublicAttachment, { ...auth, fileName: todoFile.fileName, folderPath: ["songs"] })).toBeNull();
     // Existing flat public links keep resolving after a file is moved into a folder.
     expect(await t.query(api.attachments.getPublicAttachment, { ...auth, fileName: todoFile.fileName })).toMatchObject({ _id: todoFile.id });
+  });
+
+  it("ensures nested folder paths idempotently and rejects traversal", async () => {
+    const t = convexTest(schema, modules);
+    const path = ["content", "2026", "10", "25"];
+    const first = await t.mutation(api.attachments.ensureFileFolderPath, { ...auth, path });
+    const second = await t.mutation(api.attachments.ensureFileFolderPath, { ...auth, path });
+    expect(second).toBe(first);
+    expect(await t.query(api.attachments.listFileFolders, auth)).toHaveLength(4);
+    await expect(t.mutation(api.attachments.ensureFileFolderPath, { ...auth, path: ["content", "..", "secret"] })).rejects.toThrow("invalid name");
+    await expect(t.mutation(api.attachments.ensureFileFolderPath, { ...auth, serverToken: "wrong", path })).rejects.toThrow("Unauthorized");
+  });
+
+  it("allows same file name in separate folders and resolves each public path", async () => {
+    const t = convexTest(schema, modules);
+    const leftFolderId = await t.mutation(api.attachments.createFileFolder, { ...auth, name: "Left" });
+    const rightFolderId = await t.mutation(api.attachments.createFileFolder, { ...auth, name: "Right" });
+    const left = await t.mutation(api.attachments.createR2Attachment, {
+      ...upload, fileName: "image.png", r2Key: "objects/left", folderId: leftFolderId,
+    });
+    const right = await t.mutation(api.attachments.createR2Attachment, {
+      ...upload, fileName: "image.png", r2Key: "objects/right", folderId: rightFolderId,
+    });
+    expect(left.fileName).toBe("image.png");
+    expect(right.fileName).toBe("image.png");
+    await t.mutation(api.attachments.updateVisibility, { ...auth, attachmentId: left.id, visibility: "public" });
+    await t.mutation(api.attachments.updateVisibility, { ...auth, attachmentId: right.id, visibility: "public" });
+    expect(await t.query(api.attachments.getPublicAttachment, { ...auth, fileName: "image.png", folderPath: ["left"] })).toMatchObject({ _id: left.id });
+    expect(await t.query(api.attachments.getPublicAttachment, { ...auth, fileName: "image.png", folderPath: ["right"] })).toMatchObject({ _id: right.id });
   });
 
   it("retains legacy shared files and Convex blobs during migration", async () => {

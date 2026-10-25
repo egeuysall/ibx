@@ -46,6 +46,7 @@ components:
         - image/gif
         - image/jpeg
         - image/png
+        - image/svg+xml
         - image/webp
         - text/markdown
         - text/plain
@@ -634,14 +635,16 @@ paths:
     post:
       tags: [attachments]
       summary: Create a folder
-      description: Requires write permission. Create a root folder or nest it under an owned folder.
+      description: Requires write permission. Create a root folder or nest it under an owned folder. Use path to create an entire folder path idempotently.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [name]
+              anyOf:
+                - required: [name]
+                - required: [path]
               properties:
                 name:
                   type: string
@@ -650,9 +653,13 @@ paths:
                 parentFolderId:
                   type: string
                   nullable: true
+                path:
+                  type: string
+                  description: Absolute or relative slash-separated folder path, up to 20 valid segments. Existing owned folders are reused.
+                  example: /content/2026/10/25
       responses:
         '201':
-          description: Folder created.
+          description: Folder created or ensured; the response contains the final folder.
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -705,9 +712,35 @@ paths:
         Requires write permission. No request body is required. Cookie-authenticated
         writes require a same-origin Origin or Referer.
         Send parentKind, parentId, fileName, contentType, and size. For the
-        Files library use parentKind=file and parentId=library. PUT raw bytes
+        Files library use parentKind=file and parentId=library. Add folderId
+        to upload directly into an owned directory. PUT raw bytes
         to the returned R2 URL using its returned headers; never send IBX
         credentials to storage. POST the returned uploadToken to /api/attachments.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [parentKind, parentId, fileName, contentType, size]
+              properties:
+                parentKind:
+                  type: string
+                  enum: [todo, thought, file]
+                parentId:
+                  type: string
+                folderId:
+                  type: string
+                  pattern: '^[a-z0-9]{20,64}$'
+                fileName:
+                  type: string
+                  minLength: 1
+                  maxLength: 180
+                contentType:
+                  $ref: '#/components/schemas/AttachmentContentType'
+                size:
+                  type: integer
+                  minimum: 1
       responses:
         '200':
           description: Upload URL and current limits.
@@ -738,7 +771,6 @@ paths:
                     properties:
                       maxBytes:
                         type: integer
-                        enum: [31457280]
                         description: 30 MiB for todo/thought attachments; 500 MiB for Files library uploads. Files must be nonempty.
                       allowedContentTypes:
                         type: array

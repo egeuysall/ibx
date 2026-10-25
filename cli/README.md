@@ -40,13 +40,15 @@ ibx td
 - `ibx page create "title" [same flags as todos add]`
 - `ibx publish [publish] <todoId|prefix> [--title "..."] [--private] [--json]`
 - `ibx publish unpublish <todoId|prefix> [--json]`
-- `ibx attach <todoId|prefix> <file> [--public] [--json]`
+- `ibx attach <file> [--directory /path] [--public] [--json]` (Files library)
+- `ibx attach <todoId|prefix> <file> [--public] [--json]` (todo attachment)
 - `ibx attach list <todoId|prefix> [--json]`
 - `ibx attach list --all [--json]`
 - `ibx files tree [--json]`
-- `ibx files list [--json]`
+- `ibx files list [--directory /path] [--json]`
 - `ibx files upload <path> [--folder <folderId>] [--public] [--json]`
-- `ibx files mkdir <name> [--parent <folderId>] [--json]`
+- `ibx files mkdir <name|/path> [--parent <folderId>] [--json]`
+- `ibx mkdir /path` (short form)
 - `ibx files move <fileId> <folderId|root>`
 - `ibx files public|private|delete <fileId>`
 - `ibx todos list [--view today|upcoming|archive|all] [--json]`
@@ -58,15 +60,15 @@ Manager, or Linux Secret Service. If no OS credential store is available, ibx
 falls back to the local config file with `0600` permissions and prints a
 warning. Use `--api-key` for automation or pre-generated keys.
 
-Todo attachment uploads accept nonempty files up to 30 MiB (31,457,280 bytes); `ibx files upload` accepts Files library uploads up to 500 MiB. Supported types include PDF,
-GIF/JPEG/PNG/WebP, Markdown/plain text, MP3/M4A/WAV/OGG audio, and
+Todo attachment uploads accept nonempty files up to 30 MiB (31,457,280 bytes); Files library uploads accept up to 500 MiB. Supported types include PDF,
+GIF/JPEG/PNG/SVG/WebP, Markdown/plain text, MP3/M4A/WAV/OGG audio, and
 MP4/M4V/MOV/WebM/OGV video. `ibx attach <todoId> <file>` reads a local path;
 `ibx attach list <todoId>` lists that todo's files, and `ibx attach list --all`
 lists across your owner account (at most 100 records before deleted entries are
 filtered). Duplicate names receive suffixes such as `demo-2.mp3`.
 New uploads are private by default; the returned owner URL requires authentication.
-Use `ibx attach <todoId> <file> --public` to explicitly allow anyone with the public
-link to download without signing in. The command publishes after uploading and
+Use `ibx attach <todoId> <file> --public` or `ibx attach <file> --public` to explicitly allow anyone with the public
+link to download without signing in. Use `--directory /content/YYYY/MM/DD` to create the directory path and store a library upload there. The command publishes after uploading and
 prints the resolved public URL. JSON output includes `visibility` and `publicUrl`
 when the server returns them. Notes and file management remain owner-scoped.
 Uploads use signed R2 PUT URLs without sending your IBX API key to storage.
@@ -75,9 +77,11 @@ flow and retain their server-defined visibility; `--public` requires the new API
 If publishing fails after upload, the error includes the uploaded file ID; do not
 re-upload just to retry publishing.
 
-The separate in-app browser terminal uses `attach <number|id>` to open a file
-chooser and print the file URL, and `attach list <number|id>` to list a todo's
-attachments. It cannot read arbitrary shell paths; use the installed CLI for that.
+The in-app terminal uses `attach [number|id]` to open a file chooser; omit the todo
+to upload into Files, or use `attach --directory /path` to upload there. Add the
+directory flag after a todo ID to place that todo attachment in Files folders.
+`mkdir /path` creates nested directories and `tree` shows the Files library.
+`attach list <number|id>` lists a todo's attachments.
 
 - `ibx todos add "title" [--notes "..."] [--due YYYY-MM-DD] [--hours 1.5|90m|1h] [--start HH:mm|HH:mm am/pm] [--priority 1|2|3, defaults to 1] [--recurrence none|daily|weekly|monthly] [--json]`
 - `ibx t a "title" [same flags]` (short)

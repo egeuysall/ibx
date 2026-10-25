@@ -470,10 +470,11 @@ export const apiClient = {
   async uploadAttachmentFile(input: {
     parentKind: AttachmentParentKind | "file";
     parentId: string;
+    folderId?: string;
     file: File;
   }) {
     const contentType = input.file.type || "application/octet-stream";
-    const metadata = { parentKind: input.parentKind, parentId: input.parentId,
+    const metadata = { parentKind: input.parentKind, parentId: input.parentId, ...(input.folderId ? { folderId: input.folderId } : {}),
       fileName: input.file.name, contentType, size: input.file.size };
     const { uploadUrl, limits, method, headers, uploadToken } = await requestJson<{
       uploadUrl: string; limits: { maxBytes: number; allowedContentTypes: string[] };

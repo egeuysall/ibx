@@ -44,8 +44,8 @@ export async function POST(request: NextRequest) {
   let created: { id: string; fileName: string };
   if (body?.uploadToken !== undefined) {
     try {
-      const { r2Key, parentKind, parentId, fileName, contentType, size } = await confirmR2Upload(body.uploadToken, ownerKey);
-      created = await convex.mutation(api.attachments.createR2Attachment, { ownerKey, r2Key, parentKind, parentId, fileName, contentType, size });
+      const { r2Key, parentKind, parentId, folderId, fileName, contentType, size } = await confirmR2Upload(body.uploadToken, ownerKey);
+      created = await convex.mutation(api.attachments.createR2Attachment, { ownerKey, r2Key, parentKind, parentId, ...(folderId ? { folderId: folderId as never } : {}), fileName, contentType, size });
     } catch {
       return NextResponse.json({ error: "Upload ticket expired, invalid, or uploaded bytes do not match." }, { status: 400 });
     }
@@ -55,7 +55,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid attachment metadata." }, { status: 400 });
     }
     try {
-      created = await convex.mutation(api.attachments.createAttachment, { ownerKey, ...metadata.data, storageId: body.storageId as never });
+      const { folderId, ...uploadMetadata } = metadata.data;
+      created = await convex.mutation(api.attachments.createAttachment, { ownerKey, ...uploadMetadata, ...(folderId ? { folderId: folderId as never } : {}), storageId: body.storageId as never });
     } catch {
       return NextResponse.json({ error: "Attachment metadata rejected." }, { status: 400 });
     }

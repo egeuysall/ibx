@@ -35,6 +35,8 @@ function normalizeTopLevelCommand(parsed: ParsedArgs) {
             ? "todos"
             : first === "pages"
               ? "page"
+              : first === "mkdir"
+                ? "files"
               : first;
   const normalizedParsed: ParsedArgs =
     first === "login" || first === "logout"
@@ -52,6 +54,8 @@ function normalizeTopLevelCommand(parsed: ParsedArgs) {
           ...parsed,
           positionals: ["todos", "today-done", ...parsed.positionals.slice(1)],
         }
+      : first === "mkdir"
+        ? { ...parsed, positionals: ["files", "mkdir", ...parsed.positionals.slice(1)] }
       : first === "a" || first === "n" || first === "t" || first === "cal" || first === "c"
         ? {
             ...parsed,

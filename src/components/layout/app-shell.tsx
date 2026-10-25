@@ -1047,7 +1047,7 @@ export function AppShell({
   const terminalHistoryIndex = useRef(-1);
   const terminalHistoryDraft = useRef("");
   const terminalFileInputRef = useRef<HTMLInputElement>(null);
-  const terminalAttachmentTarget = useRef<TodoItem | null>(null);
+  const terminalAttachmentTarget = useRef<{ kind: "todo"; todo: TodoItem; directory?: string } | { kind: "file"; directory?: string } | null>(null);
   const [terminalOutput, setTerminalOutput] = useState<string[]>([
     "ibx terminal ready. type help or ls.",
   ]);
@@ -3001,12 +3001,14 @@ export function AppShell({
           "  pwd",
           "  ls [all|today|upcoming|archive]",
           "  tree [files]",
+          "  mkdir /path (create a file directory)",
           "  search <text>",
           "  create <title>",
           "  open <number|id>",
           "  done <number|id>",
           "  delete <number|id>",
-          "  attach <number|id> (choose a file, up to 30 MB)",
+          "  attach [number|id] [--directory /path] (choose a file)",
+          "  attach --directory /path (upload into a Files directory)",
           "  attach list <number|id>",
           "  cd today|upcoming|archive|zen",
         ].join("\n"),
@@ -3046,6 +3048,17 @@ export function AppShell({
       return;
     }
 
+    if (command === "mkdir") {
+      if (!argument) { addOutput("usage: mkdir /content/YYYY/MM/DD"); return; }
+      try {
+        const response = await fetch("/api/files", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: argument }) });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error ?? "Could not create directory.");
+        addOutput(`created ${argument.replace(/\/+$/, "")}/`);
+      } catch (error) { addOutput(error instanceof Error ? error.message : "Could not create directory."); }
+      return;
+    }
+
     if (command === "cd") {
       if (
         argument === "today" ||
@@ -3082,8 +3095,18 @@ export function AppShell({
     if (command === "attach") {
       const listing = rest[0] === "list";
       const target = listing ? rest[1] : rest[0];
-      if (!target || rest.length !== (listing ? 2 : 1)) {
-        addOutput("usage: attach <number|id> or attach list <number|id>");
+      const directoryIndex = rest.indexOf("--directory");
+      const directory = directoryIndex >= 0 ? rest[directoryIndex + 1] : undefined;
+      const libraryUpload = !listing && (!target || rest[0] === "--directory");
+      const invalidDirectory = directoryIndex >= 0 && (!directory || directoryIndex !== rest.length - 2);
+      if ((listing && (!target || rest.length !== 2 || directoryIndex >= 0)) || invalidDirectory || (!listing && !libraryUpload && rest.length > 1 && directoryIndex < 0)) {
+        addOutput("usage: attach [number|id], attach --directory /path, or attach list <number|id>");
+        return;
+      }
+      if (libraryUpload) {
+        terminalAttachmentTarget.current = { kind: "file", ...(directory ? { directory } : {}) };
+        addOutput(directory ? `choose a file for ${directory}` : "choose a file for Files");
+        terminalFileInputRef.current?.click();
         return;
       }
       const todo = todoByIndexOrId(target);
@@ -3114,7 +3137,7 @@ export function AppShell({
           );
         }
       } else {
-        terminalAttachmentTarget.current = todo;
+        terminalAttachmentTarget.current = { kind: "todo", todo, ...(directory ? { directory } : {}) };
         addOutput(`choose a file for ${todo.title}`);
         terminalFileInputRef.current?.click();
       }
@@ -3166,19 +3189,27 @@ export function AppShell({
   };
 
   const uploadTerminalAttachment = async (file: File) => {
-    const todo = terminalAttachmentTarget.current;
+    const target = terminalAttachmentTarget.current;
     terminalAttachmentTarget.current = null;
-    if (!todo) return;
+    if (!target) return;
     setIsTerminalUploading(true);
     try {
+      let folderId: string | undefined;
+      if (target.directory) {
+        const folderResponse = await fetch("/api/files", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: target.directory }) });
+        const folderPayload = await folderResponse.json();
+        if (!folderResponse.ok || !folderPayload.folder?.id) throw new Error(folderPayload.error ?? "Could not create directory.");
+        folderId = folderPayload.folder.id;
+      }
       const saved = await apiClient.uploadAttachmentFile({
-        parentKind: "todo",
-        parentId: todo.id,
+        parentKind: target.kind === "todo" ? "todo" : "file",
+        parentId: target.kind === "todo" ? target.todo.id : "library",
+        ...(folderId ? { folderId } : {}),
         file,
       });
       setTerminalOutput((current) => [
         ...current.slice(-40),
-        `attached ${saved.fileName} to ${todo.title}\n${saved.url}`,
+        target.kind === "todo" ? `attached ${saved.fileName} to ${target.todo.title}${target.directory ? ` in ${target.directory}` : ""}\n${saved.url}` : `uploaded ${saved.fileName} to ${target.directory ?? "/"}\n${saved.url}`,
       ]);
     } catch (error) {
       setTerminalOutput((current) => [

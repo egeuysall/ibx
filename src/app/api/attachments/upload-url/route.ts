@@ -31,6 +31,10 @@ export async function POST(request: NextRequest) {
     const metadata = uploadMetadataSchema.safeParse(body);
     if (!metadata.success) return NextResponse.json({ error: "Invalid file metadata, unsupported type, or file exceeds its upload size limit." }, { status: 400 });
     const input = metadata.data;
+    if (input.folderId) {
+      const folders = await convex.query(api.attachments.listFileFolders, { ownerKey });
+      if (!folders.some((folder) => folder._id === input.folderId)) return NextResponse.json({ error: "Folder not found." }, { status: 404 });
+    }
     if (input.parentKind !== "file") {
       const parent = input.parentKind === "todo"
         ? await convex.query(api.todos.getByStringId, { ownerKey, todoId: input.parentId })

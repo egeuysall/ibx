@@ -7,7 +7,7 @@ export const MAX_ATTACHMENT_BYTES = 500 * 1024 * 1024;
 const MIME_BY_EXTENSION: Record<string, string> = {
   ".gif": "image/gif", ".jpeg": "image/jpeg", ".jpg": "image/jpeg",
   ".md": "text/markdown", ".pdf": "application/pdf", ".png": "image/png",
-  ".txt": "text/plain", ".webp": "image/webp", ".mp3": "audio/mpeg",
+  ".svg": "image/svg+xml", ".txt": "text/plain", ".webp": "image/webp", ".mp3": "audio/mpeg",
   ".m4a": "audio/mp4", ".wav": "audio/wav", ".ogg": "audio/ogg",
   ".mp4": "video/mp4", ".m4v": "video/x-m4v", ".mov": "video/quicktime",
   ".webm": "video/webm", ".ogv": "video/ogg",
@@ -20,6 +20,7 @@ export function inferContentType(path: string) {
 export type AttachmentMetadata = {
   parentKind: "todo" | "file";
   parentId: string;
+  folderId?: string;
   fileName: string;
   contentType: string;
   size: number;

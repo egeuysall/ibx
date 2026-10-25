@@ -19,6 +19,7 @@ describe("file upload tickets", () => {
   });
   test("rejects executable MIME types, empty files and oversized uploads", () => {
     expect(uploadMetadataSchema.safeParse({ ...ticket, size: 500 * 1024 * 1024 }).success).toBe(true);
+    expect(uploadMetadataSchema.safeParse({ ...ticket, parentKind: "file", folderId: "abcdefghijklmnopqrst", fileName: "image.svg", contentType: "image/svg+xml" }).success).toBe(true);
     for (const delta of [{ size: 0 }, { size: 500 * 1024 * 1024 + 1 }, { contentType: "text/html" }]) {
       expect(uploadMetadataSchema.safeParse({ ...ticket, ...delta }).success).toBe(false);
     }

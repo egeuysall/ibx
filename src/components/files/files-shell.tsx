@@ -53,8 +53,19 @@ export function FilesShell({ children, username, terminalStorageKey }: { childre
     const [command] = input.toLowerCase().split(/\s+/);
     const addOutput = (line: string) => setTerminalOutput((current) => [...current.slice(-38), `$ ${input}`, line]);
     if (command === "clear") { setTerminalOutput([]); return; }
-    if (command === "help") { addOutput("commands: help, pwd, ls, tree, clear"); return; }
+    if (command === "help") { addOutput("commands: help, pwd, ls, tree, mkdir /path, clear"); return; }
     if (command === "pwd") { addOutput("/ibx/files"); return; }
+    if (command === "mkdir") {
+      const path = input.replace(/^\S+\s*/, "").trim();
+      if (!path) { addOutput("usage: mkdir /content/YYYY/MM/DD"); return; }
+      try {
+        const response = await fetch("/api/files", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path }) });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error ?? "Could not create directory.");
+        addOutput(`created ${path.replace(/\/+$/, "")}/`);
+      } catch (error) { addOutput(error instanceof Error ? error.message : "Could not create directory."); }
+      return;
+    }
     if (command === "ls" || command === "tree") {
       try {
         const response = await fetch("/api/files/tree", { cache: "no-store" });
@@ -124,7 +135,7 @@ export function FilesShell({ children, username, terminalStorageKey }: { childre
         <main className="flex min-w-0 flex-1 flex-col gap-4 px-4 py-4 md:px-6">{children}</main>
       </SidebarInset>
       {terminalOpen && <div className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background px-4 py-3 text-foreground md:px-6" role="dialog" aria-label="IBX terminal">
-        <div className="mb-2 flex items-center justify-between font-mono text-xs text-muted-foreground"><span>ibx terminal // help, pwd, ls, tree</span><button type="button" onClick={() => setTerminalOpen(false)}>close</button></div>
+        <div className="mb-2 flex items-center justify-between font-mono text-xs text-muted-foreground"><span>ibx terminal // help, pwd, ls, tree, mkdir</span><button type="button" onClick={() => setTerminalOpen(false)}>close</button></div>
         <div className="h-[34vh] min-h-48 overflow-auto whitespace-pre-wrap font-mono text-xs leading-5">{terminalOutput.flatMap((line) => line.split("\n")).map((line, index) => <div key={`${index}:${line}`}>{line}</div>)}
           <div className="flex items-center gap-2"><span>$</span><Input aria-label="Terminal command" value={terminalInput} onChange={(event) => setTerminalInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void runTerminalCommand(); } if (event.key === "Escape") setTerminalOpen(false); }} className="h-5 flex-1 border-0 bg-transparent px-0 font-mono text-xs shadow-none focus-visible:ring-0" autoFocus /></div>
         </div>

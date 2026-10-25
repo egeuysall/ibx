@@ -118,15 +118,18 @@ async function getActiveAttachment(
   return attachment;
 }
 
-async function reserveFileName(ctx: MutationCtx, ownerKey: string | null, name: string) {
+async function reserveFileName(ctx: MutationCtx, ownerKey: string | null, name: string, folderId?: Id<"fileFolders">) {
   const baseName = normalizeFileName(name);
   let fileName = baseName;
   // Reserve deleted names too so a shared URL never points at a later upload.
   for (let suffix = 2; ; suffix += 1) {
-    const existing = await ctx.db.query("attachments")
-      .withIndex("by_ownerKey_and_fileName_and_createdAt", (q) =>
+    const existing = folderId
+      ? await ctx.db.query("attachments").withIndex("by_ownerKey_and_folderId_and_fileName_and_createdAt", (q) =>
+        q.eq("ownerKey", ownerKey).eq("folderId", folderId).eq("fileName", fileName),
+      ).first()
+      : (await ctx.db.query("attachments").withIndex("by_ownerKey_and_fileName_and_createdAt", (q) =>
         q.eq("ownerKey", ownerKey).eq("fileName", fileName),
-      ).first();
+      ).take(5_000)).find((attachment) => !attachment.folderId);
     if (!existing) return fileName;
     if (suffix > 100) throw new Error("Too many files with this name. Rename the file.");
     const dot = baseName.lastIndexOf(".");
@@ -195,10 +198,15 @@ export const createAttachment = mutation({
     fileName: v.string(),
     contentType: v.string(),
     size: v.number(),
+    folderId: v.optional(v.id("fileFolders")),
     visibility: v.optional(visibilityValidator),
   },
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
+    if (args.folderId) {
+      const folder = await ctx.db.get(args.folderId);
+      if (!folder || !ownerMatches(folder, args.ownerKey)) throw new Error("Folder not found.");
+    }
     const parentOk = await parentExists(
       ctx,
       args.ownerKey,
@@ -229,11 +237,12 @@ export const createAttachment = mutation({
     if (existingStorage) throw new Error("Uploaded file already attached.");
 
     const now = Date.now();
-    const fileName = await reserveFileName(ctx, args.ownerKey, args.fileName);
+    const fileName = await reserveFileName(ctx, args.ownerKey, args.fileName, args.folderId);
     const id = await ctx.db.insert("attachments", {
       ownerKey: args.ownerKey,
       parentKind: args.parentKind,
       parentId: args.parentId,
+      ...(args.folderId ? { folderId: args.folderId } : {}),
       storageId: args.storageId,
       storageProvider: "convex",
       visibility: args.visibility ?? "private",
@@ -410,11 +419,16 @@ export const createR2Attachment = mutation({
     fileName: v.string(),
     contentType: v.string(),
     size: v.number(),
+    folderId: v.optional(v.id("fileFolders")),
     r2Key: v.string(),
     visibility: v.optional(visibilityValidator),
   },
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
+    if (args.folderId) {
+      const folder = await ctx.db.get(args.folderId);
+      if (!folder || !ownerMatches(folder, args.ownerKey)) throw new Error("Folder not found.");
+    }
     validateR2Key(args.r2Key);
     if (!isAllowedAttachmentSize(args.size, args.parentKind)) {
       throw new Error("Attachment exceeds its upload size limit.");
@@ -431,18 +445,19 @@ export const createR2Attachment = mutation({
       if (!ownerMatches(existing, args.ownerKey) || !isActive(existing) ||
           existing.status !== "uploaded" || existing.parentKind !== args.parentKind ||
           existing.parentId !== args.parentId || existing.size !== args.size ||
-          existing.contentType !== args.contentType) {
+          existing.contentType !== args.contentType || existing.folderId !== args.folderId) {
         throw new Error("R2 object already attached.");
       }
       // A completion retry never resets visibility or reserves another filename.
       return { id: existing._id, fileName: existing.fileName };
     }
-    const fileName = await reserveFileName(ctx, args.ownerKey, args.fileName);
+    const fileName = await reserveFileName(ctx, args.ownerKey, args.fileName, args.folderId);
     const now = Date.now();
     const id = await ctx.db.insert("attachments", {
       ownerKey: args.ownerKey,
       parentKind: args.parentKind,
       parentId: args.parentId,
+      ...(args.folderId ? { folderId: args.folderId } : {}),
       fileName,
       contentType: args.contentType,
       size: args.size,
@@ -526,6 +541,46 @@ export const createFileFolder = mutation({
     return await ctx.db.insert("fileFolders", {
       ownerKey: args.ownerKey, name, slug, parentFolderId, createdAt: Date.now(),
     });
+  },
+});
+
+export const ensureFileFolderPath = mutation({
+  args: { serverToken: v.string(), ownerKey: v.union(v.string(), v.null()), path: v.array(v.string()) },
+  handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
+    if (!args.path.length || args.path.length > 20) throw new Error("Folder paths must contain 1–20 segments.");
+    if (args.path.some((part) => !part.trim() || part.length > 64 || /[\u0000-\u001f\u007f/\\]/.test(part) || part === "." || part === "..")) {
+      throw new Error("Folder path contains an invalid name.");
+    }
+    const existing = await ctx.db.query("fileFolders")
+      .withIndex("by_ownerKey_and_name", (q) => q.eq("ownerKey", args.ownerKey))
+      .take(200);
+    const existingPaths = buildFolderPaths(existing.map((folder) => ({
+      id: folder._id, name: folder.name, slug: folder.slug, parentFolderId: folder.parentFolderId ?? null,
+    })));
+    let parentFolderId = null as typeof existing[number]["_id"] | null;
+    let depth = 0;
+    for (const rawName of args.path) {
+      const name = rawName.trim();
+      if (parentFolderId && depth === 0) depth = existingPaths.get(parentFolderId)?.length ?? 20;
+      if (depth >= 20) throw new Error("Folders can be nested up to 20 levels.");
+      const siblings = existing.filter((folder) => (folder.parentFolderId ?? null) === parentFolderId);
+      let folder = siblings.find((item) => item.name.toLowerCase() === name.toLowerCase());
+      if (!folder) {
+        if (existing.length >= 200) throw new Error("You can create up to 200 folders.");
+        const baseSlug = folderSlug(name);
+        let slug = baseSlug;
+        for (let suffix = 2; siblings.some((item) => (item.slug || folderSlug(item.name)) === slug); suffix += 1) {
+          slug = `${baseSlug}-${suffix}`;
+        }
+        const id = await ctx.db.insert("fileFolders", { ownerKey: args.ownerKey, name, slug, parentFolderId, createdAt: Date.now() });
+        folder = { _id: id, ownerKey: args.ownerKey, name, slug, parentFolderId } as typeof existing[number];
+        existing.push(folder);
+      }
+      parentFolderId = folder._id;
+      depth += 1;
+    }
+    return parentFolderId;
   },
 });
 
@@ -626,12 +681,18 @@ export const getPublicAttachment = query({
   },
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
-    const file = await findPublicAttachment(ctx, args.ownerKey, args.fileName);
-    if (!file || !args.folderPath?.length) return file;
-    const folderPaths = await folderPathsForOwner(ctx, args.ownerKey);
-    const currentPath = file.folderId ? folderPaths.get(file.folderId) ?? [] : [];
-    return currentPath.length === args.folderPath.length && currentPath.every((part, index) => part === args.folderPath?.[index])
-      ? file : null;
+    if (!args.folderPath?.length) return await findPublicAttachment(ctx, args.ownerKey, args.fileName);
+    const [matches, folderPaths] = await Promise.all([
+      ctx.db.query("attachments").withIndex("by_ownerKey_and_fileName_and_createdAt", (q) =>
+        q.eq("ownerKey", args.ownerKey).eq("fileName", args.fileName),
+      ).order("desc").take(5_000),
+      folderPathsForOwner(ctx, args.ownerKey),
+    ]);
+    return matches.find((file) => {
+      if (!isPublicFile(file)) return false;
+      const currentPath = file.folderId ? folderPaths.get(file.folderId) ?? [] : [];
+      return currentPath.length === args.folderPath!.length && currentPath.every((part, index) => part === args.folderPath![index]);
+    }) ?? null;
   },
 });
 

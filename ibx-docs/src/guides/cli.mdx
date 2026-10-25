@@ -65,6 +65,9 @@ The **Bri integration** can publish a todo or thought when IBX has a configured 
 ibx publish <todoId-or-prefix>
 ibx publish --private <todoId-or-prefix>
 ibx publish unpublish <todoId-or-prefix>
+ibx attach ./design.png
+ibx attach ./design.png --directory /content/2026/10/25 --public
+ibx mkdir /content/2026/10/25
 ibx attach <todoId-or-prefix> ./design.png
 ibx attach list <todoId-or-prefix>
 ibx attach list --all
@@ -81,7 +84,7 @@ The **publication URL** is stored with the source record and appears as briUrl i
 
 The **Files commands** browse and manage the same library as the web app. `ibx files tree` prints folders and files; add `--json` for the owner-scoped `/api/files/tree` response. Uploads are private unless `--public` is supplied, and Files library uploads allow up to **500 MiB**. The `move` target can be `root` to return a file to drive.
 
-**Attachment uploads** read a local file: `ibx attach <todoId> <file>`. `ibx attach list <todoId>` lists that todo's attachments; `ibx attach list --all` lists attachments across your owner account (up to 100 records before deleted entries are filtered). Each prints file URLs; add `--json` for structured output. Files must be nonempty and at most **30 MiB (31,457,280 bytes)**: PDF, GIF/JPEG/PNG/WebP, Markdown/plain text, MP3/M4A/WAV/OGG, or MP4/M4V/MOV/WebM/OGV. Duplicate names receive suffixes such as `design-2.png`.
+**File uploads** read a local file: `ibx attach <file>` uploads privately to Files (up to **500 MiB**); use `--directory /path` to create nested folders and place it there, and `--public` to enable its public URL. `ibx mkdir /path` creates a directory tree. `ibx attach <todoId> <file>` remains available for private todo attachments, which are limited to **30 MiB (31,457,280 bytes)**. `ibx attach list <todoId>` lists a todo's attachments; `ibx attach list --all` lists attachments across your owner account (up to 100 records before deleted entries are filtered). Each prints file URLs; add `--json` for structured output. Supported types include PDF, GIF/JPEG/PNG/WebP, Markdown/plain text, MP3/M4A/WAV/OGG, and MP4/M4V/MOV/WebM/OGV. Duplicate names receive suffixes such as `design-2.png`.
 
 ### In-app terminal
 
@@ -89,6 +92,9 @@ The **browser terminal** uses a file chooser instead of a shell path:
 
 ```text
 attach <number|id>
+attach <number|id> --directory /content/YYYY/MM/DD
+attach --directory /content/YYYY/MM/DD
+mkdir /content/YYYY/MM/DD
 attach list <number|id>
 ```
 

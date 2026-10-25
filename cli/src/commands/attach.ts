@@ -13,7 +13,7 @@ import { resolveTodoId } from "./todos.js";
 
 type AttachmentResult = {
   id: string;
-  parentKind: "thought" | "todo";
+  parentKind: "thought" | "todo" | "file";
   parentId: string;
   fileName: string;
   contentType: string;
@@ -63,17 +63,20 @@ export async function runAttachCommand(parsed: ParsedArgs) {
     return;
   }
 
-  const todoIdInput = getStringOption(parsed, "id") ?? parsed.positionals[1] ?? null;
-  const filePath = getStringOption(parsed, "file") ?? parsed.positionals[2] ?? null;
+  const directory = getStringOption(parsed, "directory");
+  const fileOption = getStringOption(parsed, "file");
+  const positionalFileOnly = parsed.positionals.length === 2;
+  const todoIdInput = getStringOption(parsed, "id") ?? (positionalFileOnly ? null : parsed.positionals[1] ?? null);
+  const filePath = fileOption ?? (positionalFileOnly ? parsed.positionals[1] : parsed.positionals[2]) ?? null;
 
-  if (!todoIdInput || !filePath) {
-    throw new CliError("Usage: ibx attach <todoId> <file> [--public] or ibx attach --id <todoId> --file <path> [--public].", {
+  if (!filePath) {
+    throw new CliError("Usage: ibx attach <file> [--directory /path] [--public], or ibx attach <todoId> <file> [--public].", {
       exitCode: EXIT_CODE.VALIDATION,
       code: "ATTACH_INPUT_REQUIRED",
     });
   }
 
-  const todoId = await resolveTodoId(config, todoIdInput);
+  const todoId = todoIdInput ? await resolveTodoId(config, todoIdInput) : null;
   const fileStats = await stat(filePath).catch(() => null);
   if (!fileStats?.isFile()) {
     throw new CliError(`Attachment file not found: ${filePath}`, {
@@ -82,10 +85,14 @@ export async function runAttachCommand(parsed: ParsedArgs) {
     });
   }
 
-  validateAttachmentSize(fileStats.size);
+  const destination = directory ? await requestJson<{ folder: { id: string; name: string } }>(
+    config, "/api/files", { method: "POST", body: JSON.stringify({ path: directory }) }, { action: "create attachment directory" },
+  ) : null;
+
+  if (todoId) validateAttachmentSize(fileStats.size, 30 * 1024 * 1024);
   const contentType = inferContentType(filePath);
   const metadata: AttachmentMetadata = {
-    parentKind: "todo", parentId: todoId, fileName: basename(filePath), contentType, size: fileStats.size,
+    parentKind: todoId ? "todo" : "file", parentId: todoId ?? "library", ...(destination ? { folderId: destination.folder.id } : {}), fileName: basename(filePath), contentType, size: fileStats.size,
   };
   const upload = await requestJson<AttachmentUpload>(
     config,
@@ -140,16 +147,18 @@ export async function runAttachCommand(parsed: ParsedArgs) {
   }
 
   if (outputJson) {
-    printJson({ ...result, todoId, contentType });
+    printJson({ ...result, ...(todoId ? { todoId } : { directory: directory ?? "/" }), contentType });
     return;
   }
 
   logEvent("info", "attach.upload", {
     id: result.id,
-    todoId,
+    ...(todoId ? { todoId } : { directory: directory ?? "/" }),
     contentType,
     size: fileStats.size,
   });
   const access = result.visibility === "public" ? "public" : result.visibility === "private" ? "private; owner sign-in required" : "server-provided URL";
-  printOk(`attached ${basename(filePath)} to ${todoId} (${access}): ${result.url}`);
+  printOk(todoId
+    ? `attached ${basename(filePath)} to ${todoId} (${access}): ${result.url}`
+    : `uploaded ${basename(filePath)} to ${directory ?? "/"} (${access}): ${result.url}`);
 }
