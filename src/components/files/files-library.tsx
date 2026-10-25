@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Combobox, ComboboxContent, ComboboxEmpty, ComboboxInput, ComboboxItem, ComboboxList } from "@/components/ui/combobox";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
@@ -171,31 +170,29 @@ export function FilesLibrary({ terminalStorageKey }: { terminalStorageKey: strin
             </span>)}
           </nav>
           <div className="flex items-center gap-2">
-          <Button variant="outline" disabled={busy || loading} onClick={() => picker.current?.click()}>upload file</Button>
-          <form className="flex items-center gap-2" onSubmit={(event) => {
-            event.preventDefault();
-            void run(async () => {
-              const { folder } = await request<{ folder: { id: string; name: string } }>("/api/files", {
-                method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: newFolder, parentFolderId: currentFolderId }),
+            <Button variant="default" disabled={busy || loading} onClick={() => picker.current?.click()}>upload file</Button>
+            <form className="flex items-center gap-2" onSubmit={(event) => {
+              event.preventDefault();
+              void run(async () => {
+                const { folder } = await request<{ folder: { id: string; name: string } }>("/api/files", {
+                  method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: newFolder, parentFolderId: currentFolderId }),
+                });
+                setNewFolder("");
+                setCurrentFolderId(folder.id);
+                await refresh(page?.files.length);
+                toast.success("Folder created.");
               });
-              setNewFolder("");
-              setCurrentFolderId(folder.id);
-              await refresh(page?.files.length);
-              toast.success("Folder created.");
-            });
-          }}>
-            <Input aria-label="New folder name" placeholder="new folder" maxLength={64} value={newFolder}
-              onChange={(event) => setNewFolder(event.target.value)} disabled={busy} className="h-8 w-36" />
-            <Button type="submit" size="sm" variant="outline" disabled={busy || !newFolder.trim()}>create folder</Button>
-          </form>
+            }}>
+              <Input aria-label="New folder name" placeholder="new folder" maxLength={64} value={newFolder}
+                onChange={(event) => setNewFolder(event.target.value)} disabled={busy} className="h-8 w-36 rounded-none border-0 bg-transparent p-0 shadow-none focus-visible:ring-0" />
+              <Button type="submit" variant="secondary" disabled={busy || !newFolder.trim()}>create folder</Button>
+            </form>
           </div>
         </div>
-        <FieldGroup>
-          <Field>
-            <FieldLabel htmlFor="files-search" className="sr-only">Search loaded files</FieldLabel>
-            <Input id="files-search" type="search" placeholder="search loaded files" value={search} onChange={(event) => setSearch(event.target.value)} />
-          </Field>
-        </FieldGroup>
+        <div className="flex min-w-0 items-center gap-2">
+          <span aria-hidden="true" className="font-mono text-sm text-muted-foreground">&gt;</span>
+          <Input id="files-search" type="search" aria-label="Search loaded files" placeholder="search loaded files" value={search} onChange={(event) => setSearch(event.target.value)} className="h-8 min-w-0 flex-1 rounded-none border-0 bg-transparent p-0 shadow-none focus-visible:ring-0" />
+        </div>
         {error && <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-destructive">
           <p>{error}</p><Button variant="outline" size="sm" disabled={busy} onClick={() => void run(() => refresh(page?.files.length))}>retry</Button>
         </div>}
