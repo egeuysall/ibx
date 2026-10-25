@@ -33,6 +33,9 @@ describe("attachment privacy", () => {
     await expect(t.query(api.attachments.listAllAttachments, {
       ...auth, serverToken: "wrong",
     })).rejects.toThrow("Unauthorized");
+    await expect(t.query(api.attachments.listAllForMigration, {
+      serverToken: "wrong", paginationOpts: { numItems: 1, cursor: null },
+    })).rejects.toThrow("Unauthorized");
     expect(await t.query(api.attachments.limits, { serverToken: auth.serverToken })).toHaveProperty("maxBytes");
     vi.stubEnv("IBX_CONVEX_SERVER_SECRET", "");
     await expect(t.query(api.attachments.listPublicFiles, auth)).rejects.toThrow();
