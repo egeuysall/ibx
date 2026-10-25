@@ -724,7 +724,10 @@ export function SimpleEditor({
               className="w-80 max-h-64"
               finalFocus={() => editor.view.dom}
               onKeyDown={(event) => {
-                if (event.key === "Backspace") {
+                if (event.key === "Enter" && matchingPublicFiles[0]) {
+                  event.preventDefault()
+                  insertPublicFile(matchingPublicFiles[0])
+                } else if (event.key === "Backspace") {
                   event.preventDefault()
                   const { from, to } = editor.state.selection
                   if (from !== to) editor.chain().focus().deleteSelection().run()
