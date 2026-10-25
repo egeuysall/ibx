@@ -17,8 +17,15 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const { id } = await params;
   if (!/^[a-z0-9]{20,64}$/.test(id)) return NextResponse.json({ error: "File not found." }, { status: 404 });
   const body = await request.json().catch(() => null);
-  if (body?.visibility !== "public" && body?.visibility !== "private") return NextResponse.json({ error: "Choose public or private." }, { status: 400 });
   const ownerKey = getRouteAuthOwnerKey(auth);
+  if (body && (body.folderId === null || (typeof body.folderId === "string" && /^[a-z0-9]{20,64}$/.test(body.folderId)))) {
+    const moved = await convex.mutation(api.attachments.moveFileToFolder, {
+      ownerKey, attachmentId: id as never, folderId: body.folderId as never,
+    });
+    if (!moved) return NextResponse.json({ error: "File or folder not found." }, { status: 404 });
+    return NextResponse.json({ ok: true }, { headers: { "Cache-Control": "private, no-store" } });
+  }
+  if (body?.visibility !== "public" && body?.visibility !== "private") return NextResponse.json({ error: "Choose public or private." }, { status: 400 });
   const file = await convex.query(api.attachments.getAttachmentDetails, { ownerKey, attachmentId: id as never });
   if (!file) return NextResponse.json({ error: "File not found." }, { status: 404 });
   // Revoke old Convex raw URLs only after a verified R2 copy exists.

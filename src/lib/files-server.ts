@@ -13,6 +13,7 @@ export function serializeFile(file: Doc<"attachments">, origin: string, username
     ? buildAttachmentUrl(origin, username, file._id, file.fileName) : null;
   return {
     id: file._id, parentKind: file.parentKind, parentId: file.parentId,
+    ...(file.folderId ? { folderId: file.folderId } : {}),
     fileName: file.fileName, contentType: file.contentType, size: file.size,
     status: file.status, visibility, createdAt: file.createdAt, updatedAt: file.updatedAt,
     storageProvider: file.storageProvider ?? "convex",

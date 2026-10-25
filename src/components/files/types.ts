@@ -8,6 +8,7 @@ export type FileRecord = {
   updatedAt: number;
   parentKind: "todo" | "thought" | "file";
   parentId: string;
+  folderId?: string | null;
   url: string;
   publicUrl: string | null;
   storageProvider: "convex" | "r2";
@@ -15,6 +16,7 @@ export type FileRecord = {
 
 export type FilesPage = {
   files: FileRecord[];
+  folders: Array<{ id: string; name: string }>;
   cursor: string | null;
   isDone: boolean;
   username: string | null;

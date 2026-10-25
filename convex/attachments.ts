@@ -464,6 +464,53 @@ export const paginateFiles = query({
   },
 });
 
+export const listFileFolders = query({
+  args: { serverToken: v.string(), ownerKey: v.union(v.string(), v.null()) },
+  handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
+    return await ctx.db.query("fileFolders")
+      .withIndex("by_ownerKey_and_name", (q) => q.eq("ownerKey", args.ownerKey))
+      .take(200);
+  },
+});
+
+export const createFileFolder = mutation({
+  args: { serverToken: v.string(), ownerKey: v.union(v.string(), v.null()), name: v.string() },
+  handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
+    const name = args.name.trim();
+    if (!name || name.length > 64 || /[\u0000-\u001f\u007f]/.test(name)) {
+      throw new Error("Folder names must be 1–64 characters.");
+    }
+    const existing = await ctx.db.query("fileFolders")
+      .withIndex("by_ownerKey_and_name", (q) => q.eq("ownerKey", args.ownerKey))
+      .take(200);
+    if (existing.some((folder) => folder.name.toLowerCase() === name.toLowerCase())) {
+      throw new Error("A folder with that name already exists.");
+    }
+    if (existing.length === 200) throw new Error("You can create up to 200 folders.");
+    return await ctx.db.insert("fileFolders", { ownerKey: args.ownerKey, name, createdAt: Date.now() });
+  },
+});
+
+export const moveFileToFolder = mutation({
+  args: {
+    serverToken: v.string(), ownerKey: v.union(v.string(), v.null()),
+    attachmentId: v.id("attachments"), folderId: v.union(v.id("fileFolders"), v.null()),
+  },
+  handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
+    const file = await getActiveAttachment(ctx, args.ownerKey, args.attachmentId);
+    if (!file || file.parentKind !== "file" || file.parentId !== "library") return false;
+    if (args.folderId) {
+      const folder = await ctx.db.get(args.folderId);
+      if (!folder || !ownerMatches(folder, args.ownerKey)) return false;
+    }
+    await ctx.db.patch(file._id, { folderId: args.folderId ?? undefined, updatedAt: Date.now() });
+    return true;
+  },
+});
+
 function pageSize(size: number) {
   if (!Number.isSafeInteger(size) || size < 1 || size > 100) {
     throw new Error("Page size must be an integer between 1 and 100.");

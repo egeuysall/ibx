@@ -34,6 +34,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export function FilesLibrary() {
   const [page, setPage] = useState<FilesPage | null>(null);
   const [search, setSearch] = useState("");
+  const [selectedFolder, setSelectedFolder] = useState("all");
+  const [newFolder, setNewFolder] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -101,7 +103,11 @@ export function FilesLibrary() {
   }
 
   const query = search.trim().toLowerCase();
-  const visible = page?.files.filter((file) => `${file.fileName} ${fileTypeLabel(file.contentType)} ${file.contentType}`.toLowerCase().includes(query)) ?? [];
+  const visible = page?.files.filter((file) => {
+    const inFolder = selectedFolder === "all" || (file.parentKind === "file" &&
+      (selectedFolder === "root" ? !file.folderId : file.folderId === selectedFolder));
+    return inFolder && `${file.fileName} ${fileTypeLabel(file.contentType)} ${file.contentType}`.toLowerCase().includes(query);
+  }) ?? [];
 
   return (
     <>
@@ -122,12 +128,39 @@ export function FilesLibrary() {
               const invalid = uploadError(file);
               if (invalid) { toast.error(invalid); return; }
               void run(async () => {
-                await apiClient.uploadAttachmentFile({ parentKind: "file", parentId: "library", file });
+                const uploaded = await apiClient.uploadAttachmentFile({ parentKind: "file", parentId: "library", file });
+                if (selectedFolder !== "all" && selectedFolder !== "root") {
+                  await request(`/api/files/${encodeURIComponent(uploaded.id)}`, {
+                    method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ folderId: selectedFolder }),
+                  });
+                }
                 toast.success("File uploaded privately.");
                 await refresh((page?.files.length ?? 0) + 1);
               });
             }} />
         </section>
+        <div className="flex flex-wrap items-center gap-2" aria-label="File folders">
+          <Button size="sm" variant={selectedFolder === "all" ? "secondary" : "ghost"} onClick={() => setSelectedFolder("all")}>all files</Button>
+          <Button size="sm" variant={selectedFolder === "root" ? "secondary" : "ghost"} onClick={() => setSelectedFolder("root")}>unfiled</Button>
+          {page?.folders.map((folder) => <Button key={folder.id} size="sm"
+            variant={selectedFolder === folder.id ? "secondary" : "ghost"} onClick={() => setSelectedFolder(folder.id)}>{folder.name}</Button>)}
+          <form className="flex items-center gap-2" onSubmit={(event) => {
+            event.preventDefault();
+            void run(async () => {
+              const { folder } = await request<{ folder: { id: string; name: string } }>("/api/files", {
+                method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: newFolder }),
+              });
+              setNewFolder("");
+              setSelectedFolder(folder.id);
+              await refresh(page?.files.length);
+              toast.success("Folder created.");
+            });
+          }}>
+            <Input aria-label="New folder name" placeholder="new folder" maxLength={64} value={newFolder}
+              onChange={(event) => setNewFolder(event.target.value)} disabled={busy} className="h-8 w-36" />
+            <Button type="submit" size="sm" variant="outline" disabled={busy || !newFolder.trim()}>create folder</Button>
+          </form>
+        </div>
         <FieldGroup>
           <Field>
             <FieldLabel htmlFor="files-search" className="sr-only">Search loaded files</FieldLabel>
@@ -154,10 +187,22 @@ export function FilesLibrary() {
                     <Badge variant="secondary">{fileTypeLabel(file.contentType)}</Badge>
                     <span>{file.size < 1024 * 1024 ? `${Math.ceil(file.size / 1024)} KB` : `${(file.size / 1024 / 1024).toFixed(1)} MB`}</span>
                     <span>{file.parentKind === "file" ? "library" : `${file.parentKind} attachment`}</span>
+                    {file.parentKind === "file" && file.folderId && <span>{page?.folders.find((folder) => folder.id === file.folderId)?.name}</span>}
                     <time dateTime={new Date(file.createdAt).toISOString()}>{new Date(file.createdAt).toLocaleDateString()}</time>
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
+                  {file.parentKind === "file" && <select aria-label={`Move ${file.fileName} to folder`} value={file.folderId ?? "root"}
+                    disabled={busy} onChange={(event) => void run(async () => {
+                      const folderId = event.target.value === "root" ? null : event.target.value;
+                      await request(`/api/files/${encodeURIComponent(file.id)}`, {
+                        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ folderId }),
+                      });
+                      setPage((current) => current && ({ ...current, files: current.files.map((item) => item.id === file.id ? { ...item, folderId } : item) }));
+                      toast.success(folderId ? "File moved." : "File moved to unfiled.");
+                    })} className="h-8 rounded-md border border-input bg-background px-2 text-xs">
+                    <option value="root">unfiled</option>{page?.folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}
+                  </select>}
                   <label className="flex items-center gap-2 text-xs">
                     <Switch checked={file.visibility === "public"} disabled={busy}
                       aria-label={`Public access for ${file.fileName}`}
