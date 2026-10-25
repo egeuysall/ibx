@@ -722,8 +722,8 @@ export function SimpleEditor({
           <DropdownMenu open modal={false} onOpenChange={(open) => { if (!open) setFileMention(null) }}>
             <DropdownMenuTrigger render={<button type="button" tabIndex={-1} aria-hidden="true" className="pointer-events-none fixed h-px w-px opacity-0" style={{ left: fileMention.left, top: fileMention.top }} />} />
             <DropdownMenuContent align="start" side="bottom" sideOffset={4} className="w-80 max-h-64" finalFocus={() => editor.view.dom}>
-              <DropdownMenuLabel>public files</DropdownMenuLabel>
               <DropdownMenuGroup>
+                <DropdownMenuLabel>public files</DropdownMenuLabel>
                 {filesLoading ? <DropdownMenuItem disabled>loading files…</DropdownMenuItem>
                   : filesError ? <DropdownMenuItem disabled>could not load public files</DropdownMenuItem>
                     : matchingPublicFiles.length ? matchingPublicFiles.map((file) => (
