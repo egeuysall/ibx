@@ -69,6 +69,7 @@ export type AttachmentRecord = {
   updatedAt: number;
   url?: string;
   publicUrl?: string | null;
+  visibility?: "public" | "private";
 };
 
 export type PublicationRecord = {

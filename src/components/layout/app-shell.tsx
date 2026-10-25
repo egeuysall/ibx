@@ -3385,6 +3385,17 @@ export function AppShell({
                 <SidebarMenu>
                   <SidebarMenuItem>
                     <SidebarMenuButton
+                      render={<Link href="/files" prefetch={false} />}
+                      aria-label="files"
+                      tooltip="files"
+                      className="group-data-[collapsible=icon]:justify-center"
+                    >
+                      <span className="group-data-[collapsible=icon]:hidden">files</span>
+                      <span aria-hidden className="hidden group-data-[collapsible=icon]:inline">~</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
                       render={<Link href="/settings" prefetch={false} />}
                       className="group-data-[collapsible=icon]:justify-center"
                     >

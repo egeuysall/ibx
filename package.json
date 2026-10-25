@@ -22,6 +22,8 @@
     "docs:deploy": "vercel --cwd ibx-docs --prod"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1156.0",
+    "@aws-sdk/s3-request-presigner": "^3.1156.0",
     "@base-ui/react": "^1.6.0",
     "@clerk/backend": "^3.8.4",
     "@clerk/nextjs": "^7.5.9",
@@ -54,7 +56,8 @@
     "ai": "^7.0.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "convex": "^1.42.0",
+    "convex": "^1.48.0",
+    "convex-helpers": "^0.1.129",
     "date-fns": "^4.4.0",
     "dexie": "^4.4.4",
     "flags": "^4.2.0",
@@ -75,18 +78,22 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@edge-runtime/vm": "^5.0.0",
     "@joshfarrant/shortcuts-js": "^0.6.0",
     "@tailwindcss/postcss": "^4.3.1",
+    "@types/bun": "^1.4.4",
     "@types/lodash.throttle": "^4.1.9",
     "@types/node": "^26.0.1",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "babel-plugin-react-compiler": "1.0.0",
+    "convex-test": "^0.0.65",
     "esbuild": "^0.28.1",
     "eslint": "^10.5.0",
     "eslint-config-next": "16.2.9",
     "sass": "^1.101.0",
     "tailwindcss": "^4.3.1",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.5"
   }
 }

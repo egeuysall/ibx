@@ -40,7 +40,7 @@ ibx td
 - `ibx page create "title" [same flags as todos add]`
 - `ibx publish [publish] <todoId|prefix> [--title "..."] [--private] [--json]`
 - `ibx publish unpublish <todoId|prefix> [--json]`
-- `ibx attach <todoId|prefix> <file> [--json]`
+- `ibx attach <todoId|prefix> <file> [--public] [--json]`
 - `ibx attach list <todoId|prefix> [--json]`
 - `ibx attach list --all [--json]`
 - `ibx todos list [--view today|upcoming|archive|all] [--json]`
@@ -58,12 +58,19 @@ MP4/M4V/MOV/WebM/OGV video. `ibx attach <todoId> <file>` reads a local path;
 `ibx attach list <todoId>` lists that todo's files, and `ibx attach list --all`
 lists across your owner account (at most 100 records before deleted entries are
 filtered). Duplicate names receive suffixes such as `demo-2.mp3`.
-With a username, returned file URLs are public: anyone with or able to guess a
-URL can download without signing in. Without a username, create/list URLs fall
-back to an authenticated file route. Notes and file management remain owner-scoped.
+New uploads are private by default; the returned owner URL requires authentication.
+Use `ibx attach <todoId> <file> --public` to explicitly allow anyone with the public
+link to download without signing in. The command publishes after uploading and
+prints the resolved public URL. JSON output includes `visibility` and `publicUrl`
+when the server returns them. Notes and file management remain owner-scoped.
+Uploads use signed R2 PUT URLs without sending your IBX API key to storage.
+Older servers without signed-upload support still use the legacy Convex upload
+flow and retain their server-defined visibility; `--public` requires the new API.
+If publishing fails after upload, the error includes the uploaded file ID; do not
+re-upload just to retry publishing.
 
 The separate in-app browser terminal uses `attach <number|id>` to open a file
-chooser and print the public URL, and `attach list <number|id>` to list a todo's
+chooser and print the file URL, and `attach list <number|id>` to list a todo's
 attachments. It cannot read arbitrary shell paths; use the installed CLI for that.
 
 - `ibx todos add "title" [--notes "..."] [--due YYYY-MM-DD] [--hours 1.5|90m|1h] [--start HH:mm|HH:mm am/pm] [--priority 1|2|3, defaults to 1] [--recurrence none|daily|weekly|monthly] [--json]`

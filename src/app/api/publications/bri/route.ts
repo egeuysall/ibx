@@ -9,12 +9,15 @@ import {
 import {
   getRouteAuth,
   getRouteAuthOwnerKey,
+  getRouteAuthUsername,
   unauthorizedJson,
   validateApiKeyPermission,
   validateCsrfForSessionAuth,
 } from "@/lib/auth-server";
 import { api, convex } from "@/lib/convex-server";
 import { tiptapJsonToMarkdown } from "@/lib/tiptap-markdown";
+import { serializeFile } from "@/lib/files-server";
+import { isPublicFile } from "@/lib/file-visibility";
 
 const MAX_TITLE_LENGTH = 120;
 const MAX_MARKDOWN_LENGTH = 200_000;
@@ -223,6 +226,8 @@ function readString(...values: unknown[]) {
 async function resolveAttachmentImageUrls(
   markdown: string,
   ownerKey: string | null,
+  origin: string,
+  username: string | null,
 ) {
   const attachmentIds = new Set<string>();
   const attachmentUrlPattern =
@@ -242,14 +247,15 @@ async function resolveAttachmentImageUrls(
   const urlByAttachmentId = new Map<string, string>();
   await Promise.all(
     [...attachmentIds].map(async (attachmentId) => {
-      const url = await convex
-        .query(api.attachments.getAttachmentUrl, {
+      const file = await convex
+        .query(api.attachments.getAttachmentDetails, {
           ownerKey,
           attachmentId: attachmentId as never,
         })
         .catch(() => null);
-      if (url) {
-        urlByAttachmentId.set(attachmentId, url);
+      if (file && isPublicFile(file)) {
+        const url = serializeFile(file, origin, username).publicUrl;
+        if (url) urlByAttachmentId.set(attachmentId, url);
       }
     }),
   );
@@ -287,6 +293,8 @@ async function appendImageAttachments(
   ownerKey: string | null,
   sourceId: string,
   referencedAttachmentIds: Set<string>,
+  origin: string,
+  username: string | null,
 ) {
   const attachments = await convex
     .query(api.attachments.listAttachments, {
@@ -306,17 +314,13 @@ async function appendImageAttachments(
         : "";
     if (
       referencedAttachmentIds.has(attachmentId) ||
+      !isPublicFile(attachment) ||
       !contentType.startsWith("image/")
     ) {
       continue;
     }
 
-    const url = await convex
-      .query(api.attachments.getAttachmentUrl, {
-        ownerKey,
-        attachmentId: attachment._id,
-      })
-      .catch(() => null);
+    const url = serializeFile(attachment, origin, username).publicUrl;
     if (url) {
       const alt = attachment.fileName.replace(/[\[\]\n]/g, " ");
       imageLines.push(`![${alt}](${url})`);
@@ -509,15 +513,25 @@ export async function POST(request: NextRequest) {
     sourceId,
   });
   const referencedAttachmentIds = getReferencedAttachmentIds(markdown);
+  const username = await getRouteAuthUsername(auth);
+  const referencedFiles = await Promise.all([...referencedAttachmentIds].map((id) =>
+    convex.query(api.attachments.getAttachmentDetails, { ownerKey, attachmentId: id as never }).catch(() => null)));
+  if (referencedFiles.some((file) => !file || !isPublicFile(file)) || (referencedFiles.length > 0 && !username)) {
+    return NextResponse.json({ error: "Make referenced images public in Files before publishing to Bri." }, { status: 409 });
+  }
   const markdownWithAttachments = await appendImageAttachments(
     markdown,
     ownerKey,
     sourceId,
     referencedAttachmentIds,
+    request.nextUrl.origin,
+    username,
   );
   const resolvedMarkdown = await resolveAttachmentImageUrls(
     markdownWithAttachments,
     ownerKey,
+    request.nextUrl.origin,
+    username,
   );
   const content = resolvedMarkdown.trim();
 

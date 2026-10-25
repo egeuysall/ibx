@@ -1,187 +1,71 @@
 import { NextRequest, NextResponse } from "next/server";
-
-import {
-  getRouteAuth,
-  getRouteAuthOwnerKey,
-  getRouteAuthUsername,
-  unauthorizedJson,
-  validateApiKeyPermission,
-  validateCsrfForSessionAuth,
-} from "@/lib/auth-server";
+import { getRouteAuth, getRouteAuthOwnerKey, getRouteAuthUsername, unauthorizedJson, validateApiKeyPermission, validateCsrfForSessionAuth } from "@/lib/auth-server";
 import { api, convex } from "@/lib/convex-server";
-import { buildAttachmentUrl } from "@/lib/attachment-url";
-
-const MAX_FILE_NAME_LENGTH = 180;
-
-function normalizeParentKind(input: string | null) {
-  return input === "thought" || input === "todo" ? input : null;
-}
-
-function normalizeParentId(input: string | null | undefined) {
-  const value = typeof input === "string" ? input.trim() : "";
-  if (!value || value.length > 128) {
-    return null;
-  }
-
-  return value;
-}
-
-function serializeAttachment(
-  attachment: {
-  _id: string;
-  parentKind: "thought" | "todo";
-  parentId: string;
-  fileName: string;
-  contentType: string;
-  size: number;
-  status: "uploaded" | "pendingDelete" | "deleted";
-  createdAt: number;
-  updatedAt: number;
-  },
-  origin: string,
-  username: string | null,
-) {
-  return {
-    id: attachment._id,
-    parentKind: attachment.parentKind,
-    parentId: attachment.parentId,
-    fileName: attachment.fileName,
-    contentType: attachment.contentType,
-    size: attachment.size,
-    status: attachment.status,
-    createdAt: attachment.createdAt,
-    updatedAt: attachment.updatedAt,
-    url: buildAttachmentUrl(origin, username, attachment._id, attachment.fileName),
-    publicUrl: username ? buildAttachmentUrl(origin, username, attachment._id, attachment.fileName) : null,
-  };
-}
+import { uploadMetadataSchema } from "@/lib/file-upload-token";
+import { confirmR2Upload, r2Configured } from "@/lib/r2-storage";
+import { migrateFileToR2, serializeFile } from "@/lib/files-server";
 
 export async function GET(request: NextRequest) {
   const auth = await getRouteAuth(request);
-  if (!auth) {
-    return unauthorizedJson();
-  }
-  const permissionError = validateApiKeyPermission(request, auth);
-  if (permissionError) {
-    return permissionError;
-  }
-
+  if (!auth) return unauthorizedJson();
+  const denied = validateApiKeyPermission(request, auth);
+  if (denied) return denied;
   const all = request.nextUrl.searchParams.get("all") === "true";
-  const parentKind = normalizeParentKind(
-    request.nextUrl.searchParams.get("parentKind"),
-  );
-  const parentId = normalizeParentId(request.nextUrl.searchParams.get("parentId"));
-  if (!all && (!parentKind || !parentId)) {
-    return NextResponse.json(
-      { error: "parentKind and parentId are required unless all=true." },
-      { status: 400 },
-    );
+  const kind = request.nextUrl.searchParams.get("parentKind");
+  const parentKind = kind === "todo" || kind === "thought" || kind === "file" ? kind : null;
+  const parentId = request.nextUrl.searchParams.get("parentId")?.trim();
+  if (!all && (!parentKind || !parentId || parentId.length > 128)) {
+    return NextResponse.json({ error: "parentKind and parentId are required unless all=true." }, { status: 400 });
   }
-
   const ownerKey = getRouteAuthOwnerKey(auth);
-  const attachments = all
-    ? await convex.query(api.attachments.listAllAttachments, {
-        ownerKey,
-        limit: 100,
-      })
-    : await convex.query(api.attachments.listAttachments, {
-        ownerKey,
-        parentKind: parentKind as "thought" | "todo",
-        parentId: parentId as string,
-        limit: 50,
-      });
-  const username = await getRouteAuthUsername(auth);
-
-  return NextResponse.json({
-    attachments: attachments.map((attachment) =>
-      serializeAttachment(attachment, request.nextUrl.origin, username),
-    ),
-  });
+  const [attachments, username] = await Promise.all([
+    all ? convex.query(api.attachments.listAllAttachments, { ownerKey, limit: 100 })
+      : convex.query(api.attachments.listAttachments, { ownerKey, parentKind: parentKind!, parentId: parentId!, limit: 50 }),
+    getRouteAuthUsername(auth),
+  ]);
+  return NextResponse.json({ attachments: attachments.map((file) => serializeFile(file, request.nextUrl.origin, username)) },
+    { headers: { "Cache-Control": "private, no-store" } });
 }
 
 export async function POST(request: NextRequest) {
   const auth = await getRouteAuth(request);
-  if (!auth) {
-    return unauthorizedJson();
-  }
-  const csrfError = validateCsrfForSessionAuth(request, auth);
-  if (csrfError) {
-    return csrfError;
-  }
-  const permissionError = validateApiKeyPermission(request, auth);
-  if (permissionError) {
-    return permissionError;
-  }
-
-  const body = (await request.json().catch(() => null)) as {
-    parentKind?: unknown;
-    parentId?: unknown;
-    storageId?: unknown;
-    fileName?: unknown;
-    contentType?: unknown;
-    size?: unknown;
-  } | null;
-
-  const parentKind =
-    body?.parentKind === "thought" || body?.parentKind === "todo"
-      ? body.parentKind
-      : null;
-  const parentId = normalizeParentId(
-    typeof body?.parentId === "string" ? body.parentId : null,
-  );
-  const storageId =
-    typeof body?.storageId === "string" && body.storageId.length <= 128
-      ? body.storageId
-      : null;
-  const fileName =
-    typeof body?.fileName === "string"
-      ? body.fileName.trim().slice(0, MAX_FILE_NAME_LENGTH)
-      : "";
-  const contentType =
-    typeof body?.contentType === "string" && body.contentType.length <= 120
-      ? body.contentType
-      : "";
-  const size =
-    typeof body?.size === "number" && Number.isFinite(body.size)
-      ? body.size
-      : null;
-
-  if (!parentKind || !parentId || !storageId || !fileName || !contentType || !size) {
-    return NextResponse.json(
-      { error: "Invalid attachment metadata." },
-      { status: 400 },
-    );
-  }
-
+  if (!auth) return unauthorizedJson();
+  const denied = validateCsrfForSessionAuth(request, auth) ?? validateApiKeyPermission(request, auth);
+  if (denied) return denied;
+  const body = await request.json().catch(() => null);
   const ownerKey = getRouteAuthOwnerKey(auth);
-  let attachment: { id: string; fileName: string };
-  try {
-    attachment = await convex.mutation(api.attachments.createAttachment, {
-      ownerKey,
-      parentKind,
-      parentId,
-      storageId: storageId as never,
-      fileName,
-      contentType,
-      size,
-    });
-  } catch {
-    return NextResponse.json(
-      { error: "Attachment metadata rejected." },
-      { status: 400 },
-    );
+  let created: { id: string; fileName: string };
+  if (body?.uploadToken !== undefined) {
+    try {
+      const { r2Key, parentKind, parentId, fileName, contentType, size } = await confirmR2Upload(body.uploadToken, ownerKey);
+      created = await convex.mutation(api.attachments.createR2Attachment, { ownerKey, r2Key, parentKind, parentId, fileName, contentType, size });
+    } catch {
+      return NextResponse.json({ error: "Upload ticket expired, invalid, or uploaded bytes do not match." }, { status: 400 });
+    }
+  } else {
+    const metadata = uploadMetadataSchema.safeParse(body);
+    if (!metadata.success || typeof body?.storageId !== "string" || !/^[a-z0-9]{20,64}$/.test(body.storageId)) {
+      return NextResponse.json({ error: "Invalid attachment metadata." }, { status: 400 });
+    }
+    try {
+      created = await convex.mutation(api.attachments.createAttachment, { ownerKey, ...metadata.data, storageId: body.storageId as never });
+    } catch {
+      return NextResponse.json({ error: "Attachment metadata rejected." }, { status: 400 });
+    }
+    if (r2Configured()) {
+      const file = await convex.query(api.attachments.getAttachmentDetails, { ownerKey, attachmentId: created.id as never });
+      if (file) await migrateFileToR2(file).catch(() => {
+        // Preserve uploaded bytes if copying fails; migration can safely retry.
+        console.warn("Legacy upload retained in Convex; R2 copy pending.");
+      });
+    }
   }
-
-  const username = await getRouteAuthUsername(auth);
-  return NextResponse.json({
-    ok: true,
-    id: attachment.id,
-    fileName: attachment.fileName,
-    url: buildAttachmentUrl(
-      request.nextUrl.origin,
-      username,
-      attachment.id,
-      attachment.fileName,
-    ),
-  });
+  const [file, username] = await Promise.all([
+    convex.query(api.attachments.getAttachmentDetails, { ownerKey, attachmentId: created.id as never }),
+    getRouteAuthUsername(auth),
+  ]);
+  if (!file) return NextResponse.json({ error: "Attachment not found." }, { status: 404 });
+  const result = serializeFile(file, request.nextUrl.origin, username);
+  return NextResponse.json({ ok: true, id: result.id, fileName: result.fileName, url: result.url, publicUrl: result.publicUrl, visibility: result.visibility },
+    { headers: { "Cache-Control": "private, no-store" } });
 }

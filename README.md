@@ -2,9 +2,14 @@
 
 `ibx` is a private, offline-first task execution app for quickly turning raw thoughts into prioritized todos.
 
-Attachments have public, shareable URLs at `/{username}/{lowercase-filename.ext}`.
-Anyone with the URL can view the file; notes and attachment management still require sign-in.
-Uploads are limited to 30 MB per file and support PDF, PNG/JPEG/GIF/WebP images,
+The **Files** section supports owner-managed uploads, public/private visibility, and public `/{username}` profiles. File bytes are stored in Cloudflare R2; Convex stores metadata. Public profiles show only explicitly public files and public Bri publications.
+
+New attachments are private by default; owner file URLs require authentication.
+Use `ibx attach <todoId> <file> --public` to explicitly publish a shareable URL at
+`/{username}/{lowercase-filename.ext}`. Anyone with a public URL can view the file;
+notes and attachment management still require sign-in. Older servers retain their
+existing visibility behavior.
+Uploads are limited to 30 MiB (31,457,280 bytes) per file and support PDF, PNG/JPEG/GIF/WebP images,
 Markdown/text, MP3/M4A/WAV/OGG audio, and MP4/MOV/WebM/M4V/OGV video.
 Playback depends on the browser's codec support. Deleted attachment URLs stop working.
 
@@ -114,6 +119,8 @@ Required keys:
 - `AI_AGENT_MODEL` (default: `openai/gpt-5.4-nano`)
 - `APP_ACCESS_PASSWORD`
 - `NEXT_PUBLIC_SITE_URL` (default deployment URL)
+- `R2_ACCOUNT_ID`, `R2_BUCKET_NAME`, `R2_ACCESS_KEY_ID`, and `R2_SECRET_ACCESS_KEY` for private Cloudflare R2 storage
+- `IBX_CONVEX_SERVER_SECRET` (at least 32 characters; configured in both Convex and the server environment)
 
 Optional:
 

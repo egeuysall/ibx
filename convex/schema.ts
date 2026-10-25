@@ -117,9 +117,13 @@ export default defineSchema({
     .index("by_ownerKey_and_createdAt", ["ownerKey", "createdAt"]),
   attachments: defineTable({
     ownerKey: v.optional(v.union(v.string(), v.null())),
-    parentKind: v.union(v.literal("thought"), v.literal("todo")),
+    parentKind: v.union(v.literal("thought"), v.literal("todo"), v.literal("file")),
     parentId: v.string(),
-    storageId: v.id("_storage"),
+    // Retained during R2 migration so existing Convex URLs keep working.
+    storageId: v.optional(v.id("_storage")),
+    r2Key: v.optional(v.string()),
+    storageProvider: v.optional(v.union(v.literal("r2"), v.literal("convex"))),
+    visibility: v.optional(v.union(v.literal("public"), v.literal("private"))),
     fileName: v.string(),
     contentType: v.string(),
     size: v.number(),
@@ -145,6 +149,12 @@ export default defineSchema({
       "createdAt",
     ])
     .index("by_ownerKey_and_storageId", ["ownerKey", "storageId"])
+    .index("by_storageId", ["storageId"])
+    .index("by_r2Key", ["r2Key"])
+    .index("by_ownerKey_and_status_and_createdAt", ["ownerKey", "status", "createdAt"])
+    .index("by_ownerKey_and_visibility_and_status_and_createdAt", [
+      "ownerKey", "visibility", "status", "createdAt",
+    ])
     .index("by_ownerKey_and_fileName_and_createdAt", [
       "ownerKey",
       "fileName",
@@ -173,7 +183,8 @@ export default defineSchema({
       "sourceKind",
       "sourceId",
     ])
-    .index("by_ownerKey_and_updatedAt", ["ownerKey", "updatedAt"]),
+    .index("by_ownerKey_and_updatedAt", ["ownerKey", "updatedAt"])
+    .index("by_ownerKey_and_visibility_and_status_and_updatedAt", ["ownerKey", "visibility", "status", "updatedAt"]),
   briConnections: defineTable({
     ownerKey: v.union(v.string(), v.null()),
     encryptedApiKey: v.string(),

@@ -8,6 +8,7 @@ import {
   validateCsrfForSessionAuth,
 } from "@/lib/auth-server";
 import { api, convex } from "@/lib/convex-server";
+import { deleteStoredFile } from "@/lib/files-server";
 
 export async function DELETE(
   request: NextRequest,
@@ -28,19 +29,20 @@ export async function DELETE(
 
   const resolvedParams = await params;
   const attachmentId = resolvedParams.attachmentId?.trim();
-  if (!attachmentId || attachmentId.length > 128) {
+  if (!attachmentId || !/^[a-z0-9]{20,64}$/.test(attachmentId)) {
     return NextResponse.json({ error: "Invalid attachment id." }, { status: 400 });
   }
 
   const ownerKey = getRouteAuthOwnerKey(auth);
-  const ok = await convex.mutation(api.attachments.deleteAttachment, {
+  const file = await convex.query(api.attachments.getAttachmentDetails, {
     ownerKey,
     attachmentId: attachmentId as never,
   });
 
-  if (!ok) {
+  if (!file) {
     return NextResponse.json({ error: "Attachment not found." }, { status: 404 });
   }
 
-  return NextResponse.json({ ok: true });
+  const ok = await deleteStoredFile(file);
+  return NextResponse.json({ ok });
 }

@@ -1,7 +1,8 @@
-import { basename, extname } from "node:path";
+import { basename } from "node:path";
 import { readFile, stat } from "node:fs/promises";
 
 import { getStringOption, hasFlag } from "../core/args.js";
+import { inferContentType, uploadAttachmentBytes, validateAttachmentSize, type AttachmentMetadata, type AttachmentUpload } from "../core/attachment-upload.js";
 import { requireConfig } from "../core/config.js";
 import { EXIT_CODE } from "../core/constants.js";
 import { CliError } from "../core/errors.js";
@@ -21,34 +22,13 @@ type AttachmentResult = {
   createdAt: number;
   updatedAt: number;
   url: string;
+  publicUrl?: string | null;
+  visibility?: "public" | "private";
 };
-
-const MIME_BY_EXTENSION: Record<string, string> = {
-  ".gif": "image/gif",
-  ".jpeg": "image/jpeg",
-  ".jpg": "image/jpeg",
-  ".md": "text/markdown",
-  ".pdf": "application/pdf",
-  ".png": "image/png",
-  ".txt": "text/plain",
-  ".webp": "image/webp",
-  ".mp3": "audio/mpeg",
-  ".m4a": "audio/mp4",
-  ".wav": "audio/wav",
-  ".ogg": "audio/ogg",
-  ".mp4": "video/mp4",
-  ".m4v": "video/x-m4v",
-  ".mov": "video/quicktime",
-  ".webm": "video/webm",
-  ".ogv": "video/ogg",
-};
-
-function inferContentType(path: string) {
-  return MIME_BY_EXTENSION[extname(path).toLowerCase()] ?? "application/octet-stream";
-}
 
 export async function runAttachCommand(parsed: ParsedArgs) {
   const outputJson = hasFlag(parsed, "json");
+  const makePublic = hasFlag(parsed, "public");
   const config = await requireConfig();
 
   if (parsed.positionals[1] === "list") {
@@ -87,7 +67,7 @@ export async function runAttachCommand(parsed: ParsedArgs) {
   const filePath = getStringOption(parsed, "file") ?? parsed.positionals[2] ?? null;
 
   if (!todoIdInput || !filePath) {
-    throw new CliError("Usage: ibx attach <todoId> <file> or ibx attach --id <todoId> --file <path>.", {
+    throw new CliError("Usage: ibx attach <todoId> <file> [--public] or ibx attach --id <todoId> --file <path> [--public].", {
       exitCode: EXIT_CODE.VALIDATION,
       code: "ATTACH_INPUT_REQUIRED",
     });
@@ -102,71 +82,62 @@ export async function runAttachCommand(parsed: ParsedArgs) {
     });
   }
 
-  const { uploadUrl, limits } = await requestJson<{
-    uploadUrl: string;
-    limits: { maxBytes: number; allowedContentTypes: string[] };
-  }>(
+  validateAttachmentSize(fileStats.size);
+  const contentType = inferContentType(filePath);
+  const metadata: AttachmentMetadata = {
+    parentKind: "todo", parentId: todoId, fileName: basename(filePath), contentType, size: fileStats.size,
+  };
+  const upload = await requestJson<AttachmentUpload>(
     config,
     "/api/attachments/upload-url",
     {
       method: "POST",
-      body: JSON.stringify({}),
+      body: JSON.stringify(metadata),
     },
     { action: "create attachment upload url" },
   );
 
-  if (fileStats.size > limits.maxBytes) {
-    throw new CliError(`Attachment exceeds ${limits.maxBytes} byte limit.`, {
-      exitCode: EXIT_CODE.VALIDATION,
-      code: "ATTACH_FILE_TOO_LARGE",
-    });
-  }
-
-  const contentType = inferContentType(filePath);
-  if (!limits.allowedContentTypes.includes(contentType)) {
-    throw new CliError(`Unsupported attachment type: ${contentType}`, {
-      exitCode: EXIT_CODE.VALIDATION,
-      code: "ATTACH_FILE_TYPE_INVALID",
-    });
-  }
-
+  validateAttachmentSize(fileStats.size, upload.limits.maxBytes);
   const fileBytes = await readFile(filePath);
-  const uploadResponse = await fetch(uploadUrl, {
-    method: "POST",
-    headers: { "Content-Type": contentType },
-    body: new Blob([new Uint8Array(fileBytes)], { type: contentType }),
-  });
-  const uploadJson = (await uploadResponse.json().catch(() => ({}))) as {
-    storageId?: unknown;
-  };
-  if (!uploadResponse.ok || typeof uploadJson.storageId !== "string") {
-    throw new CliError(`Attachment upload failed (${uploadResponse.status}).`, {
-      exitCode: EXIT_CODE.SERVER,
-      code: "ATTACH_UPLOAD_FAILED",
-    });
-  }
+  const completion = await uploadAttachmentBytes(upload, metadata, fileBytes);
 
-  const result = await requestJson<{
+  let result = await requestJson<{
     ok: true;
     id: string;
     fileName: string;
     url: string;
+    publicUrl?: string | null;
+    visibility?: "public" | "private";
   }>(
     config,
     "/api/attachments",
     {
       method: "POST",
-      body: JSON.stringify({
-        parentKind: "todo",
-        parentId: todoId,
-        storageId: uploadJson.storageId,
-        fileName: basename(filePath),
-        contentType,
-        size: fileStats.size,
-      }),
+      body: JSON.stringify(completion),
     },
     { action: "save attachment metadata" },
   );
+
+  if (makePublic) {
+    try {
+      await requestJson(config, `/api/files/${encodeURIComponent(result.id)}`, {
+        method: "PATCH", body: JSON.stringify({ visibility: "public" }),
+      }, { action: "make uploaded attachment public" });
+      const resolved = await requestJson<Pick<AttachmentResult, "url" | "publicUrl" | "visibility">>(
+        config, `/api/attachments/${encodeURIComponent(result.id)}/url`, { method: "GET" },
+        { action: "resolve public attachment URL" },
+      );
+      if (resolved.visibility !== "public" || !resolved.publicUrl) {
+        throw new CliError("The server did not return a public file URL.", { code: "ATTACH_PUBLIC_URL_MISSING" });
+      }
+      result = { ...result, ...resolved, url: resolved.publicUrl };
+    } catch (error) {
+      throw new CliError(`File uploaded (${result.id}), but public link could not be confirmed: ${error instanceof Error ? error.message : "unknown error"}`, {
+        exitCode: error instanceof CliError ? error.exitCode : EXIT_CODE.UNKNOWN,
+        code: "ATTACH_PUBLIC_FAILED", details: { id: result.id, uploaded: true },
+      });
+    }
+  }
 
   if (outputJson) {
     printJson({ ...result, todoId, contentType });
@@ -179,5 +150,6 @@ export async function runAttachCommand(parsed: ParsedArgs) {
     contentType,
     size: fileStats.size,
   });
-  printOk(`attached ${basename(filePath)} to ${todoId}: ${result.url}`);
+  const access = result.visibility === "public" ? "public" : result.visibility === "private" ? "private; owner sign-in required" : "server-provided URL";
+  printOk(`attached ${basename(filePath)} to ${todoId} (${access}): ${result.url}`);
 }

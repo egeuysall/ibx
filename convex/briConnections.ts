@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation, query } from "./functions";
 
 function requireServerSecret(serverSecret: string) {
   const expected = process.env.IBX_CONVEX_SERVER_SECRET?.trim();

@@ -3,9 +3,8 @@ info:
   title: IBX HTTP API
   version: 1.0.0
   description: |
-    The IBX API turns captured thoughts into owner-scoped todos, supports
-    offline clients, and exposes authenticated task operations for the web
-    app, CLI, Shortcut, and server integrations.
+    The IBX API turns captured thoughts into owner-scoped todos and files,
+    with private Cloudflare R2 storage and opt-in public file links.
   contact:
     url: https://ibx.egeuysal.com
 servers:
@@ -23,7 +22,7 @@ tags:
   - name: api-keys
     description: Create and revoke integration keys from a session.
   - name: attachments
-    description: Owner-scoped uploads and management, with public file downloads.
+    description: Owner-scoped file uploads and visibility, plus public downloads.
 security:
   - bearerAuth: []
 components:
@@ -64,41 +63,21 @@ components:
         - video/x-m4v
     AttachmentCreateRequest:
       type: object
-      required: [parentKind, parentId, storageId, fileName, contentType, size]
+      required: [uploadToken]
       properties:
-        parentKind:
+        uploadToken:
           type: string
-          enum: [thought, todo]
-        parentId:
-          type: string
-          minLength: 1
-          maxLength: 128
-          description: Full todo ID or thought externalId belonging to the authenticated owner.
-        storageId:
-          type: string
-          minLength: 1
-          maxLength: 128
-          description: Returned by the binary POST to the Convex uploadUrl.
-        fileName:
-          type: string
-          minLength: 1
-          description: Trimmed and truncated to 180 characters, then normalized to a lowercase URL-safe name. Owner-wide duplicates get -2 through -100 suffixes; deleted names remain reserved.
-        contentType:
-          $ref: '#/components/schemas/AttachmentContentType'
-        size:
-          type: integer
-          minimum: 1
-          maximum: 31457280
-          description: Bytes (30 MiB cap). Storage metadata determines the actual saved size and content type, with the supplied type used only when storage has none.
+          maxLength: 4000
+          description: Short-lived signed ticket returned with the R2 upload URL.
     Attachment:
       type: object
-      required: [id, parentKind, parentId, fileName, contentType, size, status, createdAt, updatedAt, url, publicUrl]
+      required: [id, parentKind, parentId, fileName, contentType, size, status, createdAt, updatedAt, url, publicUrl, visibility]
       properties:
         id:
           type: string
         parentKind:
           type: string
-          enum: [thought, todo]
+          enum: [thought, todo, file]
         parentId:
           type: string
         fileName:
@@ -126,6 +105,17 @@ components:
           format: uri
           nullable: true
           description: Public download URL, or null without a username. Anyone who knows or guesses this URL can download without authentication.
+        visibility:
+          type: string
+          enum: [public, private]
+          description: New uploads default to private.
+    FileVisibility:
+      type: object
+      required: [visibility]
+      properties:
+        visibility:
+          type: string
+          enum: [public, private]
     Timestamp:
       type: integer
       format: int64
@@ -505,17 +495,89 @@ components:
         type: string
         maxLength: 96
 paths:
+  /api/files:
+    get:
+      tags: [attachments]
+      summary: List your files
+      parameters:
+        - name: cursor
+          in: query
+          schema:
+            type: string
+            maxLength: 4000
+      responses:
+        '200':
+          description: Owner-scoped page of up to 50 files.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [files, cursor, isDone, username]
+                properties:
+                  files:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Attachment'
+                  cursor:
+                    type: string
+                    nullable: true
+                  isDone:
+                    type: boolean
+                  username:
+                    type: string
+                    nullable: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/files/{attachmentId}:
+    patch:
+      tags: [attachments]
+      summary: Change file visibility
+      parameters:
+        - $ref: '#/components/parameters/AttachmentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FileVisibility'
+      responses:
+        '200':
+          description: Visibility updated.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [attachments]
+      summary: Delete a file
+      parameters:
+        - $ref: '#/components/parameters/AttachmentId'
+      responses:
+        '200':
+          description: File deleted.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /api/attachments/upload-url:
     post:
       tags: [attachments]
-      summary: Get upload URL
+      summary: Create a direct-to-R2 upload
       description: |
         Requires write permission. No request body is required. Cookie-authenticated
         writes require a same-origin Origin or Referer.
-        POST raw binary bytes to the returned Convex uploadUrl with the file's
-        Content-Type (not multipart). Do not send the IBX Bearer key or session
-        cookies to storage. Convex returns JSON containing storageId; then POST
-        metadata to /api/attachments. Check limits before uploading.
+        Send parentKind, parentId, fileName, contentType, and size. For the
+        Files library use parentKind=file and parentId=library. PUT raw bytes
+        to the returned R2 URL using its returned headers; never send IBX
+        credentials to storage. POST the returned uploadToken to /api/attachments.
       responses:
         '200':
           description: Upload URL and current limits.
@@ -523,11 +585,23 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [uploadUrl, limits]
+                required: [uploadUrl, method, headers, uploadToken, limits]
                 properties:
                   uploadUrl:
                     type: string
                     format: uri
+                  method:
+                    type: string
+                    enum: [PUT]
+                  headers:
+                    type: object
+                    required: [Content-Type]
+                    properties:
+                      Content-Type:
+                        type: string
+                  uploadToken:
+                    type: string
+                    maxLength: 4000
                   limits:
                     type: object
                     required: [maxBytes, allowedContentTypes]
@@ -549,9 +623,9 @@ paths:
       tags: [attachments]
       summary: Save attachment
       description: |
-        Requires write permission and an existing owner-scoped parent. Save metadata
-        after uploading bytes to Convex. Cookie-authenticated writes require a
-        same-origin Origin or Referer. Storage size and type are validated.
+        Requires write permission. Complete an R2 upload by sending its signed
+        uploadToken. Cookie-authenticated writes require a same-origin Origin
+        or Referer. Uploaded size and type are verified against the ticket.
         Names are normalized and suffixed on duplicates, including deleted names.
         Public username/fileName links expose the file without authentication;
         notes and management remain private. Without a username, url uses the
@@ -569,7 +643,7 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [ok, id, fileName, url]
+                required: [ok, id, fileName, url, publicUrl, visibility]
                 properties:
                   ok:
                     type: boolean
@@ -578,6 +652,13 @@ paths:
                     type: string
                   fileName:
                     type: string
+                  publicUrl:
+                    type: string
+                    format: uri
+                    nullable: true
+                  visibility:
+                    type: string
+                    enum: [public, private]
                   url:
                     type: string
                     format: uri
@@ -600,10 +681,10 @@ paths:
           in: query
           schema:
             type: string
-            enum: [thought, todo]
+            enum: [thought, todo, file]
         - name: parentId
           in: query
-          description: Full todo ID or thought externalId; required with parentKind unless all=true.
+          description: Full todo ID, thought externalId, or library ID; required with parentKind unless all=true.
           schema:
             type: string
             minLength: 1
@@ -663,7 +744,7 @@ paths:
     get:
       tags: [attachments]
       summary: Get file URL
-      description: Requires read permission and ownership. Returns the public username/fileName URL when a username exists; otherwise returns a Convex storage URL.
+      description: Requires read permission and ownership. Returns an IBX URL and nullable publicUrl; signed storage credentials are never returned.
       parameters:
         - $ref: '#/components/parameters/AttachmentId'
       responses:
@@ -673,11 +754,18 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [url]
+                required: [url, publicUrl, visibility]
                 properties:
                   url:
                     type: string
                     format: uri
+                  publicUrl:
+                    type: string
+                    format: uri
+                    nullable: true
+                  visibility:
+                    type: string
+                    enum: [public, private]
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -690,7 +778,7 @@ paths:
     get:
       tags: [attachments]
       summary: Get file
-      description: Requires read permission and ownership. Redirects to the public URL when a username exists; otherwise streams storage bytes inline with private, no-store caching and nosniff. Range forwarding is supported by the public route, not this fallback stream.
+      description: Requires read permission and ownership. Streams file bytes inline with private, no-store caching and nosniff; it does not expose or redirect to storage credentials.
       parameters:
         - $ref: '#/components/parameters/AttachmentId'
       responses:
@@ -701,13 +789,6 @@ paths:
               schema:
                 type: string
                 format: binary
-        '307':
-          description: Redirect to public username/fileName URL.
-          headers:
-            Location:
-              schema:
-                type: string
-                format: uri
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -730,9 +811,9 @@ paths:
       description: |
         No authentication required. Anyone who knows or guesses the URL can download.
         Resolves the username's owner and normalized filename, not the viewer's session.
-        Streams inline with no-store caching, nosniff, wildcard CORS, and noindex,
+        Streams inline with private, no-store caching, nosniff, wildcard CORS, and noindex,
         nofollow (not access control). Forwards Range and If-Range to storage and
-        preserves Content-Length, Content-Range, Accept-Ranges, ETag, Last-Modified,
+        preserves Content-Range, Accept-Ranges, ETag, Last-Modified,
         Content-Type, and storage status, supporting audio/video seeking.
       parameters:
         - name: username

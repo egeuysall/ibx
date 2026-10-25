@@ -3,10 +3,9 @@ import { internal } from "./_generated/api";
 import {
   internalAction,
   internalMutation,
-  mutation,
-  query,
   type MutationCtx,
 } from "./_generated/server";
+import { mutation, query } from "./functions";
 import type { Id } from "./_generated/dataModel";
 
 const REMINDER_KIND = "timeBlockPrestart";

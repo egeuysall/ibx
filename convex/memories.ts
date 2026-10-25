@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation, query } from "./functions";
 
 const MAX_PROFILE_CONTENT_LENGTH = 8_000;
 const MAX_RUN_CONTENT_LENGTH = 1_200;

@@ -1,8 +1,19 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation, query } from "./functions";
 
 const sourceKindValidator = v.union(v.literal("todo"), v.literal("thought"));
 const visibilityValidator = v.union(v.literal("public"), v.literal("private"));
+
+export const listPublic = query({
+  args: { ownerKey: v.union(v.string(), v.null()) },
+  handler: async (ctx, args) => {
+    const rows = await ctx.db.query("publications")
+      .withIndex("by_ownerKey_and_visibility_and_status_and_updatedAt", (q) =>
+        q.eq("ownerKey", args.ownerKey).eq("visibility", "public").eq("status", "published"))
+      .order("desc").take(50);
+    return rows.filter((row) => row.deletedAt == null).map((row) => ({ title: row.title, url: row.url }));
+  },
+});
 
 export const getBySource = query({
   args: {

@@ -468,38 +468,35 @@ export const apiClient = {
   },
 
   async uploadAttachmentFile(input: {
-    parentKind: AttachmentParentKind;
+    parentKind: AttachmentParentKind | "file";
     parentId: string;
     file: File;
   }) {
-    const { uploadUrl, limits } = await this.createAttachmentUploadUrl();
+    const contentType = input.file.type || "application/octet-stream";
+    const metadata = { parentKind: input.parentKind, parentId: input.parentId,
+      fileName: input.file.name, contentType, size: input.file.size };
+    const { uploadUrl, limits, method, headers, uploadToken } = await requestJson<{
+      uploadUrl: string; limits: { maxBytes: number; allowedContentTypes: string[] };
+      method: "PUT"; headers: Record<string, string>; uploadToken: string;
+    }>("/api/attachments/upload-url", { method: "POST", body: JSON.stringify(metadata) });
     if (input.file.size <= 0 || input.file.size > limits.maxBytes) {
       throw new ApiError(`Attachment must be between 1 byte and ${limits.maxBytes / 1024 / 1024} MB.`, 400);
     }
 
-    const contentType = input.file.type || "application/octet-stream";
     if (!limits.allowedContentTypes.includes(contentType)) {
       throw new ApiError("This attachment file type is not supported.", 400);
     }
     const uploadResponse = await fetch(uploadUrl, {
-      method: "POST",
-      headers: { "Content-Type": contentType },
+      method,
+      headers,
       body: input.file,
     });
-    const uploadJson = (await uploadResponse.json().catch(() => ({}))) as {
-      storageId?: unknown;
-    };
-    if (!uploadResponse.ok || typeof uploadJson.storageId !== "string") {
+    if (!uploadResponse.ok) {
       throw new ApiError("Attachment upload failed.", uploadResponse.status || 500);
     }
 
-    return await this.createAttachment({
-      parentKind: input.parentKind,
-      parentId: input.parentId,
-      storageId: uploadJson.storageId,
-      fileName: input.file.name,
-      contentType,
-      size: input.file.size,
+    return requestJson<{ ok: true; id: string; fileName: string; url: string; publicUrl: string | null; visibility: "private" }>("/api/attachments", {
+      method: "POST", body: JSON.stringify({ uploadToken }),
     });
   },
 
