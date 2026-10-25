@@ -118,6 +118,35 @@ describe("attachment privacy", () => {
     })).toBe(false);
   });
 
+  it("creates validated owner-scoped folders and moves only library files", async () => {
+    const t = convexTest(schema, modules);
+    const file = await t.mutation(api.attachments.createR2Attachment, upload);
+    const folderId = await t.mutation(api.attachments.createFileFolder, { ...auth, name: "  Projects  " });
+
+    expect(await t.query(api.attachments.listFileFolders, auth)).toMatchObject([{ _id: folderId, name: "Projects" }]);
+    expect(await t.query(api.attachments.listFileFolders, { ...auth, ownerKey: "owner-b" })).toEqual([]);
+    await expect(t.mutation(api.attachments.createFileFolder, { ...auth, name: "projects" })).rejects.toThrow("already exists");
+    await expect(t.mutation(api.attachments.createFileFolder, { ...auth, name: "  " })).rejects.toThrow("1–64 characters");
+    await expect(t.mutation(api.attachments.createFileFolder, { ...auth, name: "x".repeat(65) })).rejects.toThrow("1–64 characters");
+    await expect(t.mutation(api.attachments.createFileFolder, { ...auth, serverToken: "wrong", name: "Private" })).rejects.toThrow("Unauthorized");
+
+    expect(await t.mutation(api.attachments.moveFileToFolder, {
+      ...auth, attachmentId: file.id, folderId,
+    })).toBe(true);
+    expect(await t.query(api.attachments.getAttachmentDetails, {
+      ...auth, attachmentId: file.id,
+    })).toMatchObject({ folderId });
+    expect(await t.mutation(api.attachments.moveFileToFolder, {
+      ...auth, ownerKey: "owner-b", attachmentId: file.id, folderId,
+    })).toBe(false);
+    expect(await t.mutation(api.attachments.moveFileToFolder, {
+      ...auth, attachmentId: file.id, folderId: null,
+    })).toBe(true);
+    expect((await t.query(api.attachments.getAttachmentDetails, {
+      ...auth, attachmentId: file.id,
+    }))?.folderId).toBeUndefined();
+  });
+
   it("retains legacy shared files and Convex blobs during migration", async () => {
     const t = convexTest(schema, modules);
     const { id, storageId } = await t.run(async (ctx) => {
