@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getRouteAuth, getRouteAuthOwnerKey, getRouteAuthUsername, unauthorizedJson, validateApiKeyPermission, validateCsrfForSessionAuth } from "@/lib/auth-server";
 import { api, convex } from "@/lib/convex-server";
 import { serializeFile } from "@/lib/files-server";
+import { buildFolderPaths, folderSlug } from "@/lib/file-folders";
 
 export async function GET(request: NextRequest) {
   const auth = await getRouteAuth(request);
@@ -16,9 +17,17 @@ export async function GET(request: NextRequest) {
       convex.query(api.attachments.listFileFolders, { ownerKey: getRouteAuthOwnerKey(auth) }),
       getRouteAuthUsername(auth),
     ]);
+    const folderEntries = folders.map((folder) => ({
+      id: folder._id,
+      name: folder.name,
+      slug: folder.slug || folderSlug(folder.name),
+      parentFolderId: folder.parentFolderId ?? null,
+    }));
+    const folderPaths = buildFolderPaths(folderEntries);
     return NextResponse.json({
-      files: result.page.map((file) => serializeFile(file, request.nextUrl.origin, username)),
-      folders: folders.map(({ _id, name }) => ({ id: _id, name })),
+      files: result.page.map((file) => serializeFile(file, request.nextUrl.origin, username,
+        file.folderId ? folderPaths.get(file.folderId) ?? [] : [])),
+      folders: folderEntries.map((folder) => ({ ...folder, path: folderPaths.get(folder.id) ?? [] })),
       cursor: result.isDone ? null : result.continueCursor, isDone: result.isDone, username,
     }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
@@ -36,9 +45,15 @@ export async function POST(request: NextRequest) {
   if (typeof body?.name !== "string" || body.name.length > 64) {
     return NextResponse.json({ error: "Folder names must be 1–64 characters." }, { status: 400 });
   }
+  const parentFolderId = body.parentFolderId ?? null;
+  if (parentFolderId !== null && (typeof parentFolderId !== "string" || !/^[a-z0-9]{20,64}$/.test(parentFolderId))) {
+    return NextResponse.json({ error: "Parent folder not found." }, { status: 400 });
+  }
   try {
-    const id = await convex.mutation(api.attachments.createFileFolder, { ownerKey: getRouteAuthOwnerKey(auth), name: body.name });
-    return NextResponse.json({ folder: { id, name: body.name.trim() } }, { status: 201, headers: { "Cache-Control": "private, no-store" } });
+    const id = await convex.mutation(api.attachments.createFileFolder, {
+      ownerKey: getRouteAuthOwnerKey(auth), name: body.name, parentFolderId: parentFolderId as never,
+    });
+    return NextResponse.json({ folder: { id, name: body.name.trim(), parentFolderId } }, { status: 201, headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not create folder." }, { status: 400 });
   }

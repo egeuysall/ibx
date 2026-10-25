@@ -119,7 +119,7 @@ export default defineSchema({
     ownerKey: v.optional(v.union(v.string(), v.null())),
     parentKind: v.union(v.literal("thought"), v.literal("todo"), v.literal("file")),
     parentId: v.string(),
-    folderId: v.optional(v.id("fileFolders")),
+    folderId: v.optional(v.union(v.id("fileFolders"), v.null())),
     // Retained during R2 migration so existing Convex URLs keep working.
     storageId: v.optional(v.id("_storage")),
     r2Key: v.optional(v.string()),
@@ -166,6 +166,8 @@ export default defineSchema({
   fileFolders: defineTable({
     ownerKey: v.optional(v.union(v.string(), v.null())),
     name: v.string(),
+    slug: v.optional(v.string()),
+    parentFolderId: v.optional(v.union(v.id("fileFolders"), v.null())),
     createdAt: v.number(),
   }).index("by_ownerKey_and_name", ["ownerKey", "name"]),
   publications: defineTable({

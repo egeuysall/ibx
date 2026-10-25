@@ -3,10 +3,12 @@ export function buildAttachmentUrl(
   username: string | null,
   attachmentId: string,
   fileName: string,
+  folderPath: string[] = [],
 ) {
   if (!username) {
     return `${origin}/api/attachments/${encodeURIComponent(attachmentId)}/file`;
   }
 
-  return `${origin}/${encodeURIComponent(username)}/${encodeURIComponent(fileName)}`;
+  const path = [...folderPath, fileName].map(encodeURIComponent).join("/");
+  return `${origin}/${encodeURIComponent(username)}/${path}`;
 }

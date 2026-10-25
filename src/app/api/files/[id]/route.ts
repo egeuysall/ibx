@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRouteAuth, getRouteAuthOwnerKey, unauthorizedJson, validateApiKeyPermission, validateCsrfForSessionAuth } from "@/lib/auth-server";
+import { getRouteAuth, getRouteAuthOwnerKey, getRouteAuthUsername, unauthorizedJson, validateApiKeyPermission, validateCsrfForSessionAuth } from "@/lib/auth-server";
 import { api, convex } from "@/lib/convex-server";
-import { migrateFileToR2 } from "@/lib/files-server";
+import { migrateFileToR2, serializeFile } from "@/lib/files-server";
+import { buildFolderPaths, folderSlug } from "@/lib/file-folders";
 import { DELETE as deleteAttachment } from "../../attachments/[attachmentId]/route";
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -23,7 +24,20 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       ownerKey, attachmentId: id as never, folderId: body.folderId as never,
     });
     if (!moved) return NextResponse.json({ error: "File or folder not found." }, { status: 404 });
-    return NextResponse.json({ ok: true }, { headers: { "Cache-Control": "private, no-store" } });
+    const [file, folders, username] = await Promise.all([
+      convex.query(api.attachments.getAttachmentDetails, { ownerKey, attachmentId: id as never }),
+      convex.query(api.attachments.listFileFolders, { ownerKey }),
+      getRouteAuthUsername(auth),
+    ]);
+    if (!file) return NextResponse.json({ error: "File not found." }, { status: 404 });
+    const paths = buildFolderPaths(folders.map((folder) => ({
+      id: folder._id, name: folder.name, slug: folder.slug || folderSlug(folder.name),
+      parentFolderId: folder.parentFolderId ?? null,
+    })));
+    const result = serializeFile(file, request.nextUrl.origin, username,
+      file.folderId ? paths.get(file.folderId) ?? [] : []);
+    return NextResponse.json({ ok: true, folderId: file.folderId ?? null, publicUrl: result.publicUrl },
+      { headers: { "Cache-Control": "private, no-store" } });
   }
   if (body?.visibility !== "public" && body?.visibility !== "private") return NextResponse.json({ error: "Choose public or private." }, { status: 400 });
   const file = await convex.query(api.attachments.getAttachmentDetails, { ownerKey, attachmentId: id as never });

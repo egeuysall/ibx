@@ -118,17 +118,34 @@ describe("attachment privacy", () => {
     })).toBe(false);
   });
 
-  it("creates validated owner-scoped folders and moves only library files", async () => {
+  it("creates nested owner-scoped folders and moves any attachment", async () => {
     const t = convexTest(schema, modules);
     const file = await t.mutation(api.attachments.createR2Attachment, upload);
     const folderId = await t.mutation(api.attachments.createFileFolder, { ...auth, name: "  Projects  " });
+    const nestedId = await t.mutation(api.attachments.createFileFolder, { ...auth, name: "Songs", parentFolderId: folderId });
+    const todoId = await t.run(async (ctx) => {
+      const thoughtId = await ctx.db.insert("thoughts", {
+        ownerKey: auth.ownerKey, externalId: "thought-1", rawText: "task", createdAt: 1,
+        status: "done", synced: true, aiRunId: null,
+      });
+      return await ctx.db.insert("todos", {
+        ownerKey: auth.ownerKey, thoughtId, title: "task", notes: null, status: "open", createdAt: 1,
+      });
+    });
+    const todoFile = await t.mutation(api.attachments.createR2Attachment, {
+      ...upload, parentKind: "todo", parentId: todoId, fileName: "todo.pdf", r2Key: "objects/todo",
+    });
 
-    expect(await t.query(api.attachments.listFileFolders, auth)).toMatchObject([{ _id: folderId, name: "Projects" }]);
+    expect(await t.query(api.attachments.listFileFolders, auth)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ _id: folderId, name: "Projects" }),
+      expect.objectContaining({ _id: nestedId, name: "Songs", parentFolderId: folderId }),
+    ]));
     expect(await t.query(api.attachments.listFileFolders, { ...auth, ownerKey: "owner-b" })).toEqual([]);
     await expect(t.mutation(api.attachments.createFileFolder, { ...auth, name: "projects" })).rejects.toThrow("already exists");
     await expect(t.mutation(api.attachments.createFileFolder, { ...auth, name: "  " })).rejects.toThrow("1–64 characters");
     await expect(t.mutation(api.attachments.createFileFolder, { ...auth, name: "x".repeat(65) })).rejects.toThrow("1–64 characters");
     await expect(t.mutation(api.attachments.createFileFolder, { ...auth, serverToken: "wrong", name: "Private" })).rejects.toThrow("Unauthorized");
+    await expect(t.mutation(api.attachments.createFileFolder, { ...auth, name: "Songs", parentFolderId: folderId })).rejects.toThrow("already exists");
 
     expect(await t.mutation(api.attachments.moveFileToFolder, {
       ...auth, attachmentId: file.id, folderId,
@@ -144,7 +161,16 @@ describe("attachment privacy", () => {
     })).toBe(true);
     expect((await t.query(api.attachments.getAttachmentDetails, {
       ...auth, attachmentId: file.id,
-    }))?.folderId).toBeUndefined();
+    }))?.folderId).toBeNull();
+    expect(await t.mutation(api.attachments.moveFileToFolder, {
+      ...auth, attachmentId: todoFile.id, folderId: nestedId,
+    })).toBe(true);
+    await t.mutation(api.attachments.updateVisibility, { ...auth, attachmentId: todoFile.id, visibility: "public" });
+    expect(await t.query(api.attachments.getPublicAttachment, { ...auth, fileName: todoFile.fileName, folderPath: ["projects", "songs"] }))
+      .toMatchObject({ _id: todoFile.id });
+    expect(await t.query(api.attachments.getPublicAttachment, { ...auth, fileName: todoFile.fileName, folderPath: ["songs"] })).toBeNull();
+    // Existing flat public links keep resolving after a file is moved into a folder.
+    expect(await t.query(api.attachments.getPublicAttachment, { ...auth, fileName: todoFile.fileName })).toMatchObject({ _id: todoFile.id });
   });
 
   it("retains legacy shared files and Convex blobs during migration", async () => {
@@ -221,7 +247,7 @@ describe("attachment privacy", () => {
     );
     for (const row of [...first.page, ...second.page]) {
       expect(Object.keys(row).sort()).toEqual(
-        ["_id", "fileName", "contentType", "size", "createdAt", "visibility"].sort(),
+        ["_id", "fileName", "contentType", "size", "createdAt", "visibility", "folderPath"].sort(),
       );
       expect(row.visibility).toBe("public");
     }

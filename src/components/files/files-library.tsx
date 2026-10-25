@@ -2,16 +2,20 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { File01Icon, Folder01Icon } from "@hugeicons/core-free-icons";
 import { apiClient } from "@/lib/apiClient";
 import { ATTACHMENT_CONTENT_TYPES } from "@/lib/attachment-policy";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Combobox, ComboboxContent, ComboboxEmpty, ComboboxInput, ComboboxItem, ComboboxList } from "@/components/ui/combobox";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
 import { Toaster } from "@/components/ui/sonner";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -34,8 +38,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export function FilesLibrary() {
   const [page, setPage] = useState<FilesPage | null>(null);
   const [search, setSearch] = useState("");
-  const [selectedFolder, setSelectedFolder] = useState("all");
+  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [newFolder, setNewFolder] = useState("");
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -102,12 +107,31 @@ export function FilesLibrary() {
     await refresh(page?.files.length);
   }
 
+  async function moveFile(file: FileRecord, folderId: string | null) {
+    const result = await request<{ folderId: string | null; publicUrl: string | null }>(`/api/files/${encodeURIComponent(file.id)}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ folderId }),
+    });
+    setPage((current) => current && ({ ...current, files: current.files.map((item) => item.id === file.id
+      ? { ...item, folderId: result.folderId, publicUrl: result.publicUrl } : item) }));
+    toast.success(folderId ? "File moved." : "File moved to My Drive.");
+  }
+
   const query = search.trim().toLowerCase();
-  const visible = page?.files.filter((file) => {
-    const inFolder = selectedFolder === "all" || (file.parentKind === "file" &&
-      (selectedFolder === "root" ? !file.folderId : file.folderId === selectedFolder));
-    return inFolder && `${file.fileName} ${fileTypeLabel(file.contentType)} ${file.contentType}`.toLowerCase().includes(query);
-  }) ?? [];
+  const visibleFolders = page?.folders.filter((folder) => folder.parentFolderId === currentFolderId) ?? [];
+  const visibleFiles = page?.files.filter((file) => (file.folderId ?? null) === currentFolderId &&
+    `${file.fileName} ${fileTypeLabel(file.contentType)} ${file.contentType}`.toLowerCase().includes(query)) ?? [];
+  const folderById = new Map((page?.folders ?? []).map((folder) => [folder.id, folder]));
+  const breadcrumbs: FilesPage["folders"] = [];
+  for (let id = currentFolderId; id;) {
+    const folder = folderById.get(id);
+    if (!folder) break;
+    breadcrumbs.unshift(folder);
+    id = folder.parentFolderId;
+  }
+  const folderOptions = [
+    { id: "root", label: "My Drive" },
+    ...(page?.folders ?? []).map((folder) => ({ id: folder.id, label: folder.path.join("/") || folder.name })),
+  ];
 
   return (
     <>
@@ -129,9 +153,9 @@ export function FilesLibrary() {
               if (invalid) { toast.error(invalid); return; }
               void run(async () => {
                 const uploaded = await apiClient.uploadAttachmentFile({ parentKind: "file", parentId: "library", file });
-                if (selectedFolder !== "all" && selectedFolder !== "root") {
+                if (currentFolderId) {
                   await request(`/api/files/${encodeURIComponent(uploaded.id)}`, {
-                    method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ folderId: selectedFolder }),
+                    method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ folderId: currentFolderId }),
                   });
                 }
                 toast.success("File uploaded privately.");
@@ -139,19 +163,22 @@ export function FilesLibrary() {
               });
             }} />
         </section>
-        <div className="flex flex-wrap items-center gap-2" aria-label="File folders">
-          <Button size="sm" variant={selectedFolder === "all" ? "secondary" : "ghost"} onClick={() => setSelectedFolder("all")}>all files</Button>
-          <Button size="sm" variant={selectedFolder === "root" ? "secondary" : "ghost"} onClick={() => setSelectedFolder("root")}>unfiled</Button>
-          {page?.folders.map((folder) => <Button key={folder.id} size="sm"
-            variant={selectedFolder === folder.id ? "secondary" : "ghost"} onClick={() => setSelectedFolder(folder.id)}>{folder.name}</Button>)}
+        <div className="flex flex-wrap items-center justify-between gap-3" aria-label="File folders">
+          <nav aria-label="Folder location" className="flex min-w-0 flex-wrap items-center gap-1 text-sm">
+            <Button size="sm" variant={currentFolderId ? "ghost" : "secondary"} onClick={() => setCurrentFolderId(null)}>My Drive</Button>
+            {breadcrumbs.map((folder) => <span key={folder.id} className="flex items-center gap-1">
+              <span aria-hidden="true" className="text-muted-foreground">/</span>
+              <Button size="sm" variant={folder.id === currentFolderId ? "secondary" : "ghost"} onClick={() => setCurrentFolderId(folder.id)}>{folder.name}</Button>
+            </span>)}
+          </nav>
           <form className="flex items-center gap-2" onSubmit={(event) => {
             event.preventDefault();
             void run(async () => {
               const { folder } = await request<{ folder: { id: string; name: string } }>("/api/files", {
-                method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: newFolder }),
+                method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: newFolder, parentFolderId: currentFolderId }),
               });
               setNewFolder("");
-              setSelectedFolder(folder.id);
+              setCurrentFolderId(folder.id);
               await refresh(page?.files.length);
               toast.success("Folder created.");
             });
@@ -171,54 +198,44 @@ export function FilesLibrary() {
           <p>{error}</p><Button variant="outline" size="sm" disabled={busy} onClick={() => void run(() => refresh(page?.files.length))}>retry</Button>
         </div>}
         <p role="status" className="text-xs text-muted-foreground">
-          {loading ? "loading files…" : `${visible.length} shown · ${page?.files.length ?? 0} loaded${page && !page.isDone ? " · load more to search more files" : ""}${busy ? " · working…" : ""}`}
+          {loading ? "loading files…" : `${visibleFolders.length + visibleFiles.length} shown · ${page?.files.length ?? 0} loaded${page && !page.isDone ? " · load more to search more files" : ""}${busy ? " · working…" : ""}`}
         </p>
         {loading ? <div className="flex flex-col gap-3" aria-hidden><Skeleton className="h-20 w-full" /><Skeleton className="h-20 w-full" /></div>
-          : visible.length === 0 ? <Empty><EmptyHeader><EmptyTitle>{error ? "Files unavailable" : query ? "No matching loaded files" : "No files yet"}</EmptyTitle>
+          : visibleFolders.length + visibleFiles.length === 0 ? <Empty><EmptyHeader><EmptyTitle>{error ? "Files unavailable" : query ? "No matching loaded files" : "No files yet"}</EmptyTitle>
             <EmptyDescription>{query ? "Try another search or load more files below." : "Upload a file to keep it in your library. Todo and thought attachments appear here too."}</EmptyDescription></EmptyHeader></Empty>
-          : <ul className="flex min-w-0 flex-col divide-y divide-border border-y border-border" aria-label="Files" aria-busy={busy}>
-            {visible.map((file) => {
-              const ownerUrl = safeFileUrl(file.url);
-              const publicUrl = file.visibility === "public" ? safeFileUrl(file.publicUrl) : null;
-              return <li key={file.id} className="flex min-w-0 flex-col gap-3 py-4 lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex min-w-0 flex-1 flex-col gap-1">
-                  <p className="truncate text-sm" title={file.fileName}>{file.fileName}</p>
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                    <Badge variant="secondary">{fileTypeLabel(file.contentType)}</Badge>
-                    <span>{file.size < 1024 * 1024 ? `${Math.ceil(file.size / 1024)} KB` : `${(file.size / 1024 / 1024).toFixed(1)} MB`}</span>
-                    <span>{file.parentKind === "file" ? "library" : `${file.parentKind} attachment`}</span>
-                    {file.parentKind === "file" && file.folderId && <span>{page?.folders.find((folder) => folder.id === file.folderId)?.name}</span>}
-                    <time dateTime={new Date(file.createdAt).toISOString()}>{new Date(file.createdAt).toLocaleDateString()}</time>
-                  </div>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  {file.parentKind === "file" && <select aria-label={`Move ${file.fileName} to folder`} value={file.folderId ?? "root"}
-                    disabled={busy} onChange={(event) => void run(async () => {
-                      const folderId = event.target.value === "root" ? null : event.target.value;
-                      await request(`/api/files/${encodeURIComponent(file.id)}`, {
-                        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ folderId }),
-                      });
-                      setPage((current) => current && ({ ...current, files: current.files.map((item) => item.id === file.id ? { ...item, folderId } : item) }));
-                      toast.success(folderId ? "File moved." : "File moved to unfiled.");
-                    })} className="h-8 rounded-md border border-input bg-background px-2 text-xs">
-                    <option value="root">unfiled</option>{page?.folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}
-                  </select>}
-                  <label className="flex items-center gap-2 text-xs">
-                    <Switch checked={file.visibility === "public"} disabled={busy}
-                      aria-label={`Public access for ${file.fileName}`}
-                      onCheckedChange={(checked) => void run(() => changeVisibility(file, checked))} />
-                    {file.visibility}
-                  </label>
-                  {ownerUrl && <Button variant="outline" size="sm" render={<a href={ownerUrl} target="_blank" rel="noopener noreferrer" />} aria-label={`Open ${file.fileName}`}>open</Button>}
-                  {publicUrl && <Button variant="outline" size="sm" disabled={busy} onClick={() => void run(async () => {
-                    await navigator.clipboard.writeText(new URL(publicUrl, window.location.origin).href);
-                    toast.success("Public link copied.");
-                  })}>copy public link</Button>}
-                  <Button variant="ghost" size="sm" disabled={busy} aria-label={`Delete ${file.fileName}`} onClick={() => setPendingDelete(file)}>delete</Button>
-                </div>
-              </li>;
-            })}
-          </ul>}
+          : <Table aria-label="Files" aria-busy={busy} className="border-y border-border">
+            <TableHeader><TableRow><TableHead className="w-full">Name</TableHead><TableHead>Type</TableHead><TableHead>Owner</TableHead><TableHead>Modified</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
+            <TableBody>
+              {visibleFolders.map((folder) => <TableRow key={folder.id} className={dropTargetId === folder.id ? "bg-accent" : ""}
+                onDragOver={(event) => { event.preventDefault(); setDropTargetId(folder.id); }} onDragLeave={() => setDropTargetId(null)}
+                onDrop={(event) => { event.preventDefault(); setDropTargetId(null); const id = event.dataTransfer.getData("text/plain"); const file = page?.files.find((item) => item.id === id); if (file) void run(() => moveFile(file, folder.id)); }}>
+                <TableCell><button type="button" className="flex items-center gap-2 text-left hover:underline" onClick={() => setCurrentFolderId(folder.id)}><HugeiconsIcon icon={Folder01Icon} size={18} />{folder.name}</button></TableCell>
+                <TableCell>Folder</TableCell><TableCell>—</TableCell><TableCell>—</TableCell><TableCell className="text-right text-xs text-muted-foreground">Drop files here</TableCell>
+              </TableRow>)}
+              {visibleFiles.map((file) => {
+                const ownerUrl = safeFileUrl(file.url);
+                const publicUrl = file.visibility === "public" ? safeFileUrl(file.publicUrl) : null;
+                const selectedFolder = folderOptions.find((option) => option.id === (file.folderId ?? "root")) ?? folderOptions[0];
+                return <TableRow key={file.id} draggable onDragStart={(event) => { event.dataTransfer.setData("text/plain", file.id); event.dataTransfer.effectAllowed = "move"; }}>
+                  <TableCell className="max-w-0"><div className="flex min-w-0 items-center gap-2"><HugeiconsIcon icon={File01Icon} size={18} /><span className="truncate" title={file.fileName}>{file.fileName}</span></div></TableCell>
+                  <TableCell><Badge variant="secondary">{fileTypeLabel(file.contentType)}</Badge><span className="sr-only">{file.size < 1024 * 1024 ? `${Math.ceil(file.size / 1024)} KB` : `${(file.size / 1024 / 1024).toFixed(1)} MB`}</span></TableCell>
+                  <TableCell className="whitespace-nowrap text-xs text-muted-foreground">{file.parentKind === "file" ? "My Drive" : `${file.parentKind} attachment`}</TableCell>
+                  <TableCell><time className="whitespace-nowrap text-xs text-muted-foreground" dateTime={new Date(file.createdAt).toISOString()}>{new Date(file.createdAt).toLocaleDateString()}</time></TableCell>
+                  <TableCell><div className="flex items-center justify-end gap-2">
+                    <Combobox items={folderOptions} value={selectedFolder} itemToStringValue={(option) => option.label}
+                      onValueChange={(option) => { if (option) void run(() => moveFile(file, option.id === "root" ? null : option.id)); }}>
+                      <ComboboxInput aria-label={`Move ${file.fileName} to folder`} disabled={busy} className="h-8 max-w-32" />
+                      <ComboboxContent><ComboboxEmpty>No folders found.</ComboboxEmpty><ComboboxList>{(option) => <ComboboxItem key={option.id} value={option}>{option.label}</ComboboxItem>}</ComboboxList></ComboboxContent>
+                    </Combobox>
+                    <Switch checked={file.visibility === "public"} disabled={busy} aria-label={`Public access for ${file.fileName}`} onCheckedChange={(checked) => void run(() => changeVisibility(file, checked))} />
+                    {ownerUrl && <Button variant="outline" size="sm" render={<a href={ownerUrl} target="_blank" rel="noopener noreferrer" />} aria-label={`Open ${file.fileName}`}>open</Button>}
+                    {publicUrl && <Button variant="outline" size="sm" disabled={busy} onClick={() => void run(async () => { await navigator.clipboard.writeText(new URL(publicUrl, window.location.origin).href); toast.success("Public link copied."); })}>copy public link</Button>}
+                    <Button variant="ghost" size="sm" disabled={busy} aria-label={`Delete ${file.fileName}`} onClick={() => setPendingDelete(file)}>delete</Button>
+                  </div></TableCell>
+                </TableRow>;
+              })}
+            </TableBody>
+          </Table>}
         {page && !page.isDone && page.cursor && <Button variant="outline" className="self-start" disabled={busy} onClick={() => void run(loadMore)}>load more</Button>}
       </FilesShell>
       <AlertDialog open={pendingDelete !== null} onOpenChange={(open) => { if (!open && !busy) setPendingDelete(null); }}>

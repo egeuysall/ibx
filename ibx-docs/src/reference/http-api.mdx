@@ -7,7 +7,7 @@ icon: lucide:braces
 prompt: |
   Document authentication and owner-scoped HTTP workflows from @/src/app/api/,
   attachment policy from @/src/lib/attachment-policy.ts and @/convex/attachments.ts,
-  and public downloads from @/src/app/[username]/[fileName]/route.ts.
+  and public downloads from @/src/app/[username]/[...filePath]/route.ts.
 ---
 
 # Use the IBX HTTP API
@@ -164,13 +164,13 @@ The **list response** is `{ attachments: [...] }`, newest first. Each item inclu
 
 ### Files library and profiles
 
-`GET /api/files?cursor=<cursor>` returns the signed-in owner's files in pages of 50 and their folders. Create a folder with `POST /api/files` and `{ "name": "Projects" }` (up to 200 folders per account, with names up to 64 characters). `PATCH /api/files/<id>` with `{ "folderId": "<folder-id>" }` moves a library file into a folder; use `{ "folderId": null }` to move it to Unfiled. The same endpoint accepts `{ "visibility": "public" | "private" }` to change sharing. `DELETE /api/files/<id>` removes an owned file. Files are **private by default**. Public file downloads are available without authentication at `/{username}/{fileName}`. Profiles at `/{username}` show only public files and public Bri publications. Anyone with a public URL can download it; noindex is not access control. Deletion returns `{ ok: true }` or **404** and deletes stored bytes. Making a legacy Convex-backed file private first copies and verifies it in R2, then removes its old public-storage reference.
+`GET /api/files?cursor=<cursor>` returns the signed-in owner's files in pages of 50 and their folders. Create a root folder with `POST /api/files` and `{ "name": "Projects" }`; pass `parentFolderId` to create a nested folder (up to 200 folders per account and 20 levels deep). `PATCH /api/files/<id>` with `{ "folderId": "<folder-id>" }` moves any owned attachment, including todo and thought attachments, into a folder; use `{ "folderId": null }` to move it to My Drive. The same endpoint accepts `{ "visibility": "public" | "private" }` to change sharing. `DELETE /api/files/<id>` removes an owned file. Files are **private by default**. Public file downloads are available without authentication at `/{username}/{folder-slug}/.../{fileName}`. Moving a file updates its public link path, while its previous flat URL remains a compatibility link. Profiles at `/{username}` show only public files and public Bri publications. Anyone with a public URL can download it; noindex is not access control. Deletion returns `{ ok: true }` or **404** and deletes stored bytes. Making a legacy Convex-backed file private first copies and verifies it in R2, then removes its old public-storage reference.
 
 ### Resolve and share files
 
 **Authenticated resolution** uses `GET /api/attachments/<attachment-id>/url`, returning a safe app URL and nullable `publicUrl`; it never returns an R2 credential or signed storage URL. `GET /api/attachments/<attachment-id>/file` streams bytes through IBX with **200** and `Cache-Control: private, no-store`. Both routes require read permission and ownership; unavailable IDs return **404** and storage failures return **502**.
 
-**Public downloads** use `GET /{username}/{fileName}` without authentication. The route streams bytes inline with `Cache-Control: private, no-store`, `X-Content-Type-Options: nosniff`, wildcard CORS, and `X-Robots-Tag: noindex, nofollow`. It forwards `Range` and `If-Range` and preserves storage's **200**, **206**, or **416** response and range headers, supporting audio/video seeking. Invalid paths and private/missing files return 404; storage failures return 502.
+**Public downloads** use `GET /{username}/{folder-slug}/.../{fileName}` without authentication. The route streams bytes inline with `Cache-Control: private, no-store`, `X-Content-Type-Options: nosniff`, wildcard CORS, and `X-Robots-Tag: noindex, nofollow`. It forwards `Range` and `If-Range` and preserves storage's **200**, **206**, or **416** response and range headers, supporting audio/video seeking. The legacy `/{username}/{fileName}` form continues to resolve. Invalid paths and private/missing files return 404; storage failures return 502.
 
 <Aside>
 <Warning>

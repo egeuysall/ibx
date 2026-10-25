@@ -4,6 +4,7 @@ import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/s
 import type { Id } from "./_generated/dataModel";
 import { ATTACHMENT_CONTENT_TYPES, isAllowedAttachmentSize, MAX_ATTACHMENT_BYTES } from "../src/lib/attachment-policy";
 import { isPublicFile, resolveFileVisibility } from "../src/lib/file-visibility";
+import { buildFolderPaths, folderSlug } from "../src/lib/file-folders";
 import { requireServerToken } from "./serverAuth";
 
 const MAX_FILE_NAME_LENGTH = 180;
@@ -148,6 +149,18 @@ async function findPublicAttachment(ctx: QueryCtx, ownerKey: string | null, file
       q.eq("ownerKey", ownerKey).eq("fileName", fileName),
     ).order("desc").first();
   return attachment && isPublicFile(attachment) ? attachment : null;
+}
+
+async function folderPathsForOwner(ctx: QueryCtx, ownerKey: string | null) {
+  const folders = await ctx.db.query("fileFolders")
+    .withIndex("by_ownerKey_and_name", (q) => q.eq("ownerKey", ownerKey))
+    .take(200);
+  return buildFolderPaths(folders.map((folder) => ({
+    id: folder._id,
+    name: folder.name,
+    slug: folder.slug,
+    parentFolderId: folder.parentFolderId ?? null,
+  })));
 }
 
 export const limits = query({
@@ -475,21 +488,44 @@ export const listFileFolders = query({
 });
 
 export const createFileFolder = mutation({
-  args: { serverToken: v.string(), ownerKey: v.union(v.string(), v.null()), name: v.string() },
+  args: {
+    serverToken: v.string(), ownerKey: v.union(v.string(), v.null()), name: v.string(),
+    parentFolderId: v.optional(v.union(v.id("fileFolders"), v.null())),
+  },
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
     const name = args.name.trim();
     if (!name || name.length > 64 || /[\u0000-\u001f\u007f]/.test(name)) {
       throw new Error("Folder names must be 1–64 characters.");
     }
+    const parentFolderId = args.parentFolderId ?? null;
     const existing = await ctx.db.query("fileFolders")
       .withIndex("by_ownerKey_and_name", (q) => q.eq("ownerKey", args.ownerKey))
       .take(200);
-    if (existing.some((folder) => folder.name.toLowerCase() === name.toLowerCase())) {
+    if (parentFolderId) {
+      const parent = await ctx.db.get(parentFolderId);
+      if (!parent || !ownerMatches(parent, args.ownerKey)) throw new Error("Parent folder not found.");
+      const existingPaths = buildFolderPaths(existing.map((folder) => ({
+        id: folder._id, name: folder.name, slug: folder.slug,
+        parentFolderId: folder.parentFolderId ?? null,
+      })));
+      if (!existingPaths.has(parentFolderId) || (existingPaths.get(parentFolderId)?.length ?? 0) >= 20) {
+        throw new Error("Folders can be nested up to 20 levels.");
+      }
+    }
+    const siblings = existing.filter((folder) => (folder.parentFolderId ?? null) === parentFolderId);
+    if (siblings.some((folder) => folder.name.toLowerCase() === name.toLowerCase())) {
       throw new Error("A folder with that name already exists.");
     }
     if (existing.length === 200) throw new Error("You can create up to 200 folders.");
-    return await ctx.db.insert("fileFolders", { ownerKey: args.ownerKey, name, createdAt: Date.now() });
+    const baseSlug = folderSlug(name);
+    let slug = baseSlug;
+    for (let suffix = 2; siblings.some((folder) => (folder.slug || folderSlug(folder.name)) === slug); suffix += 1) {
+      slug = `${baseSlug}-${suffix}`;
+    }
+    return await ctx.db.insert("fileFolders", {
+      ownerKey: args.ownerKey, name, slug, parentFolderId, createdAt: Date.now(),
+    });
   },
 });
 
@@ -501,12 +537,12 @@ export const moveFileToFolder = mutation({
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
     const file = await getActiveAttachment(ctx, args.ownerKey, args.attachmentId);
-    if (!file || file.parentKind !== "file" || file.parentId !== "library") return false;
+    if (!file) return false;
     if (args.folderId) {
       const folder = await ctx.db.get(args.folderId);
       if (!folder || !ownerMatches(folder, args.ownerKey)) return false;
     }
-    await ctx.db.patch(file._id, { folderId: args.folderId ?? undefined, updatedAt: Date.now() });
+    await ctx.db.patch(file._id, { folderId: args.folderId, updatedAt: Date.now() });
     return true;
   },
 });
@@ -526,6 +562,7 @@ export const paginatePublicFiles = query({
   },
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
+    const folderPaths = await folderPathsForOwner(ctx, args.ownerKey);
     const result = await ctx.db.query("attachments")
       .withIndex("by_ownerKey_and_visibility_and_status_and_createdAt", (q) =>
         q.eq("ownerKey", args.ownerKey).eq("visibility", "public").eq("status", "uploaded"),
@@ -542,6 +579,7 @@ export const paginatePublicFiles = query({
         size: file.size,
         createdAt: file.createdAt,
         visibility: "public" as const,
+        folderPath: file.folderId ? folderPaths.get(file.folderId) ?? [] : [],
       })),
     };
   },
@@ -555,6 +593,7 @@ export const listPublicFiles = query({
   },
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
+    const folderPaths = await folderPathsForOwner(ctx, args.ownerKey);
     const limit = Math.min(pageSize(args.limit ?? 50), 50);
     const batches = await Promise.all((["public", undefined] as const).map((visibility) =>
       ctx.db.query("attachments")
@@ -572,6 +611,7 @@ export const listPublicFiles = query({
         size: file.size,
         createdAt: file.createdAt,
         visibility: "public" as const,
+        folderPath: file.folderId ? folderPaths.get(file.folderId) ?? [] : [],
       }));
     return { files };
   },
@@ -582,10 +622,16 @@ export const getPublicAttachment = query({
     serverToken: v.string(),
     ownerKey: v.union(v.string(), v.null()),
     fileName: v.string(),
+    folderPath: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
-    return await findPublicAttachment(ctx, args.ownerKey, args.fileName);
+    const file = await findPublicAttachment(ctx, args.ownerKey, args.fileName);
+    if (!file || !args.folderPath?.length) return file;
+    const folderPaths = await folderPathsForOwner(ctx, args.ownerKey);
+    const currentPath = file.folderId ? folderPaths.get(file.folderId) ?? [] : [];
+    return currentPath.length === args.folderPath.length && currentPath.every((part, index) => part === args.folderPath?.[index])
+      ? file : null;
   },
 });
 

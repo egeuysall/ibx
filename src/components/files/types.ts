@@ -16,7 +16,7 @@ export type FileRecord = {
 
 export type FilesPage = {
   files: FileRecord[];
-  folders: Array<{ id: string; name: string }>;
+  folders: Array<{ id: string; name: string; slug: string; parentFolderId: string | null; path: string[] }>;
   cursor: string | null;
   isDone: boolean;
   username: string | null;

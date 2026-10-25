@@ -122,11 +122,11 @@ Creates todos from a previously synced thought.
 ### Files and public profiles
 
 - `GET /api/files?cursor=<cursor>` lists your files in pages of 50 and returns your folders.
-- `POST /api/files` with `{ "name": "Projects" }` creates a folder (up to 200 per account, names up to 64 characters).
-- `PATCH /api/files/:id` changes `{ "visibility": "public" | "private" }` or moves a library file with `{ "folderId": "<folder-id>" | null }` (`null` moves it to Unfiled).
+- `POST /api/files` with `{ "name": "Projects", "parentFolderId": null }` creates a root folder. Set `parentFolderId` to nest a folder (up to 200 folders per account, 20 levels deep, names up to 64 characters).
+- `PATCH /api/files/:id` changes `{ "visibility": "public" | "private" }` or moves any attachment with `{ "folderId": "<folder-id>" | null }` (`null` moves it to My Drive).
 - `DELETE /api/files/:id` removes your file and stored bytes.
 - New files are private by default. Upload directly to the short-lived Cloudflare R2 URL returned by `POST /api/attachments/upload-url`, then complete with `POST /api/attachments` and its `uploadToken`.
-- Public files can be downloaded without authentication at `/{username}/{fileName}`. `/{username}` lists public files and Bri publications only. Anyone with a public link can access it; noindex is not access control.
+- Public files can be downloaded without authentication at `/{username}/{folder-slug}/.../{fileName}`. Moving a file changes its folder path; the previous flat URL remains a compatibility link. `/{username}` lists public files and Bri publications only. Anyone with a public link can access it; noindex is not access control.
 - File uploads accept the documented image, document, audio, and video types up to 30 MiB. Signed R2 URLs are never returned by owner-facing API responses.
 
 #### POST /api/todos/generate

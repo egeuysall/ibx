@@ -4,6 +4,7 @@ import { api, convex } from "@/lib/convex-server";
 import { uploadMetadataSchema } from "@/lib/file-upload-token";
 import { confirmR2Upload, r2Configured } from "@/lib/r2-storage";
 import { migrateFileToR2, serializeFile } from "@/lib/files-server";
+import { buildFolderPaths, folderSlug } from "@/lib/file-folders";
 
 export async function GET(request: NextRequest) {
   const auth = await getRouteAuth(request);
@@ -18,12 +19,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "parentKind and parentId are required unless all=true." }, { status: 400 });
   }
   const ownerKey = getRouteAuthOwnerKey(auth);
-  const [attachments, username] = await Promise.all([
+  const [attachments, username, folders] = await Promise.all([
     all ? convex.query(api.attachments.listAllAttachments, { ownerKey, limit: 100 })
       : convex.query(api.attachments.listAttachments, { ownerKey, parentKind: parentKind!, parentId: parentId!, limit: 50 }),
     getRouteAuthUsername(auth),
+    convex.query(api.attachments.listFileFolders, { ownerKey }),
   ]);
-  return NextResponse.json({ attachments: attachments.map((file) => serializeFile(file, request.nextUrl.origin, username)) },
+  const paths = buildFolderPaths(folders.map((folder) => ({
+    id: folder._id, name: folder.name, slug: folder.slug || folderSlug(folder.name),
+    parentFolderId: folder.parentFolderId ?? null,
+  })));
+  return NextResponse.json({ attachments: attachments.map((file) => serializeFile(file, request.nextUrl.origin, username,
+    file.folderId ? paths.get(file.folderId) ?? [] : [])) },
     { headers: { "Cache-Control": "private, no-store" } });
 }
 
@@ -60,12 +67,18 @@ export async function POST(request: NextRequest) {
       });
     }
   }
-  const [file, username] = await Promise.all([
+  const [file, username, folders] = await Promise.all([
     convex.query(api.attachments.getAttachmentDetails, { ownerKey, attachmentId: created.id as never }),
     getRouteAuthUsername(auth),
+    convex.query(api.attachments.listFileFolders, { ownerKey }),
   ]);
   if (!file) return NextResponse.json({ error: "Attachment not found." }, { status: 404 });
-  const result = serializeFile(file, request.nextUrl.origin, username);
+  const paths = buildFolderPaths(folders.map((folder) => ({
+    id: folder._id, name: folder.name, slug: folder.slug || folderSlug(folder.name),
+    parentFolderId: folder.parentFolderId ?? null,
+  })));
+  const result = serializeFile(file, request.nextUrl.origin, username,
+    file.folderId ? paths.get(file.folderId) ?? [] : []);
   return NextResponse.json({ ok: true, id: result.id, fileName: result.fileName, url: result.url, publicUrl: result.publicUrl, visibility: result.visibility },
     { headers: { "Cache-Control": "private, no-store" } });
 }

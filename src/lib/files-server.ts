@@ -7,10 +7,10 @@ import { resolveFileVisibility } from "./file-visibility";
 import { copyBytesToR2, deleteR2Object, r2DownloadUrl } from "./r2-storage";
 import { ownerStoragePrefix } from "./file-upload-token";
 
-export function serializeFile(file: Doc<"attachments">, origin: string, username: string | null) {
+export function serializeFile(file: Doc<"attachments">, origin: string, username: string | null, folderPath: string[] = []) {
   const visibility = resolveFileVisibility(file.visibility);
   const publicUrl = visibility === "public" && username
-    ? buildAttachmentUrl(origin, username, file._id, file.fileName) : null;
+    ? buildAttachmentUrl(origin, username, file._id, file.fileName, folderPath) : null;
   return {
     id: file._id, parentKind: file.parentKind, parentId: file.parentId,
     ...(file.folderId ? { folderId: file.folderId } : {}),

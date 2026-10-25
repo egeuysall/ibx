@@ -18,6 +18,7 @@ import { api, convex } from "@/lib/convex-server";
 import { tiptapJsonToMarkdown } from "@/lib/tiptap-markdown";
 import { serializeFile } from "@/lib/files-server";
 import { isPublicFile } from "@/lib/file-visibility";
+import { buildFolderPaths, folderSlug } from "@/lib/file-folders";
 
 const MAX_TITLE_LENGTH = 120;
 const MAX_MARKDOWN_LENGTH = 200_000;
@@ -244,6 +245,11 @@ async function resolveAttachmentImageUrls(
     return markdown;
   }
 
+  const folders = await convex.query(api.attachments.listFileFolders, { ownerKey }).catch(() => []);
+  const folderPaths = buildFolderPaths(folders.map((folder) => ({
+    id: folder._id, name: folder.name, slug: folder.slug || folderSlug(folder.name),
+    parentFolderId: folder.parentFolderId ?? null,
+  })));
   const urlByAttachmentId = new Map<string, string>();
   await Promise.all(
     [...attachmentIds].map(async (attachmentId) => {
@@ -254,7 +260,8 @@ async function resolveAttachmentImageUrls(
         })
         .catch(() => null);
       if (file && isPublicFile(file)) {
-        const url = serializeFile(file, origin, username).publicUrl;
+        const url = serializeFile(file, origin, username,
+          file.folderId ? folderPaths.get(file.folderId) ?? [] : []).publicUrl;
         if (url) urlByAttachmentId.set(attachmentId, url);
       }
     }),
@@ -304,6 +311,11 @@ async function appendImageAttachments(
       limit: 100,
     })
     .catch(() => []);
+  const folders = await convex.query(api.attachments.listFileFolders, { ownerKey }).catch(() => []);
+  const folderPaths = buildFolderPaths(folders.map((folder) => ({
+    id: folder._id, name: folder.name, slug: folder.slug || folderSlug(folder.name),
+    parentFolderId: folder.parentFolderId ?? null,
+  })));
   const imageLines: string[] = [];
 
   for (const attachment of attachments) {
@@ -320,7 +332,8 @@ async function appendImageAttachments(
       continue;
     }
 
-    const url = serializeFile(attachment, origin, username).publicUrl;
+    const url = serializeFile(attachment, origin, username,
+      attachment.folderId ? folderPaths.get(attachment.folderId) ?? [] : []).publicUrl;
     if (url) {
       const alt = attachment.fileName.replace(/[\[\]\n]/g, " ");
       imageLines.push(`![${alt}](${url})`);
