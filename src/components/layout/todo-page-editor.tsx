@@ -1520,6 +1520,7 @@ export function TodoPageEditor({ todoId }: TodoPageEditorProps) {
                   value={resolvedEditorValue}
                   embedded
                   autoFocus
+                  fileMentions
                   placeholder="Write notes, type / for blocks"
                   imageUpload={uploadEditorImage}
                   onChange={(value) => setEditorValue(value)}

@@ -23,6 +23,7 @@ import { Placeholder, Selection } from "@tiptap/extensions"
 // --- UI Primitives ---
 import { Button } from "@/components/tiptap-ui-primitive/button"
 import { Spacer } from "@/components/tiptap-ui-primitive/spacer"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import {
   Toolbar,
   ToolbarGroup,
@@ -73,6 +74,7 @@ import { useCursorVisibility } from "@/hooks/use-cursor-visibility"
 // --- Lib ---
 import { handleImageUpload, MAX_FILE_SIZE } from "@/lib/tiptap-utils"
 import { markdownMathToTiptapBlocks } from "@/lib/tiptap-markdown"
+import { parseFileMention, toPublicLibraryFiles } from "@/lib/file-mention"
 
 // --- Styles ---
 import "@/components/tiptap-templates/simple/simple-editor.scss"
@@ -90,6 +92,7 @@ type SimpleEditorProps = {
   placeholder?: string
   embedded?: boolean
   autoFocus?: boolean
+  fileMentions?: boolean
   onChange?: (value: SimpleEditorChange) => void
   imageUpload?: (
     file: File,
@@ -102,6 +105,9 @@ type SlashRange = {
   from: number
   to: number
 }
+
+type FileMentionRange = SlashRange & { query: string; left: number; top: number }
+type PublicLibraryFile = { fileName: string; contentType: string; publicUrl: string; folderPath: string[] }
 
 type SlashCommand = {
   id: string
@@ -423,6 +429,7 @@ export function SimpleEditor({
   placeholder = "Write...",
   embedded = false,
   autoFocus = false,
+  fileMentions = false,
   onChange,
   imageUpload = handleImageUpload,
 }: SimpleEditorProps) {
@@ -432,6 +439,12 @@ export function SimpleEditor({
     "main"
   )
   const [slashRange, setSlashRange] = useState<SlashRange | null>(null)
+  const [fileMention, setFileMention] = useState<FileMentionRange | null>(null)
+  const [publicFiles, setPublicFiles] = useState<PublicLibraryFile[]>([])
+  const [filesLoading, setFilesLoading] = useState(false)
+  const [filesError, setFilesError] = useState(false)
+  const [filesTruncated, setFilesTruncated] = useState(false)
+  const filesLoadedRef = useRef(false)
   const toolbarRef = useRef<HTMLDivElement>(null)
   const editorRef = useRef<Editor | null>(null)
 
@@ -450,6 +463,79 @@ export function SimpleEditor({
     }
 
     setSlashRange(null)
+  }
+
+  const updateFileMention = (nextEditor: Editor) => {
+    if (!fileMentions) {
+      setFileMention(null)
+      return
+    }
+    const { selection } = nextEditor.state
+    if (!selection.empty) {
+      setFileMention(null)
+      return
+    }
+    const parentOffset = selection.$from.parentOffset
+    const textBeforeCursor = selection.$from.parent.textBetween(0, parentOffset)
+    const mention = parseFileMention(textBeforeCursor)
+    if (!mention) {
+      setFileMention(null)
+      return
+    }
+    const caret = nextEditor.view.coordsAtPos(selection.from)
+    setFileMention({
+      from: selection.from - parentOffset + mention.markerOffset,
+      to: selection.from,
+      query: mention.query,
+      left: caret.left,
+      top: caret.bottom,
+    })
+  }
+
+  useEffect(() => {
+    if (!fileMention || filesLoadedRef.current) return
+    filesLoadedRef.current = true
+    setFilesLoading(true)
+    void (async () => {
+      let cursor: string | null = null
+      let isDone = false
+      let pageCount = 0
+      const files: PublicLibraryFile[] = []
+      // shortcut: search scans at most 5,000 files; switch to server-side search if libraries exceed that.
+      while (!isDone && pageCount < 100) {
+        const params = new URLSearchParams()
+        if (cursor) params.set("cursor", cursor)
+        const response = await fetch(`/api/files${params.size ? `?${params}` : ""}`, { cache: "no-store" })
+        if (!response.ok) throw new Error("Could not load public files.")
+        const result = await response.json() as {
+          files: Array<{ fileName: string; contentType: string; visibility: string; publicUrl: string | null; folderId?: string }>;
+          folders: Array<{ id: string; path: string[] }>;
+          cursor: string | null;
+          isDone: boolean;
+        }
+        files.push(...toPublicLibraryFiles(result.files, result.folders, window.location.origin))
+        cursor = result.cursor
+        isDone = result.isDone
+        pageCount += 1
+      }
+      setPublicFiles(files)
+      setFilesTruncated(!isDone)
+    })().catch(() => setFilesError(true)).finally(() => setFilesLoading(false))
+  }, [fileMentions, fileMention])
+
+  const insertPublicFile = (file: PublicLibraryFile) => {
+    if (!editor || !fileMention) return
+    const range = { from: fileMention.from, to: fileMention.to }
+    const chain = editor.chain().focus().deleteRange(range)
+    if (file.contentType.startsWith("image/")) {
+      chain.setImage({ src: file.publicUrl, alt: file.fileName, title: file.fileName }).run()
+    } else {
+      chain.insertContent([
+        { type: "text", text: file.fileName, marks: [{ type: "link", attrs: { href: file.publicUrl } }] },
+        { type: "text", text: " " },
+      ]).run()
+    }
+    setFileMention(null)
   }
 
   const editor = useEditor({
@@ -525,13 +611,19 @@ export function SimpleEditor({
     autofocus: autoFocus,
     onUpdate: ({ editor }) => {
       updateSlashMenu(editor)
+      updateFileMention(editor)
       onChange?.({
         text: editor.getText(),
         json: editor.getJSON(),
         html: editor.getHTML(),
       })
     },
+    onSelectionUpdate: ({ editor }) => updateFileMention(editor),
   })
+
+  useEffect(() => {
+    if (fileMention && editor && !editor.isFocused) editor.commands.focus()
+  }, [editor, fileMention])
 
   useEffect(() => {
     editorRef.current = editor
@@ -550,6 +642,10 @@ export function SimpleEditor({
     editor,
     overlayHeight: 44,
   })
+
+  const matchingPublicFiles = publicFiles.filter((file) =>
+    `${file.fileName} ${file.folderPath.join("/")}`.toLowerCase().includes(fileMention?.query.toLowerCase() ?? ""),
+  ).slice(0, 50)
 
   useEffect(() => {
     if (!editor || value === undefined || editor.isFocused) {
@@ -613,6 +709,26 @@ export function SimpleEditor({
               </button>
             ))}
           </div>
+        ) : null}
+
+        {fileMentions && editor && fileMention ? (
+          <DropdownMenu open modal={false} onOpenChange={(open) => { if (!open) setFileMention(null) }}>
+            <DropdownMenuTrigger render={<button type="button" tabIndex={-1} aria-hidden="true" className="pointer-events-none fixed h-px w-px opacity-0" style={{ left: fileMention.left, top: fileMention.top }} />} />
+            <DropdownMenuContent align="start" side="bottom" sideOffset={4} className="w-80 max-h-64" finalFocus={() => editor.view.dom}>
+              <DropdownMenuLabel>public files</DropdownMenuLabel>
+              <DropdownMenuGroup>
+                {filesLoading ? <DropdownMenuItem disabled>loading files…</DropdownMenuItem>
+                  : filesError ? <DropdownMenuItem disabled>could not load public files</DropdownMenuItem>
+                    : matchingPublicFiles.length ? matchingPublicFiles.map((file) => (
+                      <DropdownMenuItem key={file.publicUrl} onMouseDown={(event) => event.preventDefault()} onClick={() => insertPublicFile(file)}>
+                        <span className="min-w-0 flex-1 truncate">{file.fileName}</span>
+                        <span className="max-w-32 truncate text-muted-foreground">{file.folderPath.join("/") || "drive"}</span>
+                      </DropdownMenuItem>
+                    )) : <DropdownMenuItem disabled>no matching public files</DropdownMenuItem>}
+                {filesTruncated && <DropdownMenuItem disabled>showing first 5,000 files</DropdownMenuItem>}
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
         ) : null}
 
         <EditorContent
