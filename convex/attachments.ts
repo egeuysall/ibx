@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
-import { internalQuery, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
+import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { ATTACHMENT_CONTENT_TYPES, isAllowedAttachmentSize, MAX_ATTACHMENT_BYTES } from "../src/lib/attachment-policy";
 import { isPublicFile, resolveFileVisibility } from "../src/lib/file-visibility";
@@ -591,9 +591,10 @@ export const markR2Migrated = mutation({
   },
 });
 
-export const listAllForMigration = internalQuery({
-  args: { paginationOpts: paginationOptsValidator },
+export const listAllForMigration = query({
+  args: { serverToken: v.string(), paginationOpts: paginationOptsValidator },
   handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
     return await ctx.db.query("attachments").paginate({
       ...args.paginationOpts,
       numItems: pageSize(args.paginationOpts.numItems),

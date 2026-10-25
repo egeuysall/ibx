@@ -2,7 +2,7 @@
 /// <reference types="vite/client" />
 import { convexTest } from "convex-test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { api, internal } from "./_generated/api";
+import { api } from "./_generated/api";
 import schema from "./schema";
 import type { Id } from "./_generated/dataModel";
 
@@ -139,7 +139,8 @@ describe("attachment privacy", () => {
       _id: id, storageId, r2Key: "objects/legacy", storageProvider: "r2", visibility: "public",
     });
     expect(await t.run(async (ctx) => (await ctx.storage.get(storageId)) !== null)).toBe(true);
-    const migration = await t.query(internal.attachments.listAllForMigration, {
+    const migration = await t.query(api.attachments.listAllForMigration, {
+      serverToken: auth.serverToken,
       paginationOpts: { numItems: 1, cursor: null },
     });
     expect(migration.page[0]._id).toBe(id);

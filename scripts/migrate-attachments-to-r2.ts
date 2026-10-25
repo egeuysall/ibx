@@ -1,4 +1,5 @@
 import { migrateFileToR2 } from "../src/lib/files-server";
+import { api, convex } from "../src/lib/convex-server";
 import type { Doc } from "../convex/_generated/dataModel";
 
 const apply = process.argv.includes("--apply");
@@ -10,15 +11,9 @@ let skipped = 0;
 let failed = 0;
 
 do {
-  const args = JSON.stringify({ paginationOpts: { numItems: pageSize, cursor } });
-  const child = Bun.spawn(["bunx", "convex", "run", "attachments:listAllForMigration", args, "--prod"], {
-    stdout: "pipe", stderr: "pipe",
-  });
-  const [stdout, , exitCode] = await Promise.all([
-    new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited,
-  ]);
-  if (exitCode !== 0) throw new Error("Could not read the next production attachment page.");
-  const page = JSON.parse(stdout) as { page: Doc<"attachments">[]; continueCursor: string | null; isDone: boolean };
+  const page = await convex.query(api.attachments.listAllForMigration, {
+    paginationOpts: { numItems: pageSize, cursor },
+  }) as { page: Doc<"attachments">[]; continueCursor: string | null; isDone: boolean };
   for (const file of page.page) {
     if (file.storageProvider === "r2" && file.r2Key) { alreadyInR2 += 1; continue; }
     if (file.status !== "uploaded" || typeof file.deletedAt === "number" || !file.storageId) { skipped += 1; continue; }
