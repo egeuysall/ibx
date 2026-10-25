@@ -1,12 +1,12 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { fileTypeLabel, safeFileUrl, uploadError } from "./file-utils";
-import { MAX_ATTACHMENT_BYTES } from "@/lib/attachment-policy";
+import { MAX_LIBRARY_FILE_BYTES } from "@/lib/attachment-policy";
 
 describe("files library", () => {
   it("uses the existing upload size and type policy", () => {
-    assert.equal(uploadError({ size: MAX_ATTACHMENT_BYTES, type: "application/pdf" }), null);
-    assert.notEqual(uploadError({ size: MAX_ATTACHMENT_BYTES + 1, type: "image/png" }), null);
+    assert.equal(uploadError({ size: MAX_LIBRARY_FILE_BYTES, type: "application/pdf" }), null);
+    assert.notEqual(uploadError({ size: MAX_LIBRARY_FILE_BYTES + 1, type: "image/png" }), null);
     assert.notEqual(uploadError({ size: 0, type: "image/png" }), null);
     assert.notEqual(uploadError({ size: 12, type: "text/html" }), null);
   });

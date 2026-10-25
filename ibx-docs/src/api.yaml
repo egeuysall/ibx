@@ -739,7 +739,7 @@ paths:
                       maxBytes:
                         type: integer
                         enum: [31457280]
-                        description: 30 MiB; files must also be nonempty.
+                        description: 30 MiB for todo/thought attachments; 500 MiB for Files library uploads. Files must be nonempty.
                       allowedContentTypes:
                         type: array
                         items:

@@ -58,7 +58,7 @@ Manager, or Linux Secret Service. If no OS credential store is available, ibx
 falls back to the local config file with `0600` permissions and prints a
 warning. Use `--api-key` for automation or pre-generated keys.
 
-Attachment uploads accept nonempty files up to 30 MiB (31,457,280 bytes): PDF,
+Todo attachment uploads accept nonempty files up to 30 MiB (31,457,280 bytes); `ibx files upload` accepts Files library uploads up to 500 MiB. Supported types include PDF,
 GIF/JPEG/PNG/WebP, Markdown/plain text, MP3/M4A/WAV/OGG audio, and
 MP4/M4V/MOV/WebM/OGV video. `ibx attach <todoId> <file>` reads a local path;
 `ibx attach list <todoId>` lists that todo's files, and `ibx attach list --all`

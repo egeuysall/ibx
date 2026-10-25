@@ -9,7 +9,7 @@ export function fileTypeLabel(contentType: string) {
 }
 
 export function uploadError(file: Pick<File, "size" | "type">) {
-  if (!isAllowedAttachmentSize(file.size)) return "Choose a file between 1 byte and 30 MB.";
+  if (!isAllowedAttachmentSize(file.size, "file")) return "Choose a file between 1 byte and 500 MB.";
   if (!ATTACHMENT_CONTENT_TYPES.includes(file.type)) return "This file type is not supported.";
   return null;
 }

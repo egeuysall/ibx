@@ -60,7 +60,7 @@ export function FilesShell({ children, username, terminalStorageKey }: { childre
         const response = await fetch("/api/files/tree", { cache: "no-store" });
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.error ?? "Could not load file tree.");
-        const lines = ["My Drive/"];
+        const lines = ["drive/"];
         const visit = (nodes: FileTreeNode[], prefix = "") => nodes.forEach((node, index) => {
           const last = index === nodes.length - 1;
           lines.push(`${prefix}${last ? "└── " : "├── "}${node.type === "folder" ? `${node.name}/` : node.name}`);

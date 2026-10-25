@@ -1,19 +1,20 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
-import { ATTACHMENT_CONTENT_TYPES, MAX_ATTACHMENT_BYTES } from "./attachment-policy";
+import { ATTACHMENT_CONTENT_TYPES, isAllowedAttachmentSize } from "./attachment-policy";
 
-export const uploadMetadataSchema = z.object({
+const uploadMetadataShape = z.object({
   parentKind: z.enum(["todo", "thought", "file"]),
   parentId: z.string().trim().min(1).max(128),
   fileName: z.string().trim().min(1).max(180),
   contentType: z.string().refine((value) => ATTACHMENT_CONTENT_TYPES.includes(value)),
-  size: z.number().int().min(1).max(MAX_ATTACHMENT_BYTES),
+  size: z.number().int().min(1),
 });
-const ticketSchema = uploadMetadataSchema.extend({
+export const uploadMetadataSchema = uploadMetadataShape.refine((input) => isAllowedAttachmentSize(input.size, input.parentKind), { path: ["size"], message: "File exceeds the upload size limit." });
+const ticketSchema = uploadMetadataShape.extend({
   ownerKey: z.string().nullable(),
   r2Key: z.string().regex(/^uploads\/[a-f0-9]{64}\/[a-f0-9-]{36}$/),
   expiresAt: z.number().int(),
-});
+}).refine((input) => isAllowedAttachmentSize(input.size, input.parentKind), { path: ["size"], message: "File exceeds the upload size limit." });
 export type UploadTicket = z.infer<typeof ticketSchema>;
 
 export function ownerStoragePrefix(ownerKey: string | null) {

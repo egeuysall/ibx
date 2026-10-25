@@ -114,7 +114,7 @@ export function FilesLibrary({ terminalStorageKey }: { terminalStorageKey: strin
     });
     setPage((current) => current && ({ ...current, files: current.files.map((item) => item.id === file.id
       ? { ...item, folderId: result.folderId, publicUrl: result.publicUrl } : item) }));
-    toast.success(folderId ? "File moved." : "File moved to My Drive.");
+    toast.success(folderId ? "File moved." : "File moved to drive.");
   }
 
   function openPreview(file: FileRecord) {
@@ -135,7 +135,7 @@ export function FilesLibrary({ terminalStorageKey }: { terminalStorageKey: strin
     id = folder.parentFolderId;
   }
   const folderOptions = [
-    { id: "root", label: "My Drive" },
+    { id: "root", label: "drive" },
     ...(page?.folders ?? []).map((folder) => ({ id: folder.id, label: folder.path.join("/") || folder.name })),
   ];
   const previewUrl = preview ? safeFileUrl(buildAttachmentViewUrl(preview.id, preview.publicUrl)) : null;
@@ -144,9 +144,6 @@ export function FilesLibrary({ terminalStorageKey }: { terminalStorageKey: strin
     <>
       <FilesShell username={page?.username ?? null} terminalStorageKey={terminalStorageKey}>
         <section className="flex flex-wrap items-start justify-between gap-3" aria-label="Upload files">
-          <div className="flex flex-col gap-1">
-            <p className="text-sm">files</p>
-          </div>
           <Button variant="outline" disabled={busy || loading} onClick={() => picker.current?.click()}>upload file</Button>
           <input ref={picker} className="sr-only" tabIndex={-1} aria-label="Choose a file to upload" type="file"
             accept={ATTACHMENT_CONTENT_TYPES.join(",")} disabled={busy || loading}
@@ -170,7 +167,7 @@ export function FilesLibrary({ terminalStorageKey }: { terminalStorageKey: strin
         </section>
         <div className="flex flex-wrap items-center justify-between gap-3" aria-label="File folders">
           <nav aria-label="Folder location" className="flex min-w-0 flex-wrap items-center gap-1 text-sm">
-            <Button size="sm" variant={currentFolderId ? "ghost" : "secondary"} onClick={() => setCurrentFolderId(null)}>My Drive</Button>
+            <button type="button" className="text-sm text-foreground hover:underline" onClick={() => setCurrentFolderId(null)}>drive</button>
             {breadcrumbs.map((folder) => <span key={folder.id} className="flex items-center gap-1">
               <span aria-hidden="true" className="text-muted-foreground">/</span>
               <Button size="sm" variant={folder.id === currentFolderId ? "secondary" : "ghost"} onClick={() => setCurrentFolderId(folder.id)}>{folder.name}</Button>
@@ -208,7 +205,7 @@ export function FilesLibrary({ terminalStorageKey }: { terminalStorageKey: strin
         {loading ? <div className="flex flex-col gap-3" aria-hidden><Skeleton className="h-20 w-full" /><Skeleton className="h-20 w-full" /></div>
           : visibleFolders.length + visibleFiles.length === 0 ? <Empty><EmptyHeader><EmptyTitle>{error ? "Files unavailable" : query ? "No matching loaded files" : "No files yet"}</EmptyTitle>
             <EmptyDescription>{query ? "Try another search or load more files below." : "Upload a file to keep it in your library. Todo and thought attachments appear here too."}</EmptyDescription></EmptyHeader></Empty>
-          : <Table aria-label="Files" aria-busy={busy} className="border-y border-border">
+          : <Table aria-label="Files" aria-busy={busy} className="-mx-4 w-[calc(100%+2rem)] border-y border-border md:-mx-6 md:w-[calc(100%+3rem)]">
             <TableHeader><TableRow>
               <TableHead className="w-full text-xs font-normal text-muted-foreground">name</TableHead>
               <TableHead className="text-xs font-normal text-muted-foreground">type</TableHead>

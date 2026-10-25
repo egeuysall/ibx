@@ -9,7 +9,7 @@ Use `ibx attach <todoId> <file> --public` to explicitly publish a shareable URL 
 `/{username}/{lowercase-filename.ext}`. Anyone with a public URL can view the file;
 notes and attachment management still require sign-in. Older servers retain their
 existing visibility behavior.
-Uploads are limited to 30 MiB (31,457,280 bytes) per file and support PDF, PNG/JPEG/GIF/WebP images,
+Todo and thought attachments are limited to 30 MiB (31,457,280 bytes); Files library uploads allow up to 500 MiB. Uploads support PDF, PNG/JPEG/GIF/WebP images,
 Markdown/text, MP3/M4A/WAV/OGG audio, and MP4/MOV/WebM/M4V/OGV video.
 Playback depends on the browser's codec support. Deleted attachment URLs stop working.
 

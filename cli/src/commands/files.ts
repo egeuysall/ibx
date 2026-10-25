@@ -38,10 +38,10 @@ export async function runFilesCommand(parsed: ParsedArgs) {
     if (action === "list") {
       const files = flattenFiles(result.tree);
       if (outputJson) printJson({ files, truncated: result.truncated });
-      else for (const { file, path } of files) print(`${path.join("/") || "My Drive"}\t${file.visibility}\t${file.fileName}`);
+      else for (const { file, path } of files) print(`${path.join("/") || "drive"}\t${file.visibility}\t${file.fileName}`);
     } else if (outputJson) printJson(result);
     else {
-      print("My Drive/");
+      print("drive/");
       for (const line of renderTree(result.tree)) print(line);
       if (result.truncated) print("… tree truncated after 5,000 files");
     }

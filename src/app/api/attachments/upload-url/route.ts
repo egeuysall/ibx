@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
   if (body && Object.keys(body).length > 0) {
     const metadata = uploadMetadataSchema.safeParse(body);
-    if (!metadata.success) return NextResponse.json({ error: "Invalid file metadata, unsupported type, or file exceeds 30 MB." }, { status: 400 });
+    if (!metadata.success) return NextResponse.json({ error: "Invalid file metadata, unsupported type, or file exceeds its upload size limit." }, { status: 400 });
     const input = metadata.data;
     if (input.parentKind !== "file") {
       const parent = input.parentKind === "todo"
@@ -39,6 +39,7 @@ export async function POST(request: NextRequest) {
     }
     const signed = await createR2Upload({ ...input, ownerKey });
     const limits = await convex.query(api.attachments.limits, {});
+    if (input.parentKind === "file") limits.maxBytes = 500 * 1024 * 1024;
     return NextResponse.json({ ...signed, limits }, { headers: { "Cache-Control": "private, no-store" } });
   }
   // Older CLI/iOS builds still upload via Convex; completion copies their bytes to R2.

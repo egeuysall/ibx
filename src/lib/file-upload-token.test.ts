@@ -18,9 +18,10 @@ describe("file upload tickets", () => {
     expect(() => verifyUploadTicket(signUploadTicket({ ...ticket, r2Key: `${ownerStoragePrefix("clerk:b")}12345678-1234-1234-1234-123456789abc` }, secret), "clerk:a", secret)).toThrow();
   });
   test("rejects executable MIME types, empty files and oversized uploads", () => {
-    expect(uploadMetadataSchema.safeParse({ ...ticket, size: 30 * 1024 * 1024 }).success).toBe(true);
-    for (const delta of [{ size: 0 }, { size: 30 * 1024 * 1024 + 1 }, { contentType: "text/html" }]) {
+    expect(uploadMetadataSchema.safeParse({ ...ticket, size: 500 * 1024 * 1024 }).success).toBe(true);
+    for (const delta of [{ size: 0 }, { size: 500 * 1024 * 1024 + 1 }, { contentType: "text/html" }]) {
       expect(uploadMetadataSchema.safeParse({ ...ticket, ...delta }).success).toBe(false);
     }
+    expect(uploadMetadataSchema.safeParse({ ...ticket, parentKind: "todo", size: 30 * 1024 * 1024 + 1 }).success).toBe(false);
   });
 });

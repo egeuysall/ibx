@@ -125,11 +125,11 @@ Creates todos from a previously synced thought.
 - `GET /api/files?cursor=<cursor>` lists your files in pages of 50 and returns your folders.
 - `GET /api/files/tree` returns the owner-scoped folder/file hierarchy for terminal and automation use. It can include the first 5,000 files; `truncated` is `true` when more remain.
 - `POST /api/files` with `{ "name": "Projects", "parentFolderId": null }` creates a root folder. Set `parentFolderId` to nest a folder (up to 200 folders per account, 20 levels deep, names up to 64 characters).
-- `PATCH /api/files/:id` changes `{ "visibility": "public" | "private" }` or moves any attachment with `{ "folderId": "<folder-id>" | null }` (`null` moves it to My Drive).
+- `PATCH /api/files/:id` changes `{ "visibility": "public" | "private" }` or moves any attachment with `{ "folderId": "<folder-id>" | null }` (`null` moves it to drive).
 - `DELETE /api/files/:id` removes your file and stored bytes.
 - New files are private by default. Upload directly to the short-lived Cloudflare R2 URL returned by `POST /api/attachments/upload-url`, then complete with `POST /api/attachments` and its `uploadToken`.
 - Public files can be downloaded without authentication at `/{username}/{folder-slug}/.../{fileName}`. Moving a file changes its folder path; the previous flat URL remains a compatibility link. `/{username}` lists public files and Bri publications only. Anyone with a public link can access it; noindex is not access control.
-- File uploads accept the documented image, document, audio, and video types up to 30 MiB. Signed R2 URLs are never returned by owner-facing API responses.
+- Files library uploads accept the documented image, document, audio, and video types up to 500 MiB. Todo and thought attachments remain capped at 30 MiB. Signed R2 URLs are never returned by owner-facing API responses.
 
 #### POST /api/todos/generate
 

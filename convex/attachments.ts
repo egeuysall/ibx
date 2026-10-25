@@ -216,8 +216,8 @@ export const createAttachment = mutation({
 
     const contentType = metadata.contentType ?? args.contentType;
     const size = metadata.size;
-    if (!isAllowedAttachmentSize(size)) {
-      throw new Error("Attachment must be between 1 byte and 30 MB.");
+    if (!isAllowedAttachmentSize(size, args.parentKind)) {
+      throw new Error("Attachment exceeds its upload size limit.");
     }
 
     if (!isAllowedContentType(contentType)) {
@@ -416,8 +416,8 @@ export const createR2Attachment = mutation({
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
     validateR2Key(args.r2Key);
-    if (!isAllowedAttachmentSize(args.size)) {
-      throw new Error("Attachment must be between 1 byte and 30 MB.");
+    if (!isAllowedAttachmentSize(args.size, args.parentKind)) {
+      throw new Error("Attachment exceeds its upload size limit.");
     }
     if (!isAllowedContentType(args.contentType)) {
       throw new Error("Attachment file type is not allowed.");

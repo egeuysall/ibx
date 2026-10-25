@@ -2,7 +2,7 @@ import { extname } from "node:path";
 import { EXIT_CODE } from "./constants.js";
 import { CliError } from "./errors.js";
 
-export const MAX_ATTACHMENT_BYTES = 30 * 1024 * 1024;
+export const MAX_ATTACHMENT_BYTES = 500 * 1024 * 1024;
 
 const MIME_BY_EXTENSION: Record<string, string> = {
   ".gif": "image/gif", ".jpeg": "image/jpeg", ".jpg": "image/jpeg",
