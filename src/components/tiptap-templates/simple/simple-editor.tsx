@@ -445,6 +445,7 @@ export function SimpleEditor({
   const [filesError, setFilesError] = useState(false)
   const [filesTruncated, setFilesTruncated] = useState(false)
   const filesLoadedRef = useRef(false)
+  const fileMentionKeydownRef = useRef<{ first: PublicLibraryFile; insert: (file: PublicLibraryFile) => void } | null>(null)
   const toolbarRef = useRef<HTMLDivElement>(null)
   const editorRef = useRef<Editor | null>(null)
 
@@ -575,6 +576,13 @@ export function SimpleEditor({
         editor.chain().focus().insertContent(blocks).run()
         return true
       },
+      handleKeyDown: (_view, event) => {
+        const mention = fileMentionKeydownRef.current
+        if (event.key !== "Enter" || !mention) return false
+        event.preventDefault()
+        mention.insert(mention.first)
+        return true
+      },
     },
     extensions: [
       StarterKit.configure({
@@ -649,6 +657,9 @@ export function SimpleEditor({
   const matchingPublicFiles = publicFiles.filter((file) =>
     `${file.fileName} ${file.folderPath.join("/")}`.toLowerCase().includes(fileMention?.query.toLowerCase() ?? ""),
   ).slice(0, 50)
+  fileMentionKeydownRef.current = fileMention && matchingPublicFiles[0]
+    ? { first: matchingPublicFiles[0], insert: insertPublicFile }
+    : null
 
   useEffect(() => {
     if (!editor || value === undefined || editor.isFocused) {
