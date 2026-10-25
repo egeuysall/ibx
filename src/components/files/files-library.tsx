@@ -2,8 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { HugeiconsIcon } from "@hugeicons/react";
-import { File01Icon, Folder01Icon } from "@hugeicons/core-free-icons";
 import { apiClient } from "@/lib/apiClient";
 import { ATTACHMENT_CONTENT_TYPES } from "@/lib/attachment-policy";
 import { Button } from "@/components/ui/button";
@@ -209,7 +207,7 @@ export function FilesLibrary() {
               {visibleFolders.map((folder) => <TableRow key={folder.id} className={dropTargetId === folder.id ? "bg-accent" : ""}
                 onDragOver={(event) => { event.preventDefault(); setDropTargetId(folder.id); }} onDragLeave={() => setDropTargetId(null)}
                 onDrop={(event) => { event.preventDefault(); setDropTargetId(null); const id = event.dataTransfer.getData("text/plain"); const file = page?.files.find((item) => item.id === id); if (file) void run(() => moveFile(file, folder.id)); }}>
-                <TableCell><button type="button" className="flex items-center gap-2 text-left hover:underline" onClick={() => setCurrentFolderId(folder.id)}><HugeiconsIcon icon={Folder01Icon} size={18} />{folder.name}</button></TableCell>
+                <TableCell><button type="button" className="flex items-center gap-2 text-left hover:underline" onClick={() => setCurrentFolderId(folder.id)}><span aria-hidden="true" className="w-4 shrink-0 text-center font-mono">/</span>{folder.name}</button></TableCell>
                 <TableCell>Folder</TableCell><TableCell>—</TableCell><TableCell>—</TableCell><TableCell className="text-right text-xs text-muted-foreground">Drop files here</TableCell>
               </TableRow>)}
               {visibleFiles.map((file) => {
@@ -217,7 +215,7 @@ export function FilesLibrary() {
                 const publicUrl = file.visibility === "public" ? safeFileUrl(file.publicUrl) : null;
                 const selectedFolder = folderOptions.find((option) => option.id === (file.folderId ?? "root")) ?? folderOptions[0];
                 return <TableRow key={file.id} draggable onDragStart={(event) => { event.dataTransfer.setData("text/plain", file.id); event.dataTransfer.effectAllowed = "move"; }}>
-                  <TableCell className="max-w-0"><div className="flex min-w-0 items-center gap-2"><HugeiconsIcon icon={File01Icon} size={18} /><span className="truncate" title={file.fileName}>{file.fileName}</span></div></TableCell>
+                  <TableCell className="max-w-0"><div className="flex min-w-0 items-center gap-2"><span aria-hidden="true" className="w-4 shrink-0 text-center font-mono">-</span><span className="truncate" title={file.fileName}>{file.fileName}</span></div></TableCell>
                   <TableCell><Badge variant="secondary">{fileTypeLabel(file.contentType)}</Badge><span className="sr-only">{file.size < 1024 * 1024 ? `${Math.ceil(file.size / 1024)} KB` : `${(file.size / 1024 / 1024).toFixed(1)} MB`}</span></TableCell>
                   <TableCell className="whitespace-nowrap text-xs text-muted-foreground">{file.parentKind === "file" ? "My Drive" : `${file.parentKind} attachment`}</TableCell>
                   <TableCell><time className="whitespace-nowrap text-xs text-muted-foreground" dateTime={new Date(file.createdAt).toISOString()}>{new Date(file.createdAt).toLocaleDateString()}</time></TableCell>
