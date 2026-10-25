@@ -111,11 +111,14 @@ components:
           description: New uploads default to private.
     FileVisibility:
       type: object
-      required: [visibility]
       properties:
         visibility:
           type: string
           enum: [public, private]
+        folderId:
+          type: string
+          nullable: true
+          description: Destination folder ID, or null for My Drive.
     Timestamp:
       type: integer
       format: int64
@@ -495,6 +498,45 @@ components:
         type: string
         maxLength: 96
 paths:
+  /api/files/tree:
+    get:
+      tags: [attachments]
+      summary: Return the file and folder tree
+      description: Returns up to 5,000 owner-scoped files, nested under their folders.
+      responses:
+        '200':
+          description: File tree; truncated is true when more files remain.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tree, truncated]
+                properties:
+                  tree:
+                    type: array
+                    items:
+                      type: object
+                      required: [type, name, id]
+                      properties:
+                        type:
+                          type: string
+                          enum: [folder, file]
+                        name:
+                          type: string
+                        id:
+                          type: string
+                        children:
+                          type: array
+                          items:
+                            type: object
+                        file:
+                          $ref: '#/components/schemas/Attachment'
+                  truncated:
+                    type: boolean
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /api/files:
     get:
       tags: [attachments]
@@ -530,10 +572,39 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [attachments]
+      summary: Create a folder
+      description: Requires write permission. Create a root folder or nest it under an owned folder.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 64
+                parentFolderId:
+                  type: string
+                  nullable: true
+      responses:
+        '201':
+          description: Folder created.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /api/files/{attachmentId}:
     patch:
       tags: [attachments]
-      summary: Change file visibility
+      summary: Move or change visibility of a file
+      description: Requires write permission. Send folderId to move the owned file; set it to null for My Drive, or send visibility to change public sharing.
       parameters:
         - $ref: '#/components/parameters/AttachmentId'
       requestBody:

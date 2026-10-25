@@ -18,7 +18,7 @@ export function inferContentType(path: string) {
 }
 
 export type AttachmentMetadata = {
-  parentKind: "todo";
+  parentKind: "todo" | "file";
   parentId: string;
   fileName: string;
   contentType: string;

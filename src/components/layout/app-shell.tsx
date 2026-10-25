@@ -116,6 +116,7 @@ type AppShellProps = {
 type UnauthorizedEventDetail = {
   message?: string;
 };
+type TerminalFileNode = { type: "folder" | "file"; name: string; children?: TerminalFileNode[] };
 
 type TodoPatch = Partial<
   Pick<
@@ -2999,6 +3000,7 @@ export function AppShell({
           "  clear",
           "  pwd",
           "  ls [all|today|upcoming|archive]",
+          "  tree [files]",
           "  search <text>",
           "  create <title>",
           "  open <number|id>",
@@ -3019,6 +3021,28 @@ export function AppShell({
 
     if (command === "pwd") {
       addOutput(`/ibx/${filter}`);
+      return;
+    }
+
+    if (command === "tree") {
+      try {
+        const response = await fetch("/api/files/tree", { cache: "no-store" });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error ?? "Could not load file tree.");
+        const lines: string[] = ["My Drive/"];
+        const visit = (nodes: TerminalFileNode[], prefix = "") => {
+          nodes.forEach((node, index) => {
+            const last = index === nodes.length - 1;
+            lines.push(`${prefix}${last ? "└── " : "├── "}${node.type === "folder" ? `${node.name}/` : node.name}`);
+            if (node.type === "folder") visit(node.children ?? [], `${prefix}${last ? "    " : "│   "}`);
+          });
+        };
+        visit(payload.tree ?? []);
+        if (payload.truncated) lines.push("… tree truncated after 5,000 files");
+        addOutput(lines.join("\n"));
+      } catch (error) {
+        addOutput(error instanceof Error ? error.message : "Could not load file tree.");
+      }
       return;
     }
 
@@ -4286,7 +4310,7 @@ export function AppShell({
             <div className="flex h-[44vh] min-h-72 w-full flex-col px-4 py-3 md:px-6">
               <div className="mb-2 flex items-center justify-between gap-3 font-mono text-[0.72rem] text-muted-foreground">
                 <span>
-                  ibx terminal // help, pwd, ls, cd, search, create, open, done,
+                  ibx terminal // help, pwd, ls, tree, cd, search, create, open, done,
                   delete, attach
                 </span>
                 <button

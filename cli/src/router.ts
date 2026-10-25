@@ -15,6 +15,7 @@ import { runPublishCommand } from "./commands/publish.js";
 import { runSelfUpdateCommand } from "./commands/self-update.js";
 import { runSyncCommand } from "./commands/sync.js";
 import { runTodosCommand } from "./commands/todos.js";
+import { runFilesCommand } from "./commands/files.js";
 import { renderHelpUi } from "./ui/pastel.js";
 
 function normalizeTopLevelCommand(parsed: ParsedArgs) {
@@ -129,6 +130,11 @@ export async function main(argv = process.argv.slice(2)) {
 
   if (normalizedFirst === "attach") {
     await runAttachCommand(normalizedParsed);
+    return;
+  }
+
+  if (normalizedFirst === "files") {
+    await runFilesCommand(normalizedParsed);
     return;
   }
 

@@ -35,7 +35,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return body;
 }
 
-export function FilesLibrary() {
+export function FilesLibrary({ terminalStorageKey }: { terminalStorageKey: string }) {
   const [page, setPage] = useState<FilesPage | null>(null);
   const [search, setSearch] = useState("");
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
@@ -142,12 +142,10 @@ export function FilesLibrary() {
 
   return (
     <>
-      <FilesShell username={page?.username ?? null}>
+      <FilesShell username={page?.username ?? null} terminalStorageKey={terminalStorageKey}>
         <section className="flex flex-wrap items-start justify-between gap-3" aria-label="Upload files">
           <div className="flex flex-col gap-1">
-            <p className="text-sm">your files</p>
-            <p className="text-xs text-muted-foreground">pdf, images, text, audio & video · up to 30 MB each</p>
-            <p className="text-xs text-muted-foreground">uploads are private. public files are accessible to anyone with the link.</p>
+            <p className="text-sm">files</p>
           </div>
           <Button variant="outline" disabled={busy || loading} onClick={() => picker.current?.click()}>upload file</Button>
           <input ref={picker} className="sr-only" tabIndex={-1} aria-label="Choose a file to upload" type="file"

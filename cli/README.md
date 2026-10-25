@@ -43,6 +43,12 @@ ibx td
 - `ibx attach <todoId|prefix> <file> [--public] [--json]`
 - `ibx attach list <todoId|prefix> [--json]`
 - `ibx attach list --all [--json]`
+- `ibx files tree [--json]`
+- `ibx files list [--json]`
+- `ibx files upload <path> [--folder <folderId>] [--public] [--json]`
+- `ibx files mkdir <name> [--parent <folderId>] [--json]`
+- `ibx files move <fileId> <folderId|root>`
+- `ibx files public|private|delete <fileId>`
 - `ibx todos list [--view today|upcoming|archive|all] [--json]`
 - `ibx t l [--view today|upcoming|archive|all] [--json]` (short)
 
