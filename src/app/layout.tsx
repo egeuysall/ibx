@@ -1,5 +1,6 @@
 import { ClerkProvider } from "@clerk/nextjs";
 import { shadcn } from "@clerk/ui/themes";
+import Script from "next/script";
 import type { Metadata, Viewport } from "next";
 import { Geist_Mono } from "next/font/google";
 
@@ -42,6 +43,14 @@ export default function RootLayout({
       className={`${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full font-mono">
+        <Script id="ibx-theme" strategy="beforeInteractive">
+          {`try {
+            const preference = localStorage.getItem("ibx:appearance");
+            const dark = preference === "dark" || (preference !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+            document.documentElement.classList.toggle("dark", dark);
+            document.documentElement.dataset.theme = dark ? "dark" : "light";
+          } catch {}`}
+        </Script>
         <ClerkProvider appearance={{ theme: shadcn }}>
           <TooltipProvider delay={120}>
             <ServiceWorkerRegister />

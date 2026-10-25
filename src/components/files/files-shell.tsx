@@ -57,7 +57,7 @@ export function FilesShell({ children, username }: { children: ReactNode; userna
             <SidebarTrigger className="md:hidden" size="icon-sm" variant="ghost" />
             <h1 className="text-sm text-muted-foreground">{"> files"}</h1>
           </div>
-          {username && <Link href={`/${encodeURIComponent(username)}`} className="text-xs underline underline-offset-4">public profile</Link>}
+          {username && <Link href={`/${encodeURIComponent(username)}`} className="text-xs no-underline">public profile</Link>}
         </header>
         <main className="flex min-w-0 flex-1 flex-col gap-4 px-4 py-4 md:px-6">{children}</main>
       </SidebarInset>

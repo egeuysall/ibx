@@ -37,7 +37,7 @@ export default async function ProfilePage({ params, searchParams }: {
         {files.page.length ? <Table><TableHeader><TableRow>
           <TableHead>name</TableHead><TableHead className="hidden sm:table-cell">type</TableHead><TableHead className="text-right">size</TableHead>
         </TableRow></TableHeader><TableBody>{files.page.map((file) => <TableRow key={file._id}>
-          <TableCell className="max-w-0"><a href={`/${encodeURIComponent(username)}/${encodeURIComponent(file.fileName)}`} target="_blank" rel="noreferrer" className="block truncate underline underline-offset-4">{file.fileName}</a></TableCell>
+          <TableCell className="max-w-0"><a href={`/${encodeURIComponent(username)}/${encodeURIComponent(file.fileName)}`} target="_blank" rel="noreferrer" className="block truncate no-underline transition-opacity hover:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{file.fileName}</a></TableCell>
           <TableCell className="hidden text-muted-foreground sm:table-cell">{file.contentType.split("/")[1]}</TableCell>
           <TableCell className="whitespace-nowrap text-right text-muted-foreground">{file.size >= 1024 * 1024 ? `${(file.size / 1024 / 1024).toFixed(1)} MB` : `${Math.ceil(file.size / 1024)} KB`}</TableCell>
         </TableRow>)}</TableBody></Table> : <Empty><EmptyHeader><EmptyTitle>no public files yet</EmptyTitle><EmptyDescription>Only files shared publicly appear here.</EmptyDescription></EmptyHeader></Empty>}
@@ -48,7 +48,7 @@ export default async function ProfilePage({ params, searchParams }: {
         {notes.map((note) => {
           try {
             const url = new URL(note.url);
-            return url.protocol === "https:" ? <a key={note.url} href={url.href} target="_blank" rel="noreferrer" className="truncate border-b py-3 text-sm underline underline-offset-4">{note.title}</a> : null;
+            return url.protocol === "https:" ? <a key={note.url} href={url.href} target="_blank" rel="noreferrer" className="truncate border-b py-3 text-sm no-underline transition-opacity hover:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{note.title}</a> : null;
           } catch { return null; }
         })}
       </section>}
