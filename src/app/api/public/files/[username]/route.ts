@@ -18,7 +18,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     ownerKey: `clerk:${owner.id}`,
     paginationOpts: { numItems: 50, cursor },
   });
-  const files = result.page.filter((file) => file.contentType.startsWith("image/")).map((file) => ({
+  const files = result.page.map((file) => ({
     id: file._id,
     fileName: file.fileName,
     contentType: file.contentType,

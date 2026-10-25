@@ -483,13 +483,20 @@ export function SimpleEditor({
       return
     }
     const caret = nextEditor.view.coordsAtPos(selection.from)
-    setFileMention({
+    const nextMention = {
       from: selection.from - parentOffset + mention.markerOffset,
       to: selection.from,
       query: mention.query,
       left: caret.left,
       top: caret.bottom,
-    })
+    }
+    setFileMention((current) =>
+      current?.from === nextMention.from &&
+      current.to === nextMention.to &&
+      current.query === nextMention.query
+        ? current
+        : nextMention
+    )
   }
 
   useEffect(() => {
