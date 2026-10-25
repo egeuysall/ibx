@@ -498,6 +498,65 @@ components:
         type: string
         maxLength: 96
 paths:
+  /api/public/files/{username}:
+    get:
+      tags: [attachments]
+      summary: List public IBX images
+      description: Public read-only image listing for editors such as Bri. Private files are never included.
+      security: []
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+        - name: cursor
+          in: query
+          schema:
+            type: string
+            maxLength: 4000
+      responses:
+        '200':
+          description: Up to 50 public image files and a pagination cursor.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [files, cursor, isDone]
+                properties:
+                  files:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, fileName, contentType, size, folderPath, url]
+                      properties:
+                        id:
+                          type: string
+                        fileName:
+                          type: string
+                        contentType:
+                          type: string
+                          pattern: '^image/'
+                        size:
+                          type: integer
+                        folderPath:
+                          type: array
+                          items:
+                            type: string
+                        url:
+                          type: string
+                          format: uri
+                  cursor:
+                    type: string
+                    nullable: true
+                  isDone:
+                    type: boolean
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /api/files/tree:
     get:
       tags: [attachments]

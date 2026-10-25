@@ -121,6 +121,7 @@ Creates todos from a previously synced thought.
 
 ### Files and public profiles
 
+- `GET /api/public/files/:username` lists up to 50 public image files for the Bri editor; it returns only files already shared publicly and supports `cursor` pagination.
 - `GET /api/files?cursor=<cursor>` lists your files in pages of 50 and returns your folders.
 - `GET /api/files/tree` returns the owner-scoped folder/file hierarchy for terminal and automation use. It can include the first 5,000 files; `truncated` is `true` when more remain.
 - `POST /api/files` with `{ "name": "Projects", "parentFolderId": null }` creates a root folder. Set `parentFolderId` to nest a folder (up to 200 folders per account, 20 levels deep, names up to 64 characters).
