@@ -113,6 +113,11 @@ components:
     FileVisibility:
       type: object
       properties:
+        fileName:
+          type: string
+          minLength: 1
+          maxLength: 180
+          description: Rename a file (1-180 characters) or folder (1-64 characters) by item ID. Path separators and control characters are not allowed; duplicate file names are suffixed within the directory, while duplicate folder names are rejected.
         visibility:
           type: string
           enum: [public, private]
@@ -669,8 +674,8 @@ paths:
   /api/files/{attachmentId}:
     patch:
       tags: [attachments]
-      summary: Move or change visibility of a file
-      description: Requires write permission. Send folderId to move the owned file; set it to null for My Drive, or send visibility to change public sharing.
+      summary: Rename, move, or change visibility of a file
+      description: Requires write permission. Send fileName to rename; send folderId to move the owned file (null returns it to drive), or send visibility to change public sharing. Renaming changes public URLs and old URLs are not aliases.
       parameters:
         - $ref: '#/components/parameters/AttachmentId'
       requestBody:
@@ -681,7 +686,7 @@ paths:
               $ref: '#/components/schemas/FileVisibility'
       responses:
         '200':
-          description: Visibility updated.
+          description: File updated.
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':

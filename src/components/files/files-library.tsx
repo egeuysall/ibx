@@ -45,8 +45,13 @@ export function FilesLibrary({ terminalStorageKey }: { terminalStorageKey: strin
   const [error, setError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<FileRecord | null>(null);
   const [preview, setPreview] = useState<FileRecord | null>(null);
+  const [editingFileId, setEditingFileId] = useState<string | null>(null);
+  const [editingFileName, setEditingFileName] = useState("");
+  const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
+  const [editingFolderName, setEditingFolderName] = useState("");
   const picker = useRef<HTMLInputElement>(null);
   const operation = useRef(false);
+  const cancelRename = useRef(false);
 
   const refresh = useCallback(async (minimum = 1) => {
     let result = await request<FilesPage>("/api/files");
@@ -114,6 +119,57 @@ export function FilesLibrary({ terminalStorageKey }: { terminalStorageKey: strin
     setPage((current) => current && ({ ...current, files: current.files.map((item) => item.id === file.id
       ? { ...item, folderId: result.folderId, publicUrl: result.publicUrl } : item) }));
     toast.success(folderId ? "File moved." : "File moved to drive.");
+  }
+
+  function startRename(file: FileRecord) {
+    cancelRename.current = false;
+    setEditingFileId(file.id);
+    setEditingFileName(file.fileName);
+  }
+
+  function saveFileName(file: FileRecord) {
+    if (cancelRename.current) {
+      cancelRename.current = false;
+      return;
+    }
+    const fileName = editingFileName.trim();
+    if (!fileName) {
+      toast.error("File name is required.");
+      setEditingFileName(file.fileName);
+      return;
+    }
+    if (fileName === file.fileName) {
+      setEditingFileId(null);
+      return;
+    }
+    void run(async () => {
+      const result = await apiClient.renameFile(file.id, fileName);
+      if (!("type" in result && result.type === "folder")) {
+        setPage((current) => current && ({ ...current, files: current.files.map((item) => item.id === file.id
+          ? { ...item, fileName: result.fileName, url: result.url ?? item.url, publicUrl: result.publicUrl } : item) }));
+      }
+      setEditingFileId(null);
+      toast.success(`Renamed to ${result.fileName}.`);
+    });
+  }
+
+  function startFolderRename(folder: FilesPage["folders"][number]) {
+    cancelRename.current = false;
+    setEditingFolderId(folder.id);
+    setEditingFolderName(folder.name);
+  }
+
+  function saveFolderName(folder: FilesPage["folders"][number]) {
+    if (cancelRename.current) { cancelRename.current = false; return; }
+    const name = editingFolderName.trim();
+    if (!name) { toast.error("Folder name is required."); setEditingFolderName(folder.name); return; }
+    if (name === folder.name) { setEditingFolderId(null); return; }
+    void run(async () => {
+      await apiClient.renameFile(folder.id, name);
+      setEditingFolderId(null);
+      await refresh(page?.files.length);
+      toast.success(`Renamed folder to ${name}.`);
+    });
   }
 
   function openPreview(file: FileRecord) {
@@ -215,14 +271,20 @@ export function FilesLibrary({ terminalStorageKey }: { terminalStorageKey: strin
               {visibleFolders.map((folder) => <TableRow key={folder.id} className={dropTargetId === folder.id ? "bg-accent" : ""}
                 onDragOver={(event) => { event.preventDefault(); setDropTargetId(folder.id); }} onDragLeave={() => setDropTargetId(null)}
                 onDrop={(event) => { event.preventDefault(); setDropTargetId(null); const id = event.dataTransfer.getData("text/plain"); const file = page?.files.find((item) => item.id === id); if (file) void run(() => moveFile(file, folder.id)); }}>
-                <TableCell><button type="button" className="flex items-center gap-2 text-left hover:underline" onClick={() => setCurrentFolderId(folder.id)}><span aria-hidden="true" className="w-4 shrink-0 text-center font-mono">/</span>{folder.name}</button></TableCell>
+                <TableCell>{editingFolderId === folder.id ? <div className="flex items-center gap-2"><span aria-hidden="true" className="w-4 shrink-0 text-center font-mono">/</span><Input autoFocus aria-label="Rename folder" maxLength={64} value={editingFolderName} disabled={busy} onChange={(event) => setEditingFolderName(event.target.value)} onBlur={() => saveFolderName(folder)} onKeyDown={(event) => {
+                  if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); }
+                  if (event.key === "Escape") { event.preventDefault(); cancelRename.current = true; setEditingFolderName(folder.name); setEditingFolderId(null); event.currentTarget.blur(); }
+                }} className="h-7 max-w-sm border-0 bg-transparent px-0 shadow-none focus-visible:ring-0" /></div> : <button type="button" className="flex items-center gap-2 text-left hover:underline" title="Press F2 to rename" onClick={() => setCurrentFolderId(folder.id)} onKeyDown={(event) => { if (event.key === "F2") { event.preventDefault(); startFolderRename(folder); } }}><span aria-hidden="true" className="w-4 shrink-0 text-center font-mono">/</span>{folder.name}</button>}</TableCell>
                 <TableCell className="text-xs text-muted-foreground">folder</TableCell><TableCell>—</TableCell><TableCell>—</TableCell><TableCell />
               </TableRow>)}
               {visibleFiles.map((file) => {
                 const publicUrl = file.visibility === "public" ? safeFileUrl(file.publicUrl) : null;
                 const selectedFolder = folderOptions.find((option) => option.id === (file.folderId ?? "root")) ?? folderOptions[0];
                 return <TableRow key={file.id} draggable onDragStart={(event) => { event.dataTransfer.setData("text/plain", file.id); event.dataTransfer.effectAllowed = "move"; }}>
-                  <TableCell className="max-w-0"><div className="flex min-w-0 items-center gap-2"><span aria-hidden="true" className="w-4 shrink-0 text-center font-mono">-</span><button type="button" className="min-w-0 truncate text-left hover:underline" title={file.fileName} onClick={() => openPreview(file)}>{file.fileName}</button></div></TableCell>
+                  <TableCell className="max-w-0"><div className="flex min-w-0 items-center gap-2"><span aria-hidden="true" className="w-4 shrink-0 text-center font-mono">-</span>{editingFileId === file.id ? <Input autoFocus aria-label="Rename file" maxLength={180} value={editingFileName} disabled={busy} onChange={(event) => setEditingFileName(event.target.value)} onBlur={() => saveFileName(file)} onKeyDown={(event) => {
+                    if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); }
+                    if (event.key === "Escape") { event.preventDefault(); cancelRename.current = true; setEditingFileName(file.fileName); setEditingFileId(null); event.currentTarget.blur(); }
+                  }} className="h-7 min-w-0 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0" /> : <button type="button" className="min-w-0 truncate text-left hover:underline" title={file.fileName} onClick={() => openPreview(file)}>{file.fileName}</button>}</div></TableCell>
                   <TableCell><Badge variant="secondary">{fileTypeLabel(file.contentType)}</Badge><span className="sr-only">{file.size < 1024 * 1024 ? `${Math.ceil(file.size / 1024)} KB` : `${(file.size / 1024 / 1024).toFixed(1)} MB`}</span></TableCell>
                   <TableCell><time className="whitespace-nowrap text-xs text-muted-foreground" dateTime={new Date(file.createdAt).toISOString()}>{new Date(file.createdAt).toLocaleDateString()}</time></TableCell>
                   <TableCell><div className="flex items-center gap-2 text-xs text-muted-foreground"><Switch checked={file.visibility === "public"} disabled={busy} aria-label={`Public access for ${file.fileName}`} onCheckedChange={(checked) => void run(() => changeVisibility(file, checked))} /><span>{file.visibility}</span></div></TableCell>
@@ -233,6 +295,7 @@ export function FilesLibrary({ terminalStorageKey }: { terminalStorageKey: strin
                       <ComboboxContent className="min-w-44 border border-border"><ComboboxEmpty>No folders found.</ComboboxEmpty><ComboboxList>{(option) => <ComboboxItem className="whitespace-nowrap" key={option.id} value={option}>{option.label}</ComboboxItem>}</ComboboxList></ComboboxContent>
                     </Combobox>
                     {publicUrl && <Button variant="outline" size="sm" disabled={busy} onClick={() => void run(async () => { await navigator.clipboard.writeText(new URL(publicUrl, window.location.origin).href); toast.success("Public link copied."); })}>copy public link</Button>}
+                    <Button variant="ghost" size="sm" disabled={busy} aria-label={`Rename ${file.fileName}`} onClick={() => startRename(file)}>rename</Button>
                     <Button variant="ghost" size="sm" disabled={busy} aria-label={`Delete ${file.fileName}`} onClick={() => setPendingDelete(file)}>delete</Button>
                   </div></TableCell>
                 </TableRow>;

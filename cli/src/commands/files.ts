@@ -59,6 +59,17 @@ export async function runFilesCommand(parsed: ParsedArgs) {
     return;
   }
 
+  if (action === "rename") {
+    const id = parsed.positionals[2] ?? getStringOption(parsed, "id");
+    const fileName = parsed.positionals.slice(3).join(" ") || getStringOption(parsed, "name");
+    if (!id || !fileName) throw new CliError('Usage: ibx files rename <itemId> "<new name>" [--json].', { exitCode: EXIT_CODE.VALIDATION, code: "FILES_RENAME_ARGUMENTS_REQUIRED" });
+    const result = await requestJson<{ ok: true; id: string; fileName: string; url: string; publicUrl: string | null }>(config, `/api/files/${encodeURIComponent(id)}`, {
+      method: "PATCH", body: JSON.stringify({ fileName }),
+    }, { action: "rename file or folder" });
+    if (outputJson) printJson(result); else printOk(`renamed to ${result.fileName}`);
+    return;
+  }
+
   if (action === "move" || action === "public" || action === "private" || action === "delete") {
     const id = parsed.positionals[2] ?? getStringOption(parsed, "id");
     if (!id) throw new CliError(`Usage: ibx files ${action} <fileId>${action === "move" ? " <folderId|root>" : ""}.`, { exitCode: EXIT_CODE.VALIDATION, code: "FILES_ID_REQUIRED" });
@@ -95,5 +106,5 @@ export async function runFilesCommand(parsed: ParsedArgs) {
     return;
   }
 
-  throw new CliError("Usage: ibx files [tree|list|mkdir|move|public|private|delete|upload].", { exitCode: EXIT_CODE.VALIDATION, code: "FILES_COMMAND_INVALID" });
+  throw new CliError("Usage: ibx files [tree|list|mkdir|rename|move|public|private|delete|upload].", { exitCode: EXIT_CODE.VALIDATION, code: "FILES_COMMAND_INVALID" });
 }

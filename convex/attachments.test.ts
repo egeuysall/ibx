@@ -185,6 +185,28 @@ describe("attachment privacy", () => {
     await expect(t.mutation(api.attachments.ensureFileFolderPath, { ...auth, serverToken: "wrong", path })).rejects.toThrow("Unauthorized");
   });
 
+  it("renames owned files and folders without colliding within a directory", async () => {
+    const t = convexTest(schema, modules);
+    const first = await t.mutation(api.attachments.createR2Attachment, upload);
+    const second = await t.mutation(api.attachments.createR2Attachment, { ...upload, r2Key: "objects/report-2" });
+    expect(await t.mutation(api.attachments.renameFileItem, { ...auth, itemId: first.id, name: first.fileName }))
+      .toMatchObject({ id: first.id, fileName: first.fileName, type: "file" });
+    expect(await t.mutation(api.attachments.renameFileItem, { ...auth, itemId: first.id, name: second.fileName }))
+      .toMatchObject({ id: first.id, fileName: "report-2-2.pdf", type: "file" });
+    expect(await t.mutation(api.attachments.renameFileItem, { ...auth, ownerKey: "owner-b", itemId: first.id, name: "private.pdf" })).toBeNull();
+    await expect(t.mutation(api.attachments.renameFileItem, { ...auth, itemId: first.id, name: "../private.pdf" })).rejects.toThrow("cannot contain slashes");
+
+    const folderId = await t.mutation(api.attachments.createFileFolder, { ...auth, name: "Projects" });
+    const siblingId = await t.mutation(api.attachments.createFileFolder, { ...auth, name: "Archive" });
+    expect(await t.mutation(api.attachments.renameFileItem, { ...auth, itemId: folderId, name: "Work" })).toEqual({ id: folderId, fileName: "Work", type: "folder" });
+    expect(await t.query(api.attachments.listFileFolders, auth)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ _id: folderId, name: "Work", slug: "work" }),
+    ]));
+    await expect(t.mutation(api.attachments.renameFileItem, { ...auth, itemId: folderId, name: "Archive" })).rejects.toThrow("already exists");
+    expect(await t.mutation(api.attachments.renameFileItem, { ...auth, ownerKey: "owner-b", itemId: siblingId, name: "Private" })).toBeNull();
+    await expect(t.mutation(api.attachments.renameFileItem, { ...auth, itemId: folderId, name: "../Private" })).rejects.toThrow("cannot contain slashes");
+  });
+
   it("allows same file name in separate folders and resolves each public path", async () => {
     const t = convexTest(schema, modules);
     const leftFolderId = await t.mutation(api.attachments.createFileFolder, { ...auth, name: "Left" });

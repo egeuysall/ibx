@@ -118,18 +118,19 @@ async function getActiveAttachment(
   return attachment;
 }
 
-async function reserveFileName(ctx: MutationCtx, ownerKey: string | null, name: string, folderId?: Id<"fileFolders">) {
+async function reserveFileName(ctx: MutationCtx, ownerKey: string | null, name: string, folderId?: Id<"fileFolders">, excludeId?: Id<"attachments">) {
   const baseName = normalizeFileName(name);
   let fileName = baseName;
   // Reserve deleted names too so a shared URL never points at a later upload.
   for (let suffix = 2; ; suffix += 1) {
-    const existing = folderId
+    const matches = folderId
       ? await ctx.db.query("attachments").withIndex("by_ownerKey_and_folderId_and_fileName_and_createdAt", (q) =>
         q.eq("ownerKey", ownerKey).eq("folderId", folderId).eq("fileName", fileName),
-      ).first()
+      ).take(2)
       : (await ctx.db.query("attachments").withIndex("by_ownerKey_and_fileName_and_createdAt", (q) =>
         q.eq("ownerKey", ownerKey).eq("fileName", fileName),
-      ).take(5_000)).find((attachment) => !attachment.folderId);
+      ).take(5_000)).filter((attachment) => !attachment.folderId);
+    const existing = matches.find((attachment) => attachment._id !== excludeId);
     if (!existing) return fileName;
     if (suffix > 100) throw new Error("Too many files with this name. Rename the file.");
     const dot = baseName.lastIndexOf(".");
@@ -541,6 +542,50 @@ export const createFileFolder = mutation({
     return await ctx.db.insert("fileFolders", {
       ownerKey: args.ownerKey, name, slug, parentFolderId, createdAt: Date.now(),
     });
+  },
+});
+
+export const renameFileItem = mutation({
+  args: {
+    serverToken: v.string(), ownerKey: v.union(v.string(), v.null()),
+    itemId: v.string(), name: v.string(),
+  },
+  handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
+    const attachmentId = ctx.db.normalizeId("attachments", args.itemId);
+    if (attachmentId) {
+      const requestedName = args.name.trim();
+      if (!requestedName || requestedName.length > MAX_FILE_NAME_LENGTH || /[\/\\\u0000-\u001f\u007f]/.test(requestedName)) {
+        throw new Error("File names must be 1–180 characters and cannot contain slashes or control characters.");
+      }
+      const file = await getActiveAttachment(ctx, args.ownerKey, attachmentId);
+      if (!file) return null;
+      const fileName = await reserveFileName(ctx, args.ownerKey, requestedName, file.folderId ?? undefined, file._id);
+      await ctx.db.patch(file._id, { fileName, updatedAt: Date.now() });
+      return { id: file._id, fileName, type: "file" as const };
+    }
+
+    const folderId = ctx.db.normalizeId("fileFolders", args.itemId);
+    if (!folderId) return null;
+    const name = args.name.trim();
+    if (!name || name.length > 64 || /[\/\\\u0000-\u001f\u007f]/.test(name) || name === "." || name === "..") {
+      throw new Error("Folder names must be 1–64 characters and cannot contain slashes or control characters.");
+    }
+    const folder = await ctx.db.get(folderId);
+    if (!folder || !ownerMatches(folder, args.ownerKey)) return null;
+    const siblings = (await ctx.db.query("fileFolders")
+      .withIndex("by_ownerKey_and_name", (q) => q.eq("ownerKey", args.ownerKey))
+      .take(200)).filter((item) => (item.parentFolderId ?? null) === (folder.parentFolderId ?? null));
+    if (siblings.some((item) => item._id !== folder._id && item.name.toLowerCase() === name.toLowerCase())) {
+      throw new Error("A folder with that name already exists.");
+    }
+    const baseSlug = folderSlug(name);
+    let slug = baseSlug;
+    for (let suffix = 2; siblings.some((item) => item._id !== folder._id && (item.slug || folderSlug(item.name)) === slug); suffix += 1) {
+      slug = `${baseSlug}-${suffix}`;
+    }
+    await ctx.db.patch(folder._id, { name, slug });
+    return { id: folder._id, fileName: name, type: "folder" as const };
   },
 });
 

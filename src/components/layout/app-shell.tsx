@@ -116,7 +116,7 @@ type AppShellProps = {
 type UnauthorizedEventDetail = {
   message?: string;
 };
-type TerminalFileNode = { type: "folder" | "file"; name: string; children?: TerminalFileNode[] };
+type TerminalFileNode = { type: "folder" | "file"; id: string; name: string; children?: TerminalFileNode[] };
 
 type TodoPatch = Partial<
   Pick<
@@ -3002,6 +3002,7 @@ export function AppShell({
           "  ls [all|today|upcoming|archive]",
           "  tree [files]",
           "  mkdir /path (create a file directory)",
+          "  rename <file id|path|name> --to <new name>",
           "  search <text>",
           "  create <title>",
           "  open <number|id>",
@@ -3056,6 +3057,44 @@ export function AppShell({
         if (!response.ok) throw new Error(payload.error ?? "Could not create directory.");
         addOutput(`created ${argument.replace(/\/+$/, "")}/`);
       } catch (error) { addOutput(error instanceof Error ? error.message : "Could not create directory."); }
+      return;
+    }
+
+    if (command === "rename") {
+      const separator = input.indexOf(" --to ");
+      if (separator < 0) { addOutput("usage: rename <file id|path|name> --to <new name>"); return; }
+      const target = input.slice("rename ".length, separator).trim();
+      const targetPath = target.replace(/^\/+|\/+$/g, "");
+      const fileName = input.slice(separator + " --to ".length).trim();
+      if (!target || !fileName) { addOutput("usage: rename <file id|path|name> --to <new name>"); return; }
+      try {
+        const response = await fetch("/api/files/tree", { cache: "no-store" });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error ?? "Could not load files.");
+        const matches: Array<{ id: string; type: "folder" | "file"; path: string }> = [];
+        const visit = (nodes: TerminalFileNode[], path: string[] = []) => nodes.forEach((node) => {
+          if (node.type === "folder") {
+            const fullPath = [...path, node.name].join("/");
+            if (node.id === target || fullPath === targetPath || node.name === target) matches.push({ id: node.id, type: node.type, path: fullPath });
+            visit(node.children ?? [], [...path, node.name]);
+          }
+          else {
+            const fullPath = [...path, node.name].join("/");
+            if (node.id === target || fullPath === targetPath || node.name === target) matches.push({ id: node.id, type: node.type, path: fullPath });
+          }
+        });
+        visit(payload.tree ?? []);
+        if (!matches.length) throw new Error("File not found.");
+        if (matches.length > 1) throw new Error("File name is ambiguous; use its directory path or ID.");
+        const renamed = await fetch(`/api/files/${encodeURIComponent(matches[0].id)}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fileName }),
+        });
+        const result = await renamed.json();
+        if (!renamed.ok) throw new Error(result.error ?? "Could not rename file.");
+        addOutput(`renamed ${matches[0].path} to ${result.fileName}`);
+      } catch (error) {
+        addOutput(error instanceof Error ? error.message : "Could not rename file.");
+      }
       return;
     }
 

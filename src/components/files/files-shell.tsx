@@ -11,7 +11,7 @@ import {
   SidebarMenuItem, SidebarProvider, SidebarRail, SidebarTrigger,
 } from "@/components/ui/sidebar";
 
-type FileTreeNode = { type: "folder" | "file"; name: string; children?: FileTreeNode[] };
+type FileTreeNode = { type: "folder" | "file"; id: string; name: string; children?: FileTreeNode[] };
 
 export function FilesShell({ children, username, terminalStorageKey }: { children: ReactNode; username: string | null; terminalStorageKey: string }) {
   useTheme();
@@ -53,7 +53,7 @@ export function FilesShell({ children, username, terminalStorageKey }: { childre
     const [command] = input.toLowerCase().split(/\s+/);
     const addOutput = (line: string) => setTerminalOutput((current) => [...current.slice(-38), `$ ${input}`, line]);
     if (command === "clear") { setTerminalOutput([]); return; }
-    if (command === "help") { addOutput("commands: help, pwd, ls, tree, mkdir /path, clear"); return; }
+    if (command === "help") { addOutput("commands: help, pwd, ls, tree, mkdir /path, rename <id|path|name> --to <new name>, clear"); return; }
     if (command === "pwd") { addOutput("/ibx/files"); return; }
     if (command === "mkdir") {
       const path = input.replace(/^\S+\s*/, "").trim();
@@ -64,6 +64,42 @@ export function FilesShell({ children, username, terminalStorageKey }: { childre
         if (!response.ok) throw new Error(payload.error ?? "Could not create directory.");
         addOutput(`created ${path.replace(/\/+$/, "")}/`);
       } catch (error) { addOutput(error instanceof Error ? error.message : "Could not create directory."); }
+      return;
+    }
+    if (command === "rename") {
+      const separator = input.indexOf(" --to ");
+      if (separator < 0) { addOutput("usage: rename <file id|path|name> --to <new name>"); return; }
+      const target = input.slice("rename ".length, separator).trim();
+      const targetPath = target.replace(/^\/+|\/+$/g, "");
+      const fileName = input.slice(separator + " --to ".length).trim();
+      if (!target || !fileName) { addOutput("usage: rename <file id|path|name> --to <new name>"); return; }
+      try {
+        const treeResponse = await fetch("/api/files/tree", { cache: "no-store" });
+        const treePayload = await treeResponse.json();
+        if (!treeResponse.ok) throw new Error(treePayload.error ?? "Could not load files.");
+        const tree = treePayload.tree as FileTreeNode[];
+        const matches: Array<{ id: string; type: "folder" | "file"; name: string; path: string }> = [];
+        const visit = (nodes: FileTreeNode[], path: string[] = []) => nodes.forEach((node) => {
+          if (node.type === "folder") {
+            const fullPath = [...path, node.name].join("/");
+            if (node.id === target || fullPath === targetPath || node.name === target) matches.push({ id: node.id, type: node.type, name: node.name, path: fullPath });
+            visit(node.children ?? [], [...path, node.name]);
+          }
+          else {
+            const fullPath = [...path, node.name].join("/");
+            if (node.id === target || fullPath === targetPath || node.name === target) matches.push({ id: node.id, type: node.type, name: node.name, path: fullPath });
+          }
+        });
+        visit(tree);
+        if (!matches.length) throw new Error("File not found.");
+        if (matches.length > 1) throw new Error("File name is ambiguous; use its directory path or ID.");
+        const renameResponse = await fetch(`/api/files/${encodeURIComponent(matches[0].id)}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fileName }),
+        });
+        const result = await renameResponse.json();
+        if (!renameResponse.ok) throw new Error(result.error ?? "Could not rename item.");
+        addOutput(`renamed ${matches[0].path} to ${result.fileName}`);
+      } catch (error) { addOutput(error instanceof Error ? error.message : "Could not rename file."); }
       return;
     }
     if (command === "ls" || command === "tree") {

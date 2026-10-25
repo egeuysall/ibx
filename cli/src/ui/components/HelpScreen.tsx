@@ -56,6 +56,7 @@ const sections: CommandSection[] = [
       { command: "ibx files tree", description: "Browse files and folders" },
       { command: "ibx files list --json", description: "List files and sharing state" },
       { command: "ibx files upload ./image.png", description: "Upload to the Files library" },
+      { command: 'ibx files rename <itemId> "new name.png"', description: "Rename a file or folder" },
       { command: "ibx publish <todoId>", description: "Publish page to Bri" },
     ],
   },

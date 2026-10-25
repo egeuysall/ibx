@@ -423,6 +423,16 @@ export const apiClient = {
     });
   },
 
+  async renameFile(fileId: string, fileName: string) {
+    return requestJson<
+      | { ok: true; id: string; fileName: string; url: string; publicUrl: string | null }
+      | { ok: true; id: string; fileName: string; url: null; publicUrl: null; type: "folder" }
+    >(
+      `/api/files/${encodeURIComponent(fileId)}`,
+      { method: "PATCH", body: JSON.stringify({ fileName }) },
+    );
+  },
+
   async listAttachments(parentKind: AttachmentParentKind, parentId: string) {
     const query = new URLSearchParams({ parentKind, parentId });
     return requestJson<{ attachments: AttachmentRecord[] }>(

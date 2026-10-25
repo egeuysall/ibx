@@ -48,6 +48,7 @@ ibx td
 - `ibx files list [--directory /path] [--json]`
 - `ibx files upload <path> [--folder <folderId>] [--public] [--json]`
 - `ibx files mkdir <name|/path> [--parent <folderId>] [--json]`
+- `ibx files rename <itemId> "<new name>" [--json]` (file or folder)
 - `ibx mkdir /path` (short form)
 - `ibx files move <fileId> <folderId|root>`
 - `ibx files public|private|delete <fileId>`
