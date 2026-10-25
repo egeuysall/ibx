@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/apiClient";
 import { ATTACHMENT_CONTENT_TYPES } from "@/lib/attachment-policy";
+import { buildAttachmentViewUrl } from "@/lib/attachment-url";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -14,6 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
 import { Toaster } from "@/components/ui/sonner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -43,6 +45,7 @@ export function FilesLibrary() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<FileRecord | null>(null);
+  const [preview, setPreview] = useState<FileRecord | null>(null);
   const picker = useRef<HTMLInputElement>(null);
   const operation = useRef(false);
 
@@ -114,6 +117,11 @@ export function FilesLibrary() {
     toast.success(folderId ? "File moved." : "File moved to My Drive.");
   }
 
+  function openPreview(file: FileRecord) {
+    if (safeFileUrl(buildAttachmentViewUrl(file.id, file.publicUrl))) setPreview(file);
+    else toast.error("Could not open this file.");
+  }
+
   const query = search.trim().toLowerCase();
   const visibleFolders = page?.folders.filter((folder) => folder.parentFolderId === currentFolderId) ?? [];
   const visibleFiles = page?.files.filter((file) => (file.folderId ?? null) === currentFolderId &&
@@ -130,6 +138,7 @@ export function FilesLibrary() {
     { id: "root", label: "My Drive" },
     ...(page?.folders ?? []).map((folder) => ({ id: folder.id, label: folder.path.join("/") || folder.name })),
   ];
+  const previewUrl = preview ? safeFileUrl(buildAttachmentViewUrl(preview.id, preview.publicUrl)) : null;
 
   return (
     <>
@@ -202,31 +211,34 @@ export function FilesLibrary() {
           : visibleFolders.length + visibleFiles.length === 0 ? <Empty><EmptyHeader><EmptyTitle>{error ? "Files unavailable" : query ? "No matching loaded files" : "No files yet"}</EmptyTitle>
             <EmptyDescription>{query ? "Try another search or load more files below." : "Upload a file to keep it in your library. Todo and thought attachments appear here too."}</EmptyDescription></EmptyHeader></Empty>
           : <Table aria-label="Files" aria-busy={busy} className="border-y border-border">
-            <TableHeader><TableRow><TableHead className="w-full">Name</TableHead><TableHead>Type</TableHead><TableHead>Owner</TableHead><TableHead>Modified</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
+            <TableHeader><TableRow>
+              <TableHead className="w-full text-xs font-normal text-muted-foreground">name</TableHead>
+              <TableHead className="text-xs font-normal text-muted-foreground">type</TableHead>
+              <TableHead className="text-xs font-normal text-muted-foreground">modified</TableHead>
+              <TableHead className="text-xs font-normal text-muted-foreground">public</TableHead>
+              <TableHead className="text-right text-xs font-normal text-muted-foreground">actions</TableHead>
+            </TableRow></TableHeader>
             <TableBody>
               {visibleFolders.map((folder) => <TableRow key={folder.id} className={dropTargetId === folder.id ? "bg-accent" : ""}
                 onDragOver={(event) => { event.preventDefault(); setDropTargetId(folder.id); }} onDragLeave={() => setDropTargetId(null)}
                 onDrop={(event) => { event.preventDefault(); setDropTargetId(null); const id = event.dataTransfer.getData("text/plain"); const file = page?.files.find((item) => item.id === id); if (file) void run(() => moveFile(file, folder.id)); }}>
                 <TableCell><button type="button" className="flex items-center gap-2 text-left hover:underline" onClick={() => setCurrentFolderId(folder.id)}><span aria-hidden="true" className="w-4 shrink-0 text-center font-mono">/</span>{folder.name}</button></TableCell>
-                <TableCell>Folder</TableCell><TableCell>—</TableCell><TableCell>—</TableCell><TableCell className="text-right text-xs text-muted-foreground">Drop files here</TableCell>
+                <TableCell className="text-xs text-muted-foreground">folder</TableCell><TableCell>—</TableCell><TableCell>—</TableCell><TableCell />
               </TableRow>)}
               {visibleFiles.map((file) => {
-                const ownerUrl = safeFileUrl(file.url);
                 const publicUrl = file.visibility === "public" ? safeFileUrl(file.publicUrl) : null;
                 const selectedFolder = folderOptions.find((option) => option.id === (file.folderId ?? "root")) ?? folderOptions[0];
                 return <TableRow key={file.id} draggable onDragStart={(event) => { event.dataTransfer.setData("text/plain", file.id); event.dataTransfer.effectAllowed = "move"; }}>
-                  <TableCell className="max-w-0"><div className="flex min-w-0 items-center gap-2"><span aria-hidden="true" className="w-4 shrink-0 text-center font-mono">-</span><span className="truncate" title={file.fileName}>{file.fileName}</span></div></TableCell>
+                  <TableCell className="max-w-0"><div className="flex min-w-0 items-center gap-2"><span aria-hidden="true" className="w-4 shrink-0 text-center font-mono">-</span><button type="button" className="min-w-0 truncate text-left hover:underline" title={file.fileName} onClick={() => openPreview(file)}>{file.fileName}</button></div></TableCell>
                   <TableCell><Badge variant="secondary">{fileTypeLabel(file.contentType)}</Badge><span className="sr-only">{file.size < 1024 * 1024 ? `${Math.ceil(file.size / 1024)} KB` : `${(file.size / 1024 / 1024).toFixed(1)} MB`}</span></TableCell>
-                  <TableCell className="whitespace-nowrap text-xs text-muted-foreground">{file.parentKind === "file" ? "My Drive" : `${file.parentKind} attachment`}</TableCell>
                   <TableCell><time className="whitespace-nowrap text-xs text-muted-foreground" dateTime={new Date(file.createdAt).toISOString()}>{new Date(file.createdAt).toLocaleDateString()}</time></TableCell>
+                  <TableCell><div className="flex items-center gap-2 text-xs text-muted-foreground"><Switch checked={file.visibility === "public"} disabled={busy} aria-label={`Public access for ${file.fileName}`} onCheckedChange={(checked) => void run(() => changeVisibility(file, checked))} /><span>{file.visibility}</span></div></TableCell>
                   <TableCell><div className="flex items-center justify-end gap-2">
                     <Combobox items={folderOptions} value={selectedFolder} itemToStringValue={(option) => option.label}
                       onValueChange={(option) => { if (option) void run(() => moveFile(file, option.id === "root" ? null : option.id)); }}>
-                      <ComboboxInput aria-label={`Move ${file.fileName} to folder`} disabled={busy} className="h-8 max-w-32" />
-                      <ComboboxContent><ComboboxEmpty>No folders found.</ComboboxEmpty><ComboboxList>{(option) => <ComboboxItem key={option.id} value={option}>{option.label}</ComboboxItem>}</ComboboxList></ComboboxContent>
+                      <ComboboxInput aria-label={`Move ${file.fileName} to folder`} disabled={busy} className="h-8 w-40" />
+                      <ComboboxContent className="min-w-44 border border-border"><ComboboxEmpty>No folders found.</ComboboxEmpty><ComboboxList>{(option) => <ComboboxItem className="whitespace-nowrap" key={option.id} value={option}>{option.label}</ComboboxItem>}</ComboboxList></ComboboxContent>
                     </Combobox>
-                    <Switch checked={file.visibility === "public"} disabled={busy} aria-label={`Public access for ${file.fileName}`} onCheckedChange={(checked) => void run(() => changeVisibility(file, checked))} />
-                    {ownerUrl && <Button variant="outline" size="sm" render={<a href={ownerUrl} target="_blank" rel="noopener noreferrer" />} aria-label={`Open ${file.fileName}`}>open</Button>}
                     {publicUrl && <Button variant="outline" size="sm" disabled={busy} onClick={() => void run(async () => { await navigator.clipboard.writeText(new URL(publicUrl, window.location.origin).href); toast.success("Public link copied."); })}>copy public link</Button>}
                     <Button variant="ghost" size="sm" disabled={busy} aria-label={`Delete ${file.fileName}`} onClick={() => setPendingDelete(file)}>delete</Button>
                   </div></TableCell>
@@ -236,6 +248,31 @@ export function FilesLibrary() {
           </Table>}
         {page && !page.isDone && page.cursor && <Button variant="outline" className="self-start" disabled={busy} onClick={() => void run(loadMore)}>load more</Button>}
       </FilesShell>
+      <Dialog open={preview !== null} onOpenChange={(open) => { if (!open) setPreview(null); }}>
+        <DialogContent className="max-w-[min(56rem,calc(100%-2rem))] gap-3 p-3 sm:max-w-3xl">
+          <DialogHeader className="pe-8">
+            <DialogTitle className="truncate text-sm">{preview?.fileName ?? "File"}</DialogTitle>
+            <DialogDescription>
+              {preview ? <>{fileTypeLabel(preview.contentType)} / {preview.size < 1024 * 1024 ? `${Math.ceil(preview.size / 1024)} KB` : `${(preview.size / 1024 / 1024).toFixed(1)} MB`}
+                {preview.publicUrl && <> / <a href={preview.publicUrl} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">public link</a></>}</> : null}
+            </DialogDescription>
+          </DialogHeader>
+          {preview && previewUrl && <div className="overflow-hidden rounded-lg border border-border bg-background">
+            {preview.contentType.startsWith("image/") ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={previewUrl} alt={preview.fileName} className="max-h-[70vh] w-full object-contain" />
+            ) : preview.contentType.startsWith("video/") ? (
+              <video src={previewUrl} controls playsInline preload="metadata" aria-label={preview.fileName} className="max-h-[70vh] w-full" />
+            ) : preview.contentType.startsWith("audio/") ? (
+              <audio src={previewUrl} controls preload="metadata" aria-label={preview.fileName} className="w-full" />
+            ) : preview.contentType === "application/pdf" ? (
+              <iframe src={previewUrl} title={preview.fileName} className="h-[70vh] w-full" />
+            ) : (
+              <a href={previewUrl} target="_blank" rel="noopener noreferrer" className="block p-4 underline">open file</a>
+            )}
+          </div>}
+        </DialogContent>
+      </Dialog>
       <AlertDialog open={pendingDelete !== null} onOpenChange={(open) => { if (!open && !busy) setPendingDelete(null); }}>
         <AlertDialogContent size="sm">
           <AlertDialogHeader><AlertDialogTitle>delete file?</AlertDialogTitle>

@@ -1,7 +1,6 @@
 "use client";
 
 import type { JSONContent } from "@tiptap/core";
-import { useUser } from "@clerk/nextjs";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -35,6 +34,7 @@ import { useOfflineStatus } from "@/hooks/useOfflineStatus";
 import { useTheme } from "@/hooks/useTheme";
 import { ApiError, apiClient } from "@/lib/apiClient";
 import { ATTACHMENT_CONTENT_TYPES, MAX_ATTACHMENT_BYTES } from "@/lib/attachment-policy";
+import { buildAttachmentViewUrl } from "@/lib/attachment-url";
 import { getCachedTodos, setCachedTodos } from "@/lib/indexedDb";
 import {
   enqueueOfflineOperation,
@@ -363,25 +363,6 @@ function isImageAttachment(attachment: AttachmentRecord) {
   return attachment.contentType.toLowerCase().startsWith("image/");
 }
 
-function getAttachmentViewUrl(
-  attachment: AttachmentRecord,
-  username: string | null,
-) {
-  if (attachment.publicUrl) {
-    return attachment.publicUrl;
-  }
-
-  if (username) {
-    return `/${encodeURIComponent(username)}/${encodeURIComponent(attachment.fileName)}`;
-  }
-
-  if (attachment.url) {
-    return attachment.url;
-  }
-
-  return `/api/attachments/${encodeURIComponent(attachment.id)}/file`;
-}
-
 function getAttachmentKindLabel(attachment: AttachmentRecord) {
   const contentType = attachment.contentType.toLowerCase();
   if (contentType.includes("pdf")) {
@@ -408,8 +389,6 @@ function getAttachmentKindLabel(attachment: AttachmentRecord) {
 }
 
 export function TodoPageEditor({ todoId }: TodoPageEditorProps) {
-  const { user } = useUser();
-  const attachmentUsername = user?.username ?? null;
   const router = useRouter();
   const pathname = usePathname();
   const isOnline = useOfflineStatus();
@@ -1175,7 +1154,7 @@ export function TodoPageEditor({ todoId }: TodoPageEditorProps) {
       return;
     }
 
-    const url = getAttachmentViewUrl(attachment, attachmentUsername);
+    const url = buildAttachmentViewUrl(attachment.id, attachment.publicUrl);
     setAttachmentPreview({ attachment, url, isBlobUrl: false });
   };
 
@@ -1602,7 +1581,7 @@ export function TodoPageEditor({ todoId }: TodoPageEditorProps) {
                             !attachment.id.startsWith("local-attachment-") ? (
                               // eslint-disable-next-line @next/next/no-img-element
                               <img
-                                src={getAttachmentViewUrl(attachment, attachmentUsername)}
+                                src={buildAttachmentViewUrl(attachment.id, attachment.publicUrl)}
                                 alt=""
                                 className="size-full object-cover"
                                 loading="lazy"
@@ -1622,9 +1601,9 @@ export function TodoPageEditor({ todoId }: TodoPageEditorProps) {
                             <div className="text-xs text-muted-foreground">
                               {getAttachmentKindLabel(attachment)} /{" "}
                               {formatBytes(attachment.size)}
-                              {!attachment.id.startsWith("local-attachment-") && (attachment.publicUrl || attachmentUsername) ? (
+                              {!attachment.id.startsWith("local-attachment-") && attachment.publicUrl ? (
                                 <> / <a
-                                  href={getAttachmentViewUrl(attachment, attachmentUsername)}
+                                  href={attachment.publicUrl}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="underline underline-offset-2"
@@ -1681,8 +1660,8 @@ export function TodoPageEditor({ todoId }: TodoPageEditorProps) {
               {attachmentPreview ? (
                 <>
                   {getAttachmentKindLabel(attachmentPreview.attachment)} / {formatBytes(attachmentPreview.attachment.size)}
-                  {!attachmentPreview.isBlobUrl && (attachmentPreview.attachment.publicUrl || attachmentUsername) ? (
-                    <> / <a href={attachmentPreview.url} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">public link</a></>
+                  {!attachmentPreview.isBlobUrl && attachmentPreview.attachment.publicUrl ? (
+                    <> / <a href={attachmentPreview.attachment.publicUrl} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">public link</a></>
                   ) : null}
                 </>
               ) : null}

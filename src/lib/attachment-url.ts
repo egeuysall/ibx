@@ -12,3 +12,7 @@ export function buildAttachmentUrl(
   const path = [...folderPath, fileName].map(encodeURIComponent).join("/");
   return `${origin}/${encodeURIComponent(username)}/${path}`;
 }
+
+export function buildAttachmentViewUrl(attachmentId: string, publicUrl?: string | null) {
+  return publicUrl ?? `/api/attachments/${encodeURIComponent(attachmentId)}/file`;
+}
