@@ -143,28 +143,25 @@ export function FilesLibrary({ terminalStorageKey }: { terminalStorageKey: strin
   return (
     <>
       <FilesShell username={page?.username ?? null} terminalStorageKey={terminalStorageKey}>
-        <section className="flex flex-wrap items-start justify-between gap-3" aria-label="Upload files">
-          <Button variant="outline" disabled={busy || loading} onClick={() => picker.current?.click()}>upload file</Button>
-          <input ref={picker} className="sr-only" tabIndex={-1} aria-label="Choose a file to upload" type="file"
-            accept={ATTACHMENT_CONTENT_TYPES.join(",")} disabled={busy || loading}
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              event.target.value = "";
-              if (!file) return;
-              const invalid = uploadError(file);
-              if (invalid) { toast.error(invalid); return; }
-              void run(async () => {
-                const uploaded = await apiClient.uploadAttachmentFile({ parentKind: "file", parentId: "library", file });
-                if (currentFolderId) {
-                  await request(`/api/files/${encodeURIComponent(uploaded.id)}`, {
-                    method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ folderId: currentFolderId }),
-                  });
-                }
-                toast.success("File uploaded privately.");
-                await refresh((page?.files.length ?? 0) + 1);
-              });
-            }} />
-        </section>
+        <input ref={picker} className="sr-only" tabIndex={-1} aria-label="Choose a file to upload" type="file"
+          accept={ATTACHMENT_CONTENT_TYPES.join(",")} disabled={busy || loading}
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = "";
+            if (!file) return;
+            const invalid = uploadError(file);
+            if (invalid) { toast.error(invalid); return; }
+            void run(async () => {
+              const uploaded = await apiClient.uploadAttachmentFile({ parentKind: "file", parentId: "library", file });
+              if (currentFolderId) {
+                await request(`/api/files/${encodeURIComponent(uploaded.id)}`, {
+                  method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ folderId: currentFolderId }),
+                });
+              }
+              toast.success("File uploaded privately.");
+              await refresh((page?.files.length ?? 0) + 1);
+            });
+          }} />
         <div className="flex flex-wrap items-center justify-between gap-3" aria-label="File folders">
           <nav aria-label="Folder location" className="flex min-w-0 flex-wrap items-center gap-1 text-sm">
             <button type="button" className="text-sm text-foreground hover:underline" onClick={() => setCurrentFolderId(null)}>drive</button>
@@ -173,6 +170,8 @@ export function FilesLibrary({ terminalStorageKey }: { terminalStorageKey: strin
               <Button size="sm" variant={folder.id === currentFolderId ? "secondary" : "ghost"} onClick={() => setCurrentFolderId(folder.id)}>{folder.name}</Button>
             </span>)}
           </nav>
+          <div className="flex items-center gap-2">
+          <Button variant="outline" disabled={busy || loading} onClick={() => picker.current?.click()}>upload file</Button>
           <form className="flex items-center gap-2" onSubmit={(event) => {
             event.preventDefault();
             void run(async () => {
@@ -189,6 +188,7 @@ export function FilesLibrary({ terminalStorageKey }: { terminalStorageKey: strin
               onChange={(event) => setNewFolder(event.target.value)} disabled={busy} className="h-8 w-36" />
             <Button type="submit" size="sm" variant="outline" disabled={busy || !newFolder.trim()}>create folder</Button>
           </form>
+          </div>
         </div>
         <FieldGroup>
           <Field>
@@ -205,7 +205,8 @@ export function FilesLibrary({ terminalStorageKey }: { terminalStorageKey: strin
         {loading ? <div className="flex flex-col gap-3" aria-hidden><Skeleton className="h-20 w-full" /><Skeleton className="h-20 w-full" /></div>
           : visibleFolders.length + visibleFiles.length === 0 ? <Empty><EmptyHeader><EmptyTitle>{error ? "Files unavailable" : query ? "No matching loaded files" : "No files yet"}</EmptyTitle>
             <EmptyDescription>{query ? "Try another search or load more files below." : "Upload a file to keep it in your library. Todo and thought attachments appear here too."}</EmptyDescription></EmptyHeader></Empty>
-          : <Table aria-label="Files" aria-busy={busy} className="-mx-4 w-[calc(100%+2rem)] border-y border-border md:-mx-6 md:w-[calc(100%+3rem)]">
+          : <div className="-mx-4 w-[calc(100%+2rem)] md:-mx-6 md:w-[calc(100%+3rem)]">
+            <Table aria-label="Files" aria-busy={busy} className="border-y border-border">
             <TableHeader><TableRow>
               <TableHead className="w-full text-xs font-normal text-muted-foreground">name</TableHead>
               <TableHead className="text-xs font-normal text-muted-foreground">type</TableHead>
@@ -240,7 +241,8 @@ export function FilesLibrary({ terminalStorageKey }: { terminalStorageKey: strin
                 </TableRow>;
               })}
             </TableBody>
-          </Table>}
+            </Table>
+          </div>}
         {page && !page.isDone && page.cursor && <Button variant="outline" className="self-start" disabled={busy} onClick={() => void run(loadMore)}>load more</Button>}
       </FilesShell>
       <Dialog open={preview !== null} onOpenChange={(open) => { if (!open) setPreview(null); }}>
