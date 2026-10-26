@@ -732,7 +732,7 @@ export function SimpleEditor({
               align="start"
               side="bottom"
               sideOffset={4}
-              className="w-80 [scrollbar-width:thin] [scrollbar-color:var(--muted-foreground)_transparent] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/50"
+              className="w-[min(42rem,calc(100vw-2rem))] [scrollbar-width:thin] [scrollbar-color:var(--muted-foreground)_transparent] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/50"
               finalFocus={() => editor.view.dom}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && matchingPublicFiles[0]) {
@@ -755,8 +755,8 @@ export function SimpleEditor({
                   : filesError ? <DropdownMenuItem disabled>could not load public files</DropdownMenuItem>
                     : matchingPublicFiles.length ? matchingPublicFiles.map((file) => (
                       <DropdownMenuItem key={file.publicUrl} onMouseDown={(event) => event.preventDefault()} onClick={() => insertPublicFile(file)}>
-                        <span className="min-w-0 flex-1 truncate">{file.fileName}</span>
-                        <span className="max-w-32 truncate text-muted-foreground">{file.folderPath.join("/") || "drive"}</span>
+                        <span className="min-w-0 flex-1 whitespace-normal break-all">{file.fileName}</span>
+                        <span className="max-w-[45%] shrink-0 whitespace-normal break-all text-right text-muted-foreground">{file.folderPath.join("/") || "drive"}</span>
                       </DropdownMenuItem>
                     )) : <DropdownMenuItem disabled>no matching public files</DropdownMenuItem>}
                 {filesTruncated && <DropdownMenuItem disabled>showing first 5,000 files</DropdownMenuItem>}
