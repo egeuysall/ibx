@@ -134,7 +134,7 @@ export default async function ProfilePage({ params, searchParams }: {
             {childFolders.map((folder) => <Link key={folder} href={folderHref(username, [...currentPath, folder], notePage)} className="flex items-center gap-3 px-3 py-3 text-sm no-underline transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               <span aria-hidden="true" className="w-4 shrink-0 text-center font-mono">/</span><span>{folder}</span>
             </Link>)}
-            {visibleFiles.map((file) => <PublicFileViewer key={file._id} fileName={file.fileName} contentType={file.contentType} href={fileHref(file)} className="flex w-full items-center gap-3 px-3 py-3 text-left text-sm transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />)}
+            {visibleFiles.map((file) => <PublicFileViewer key={file._id} fileName={file.fileName} contentType={file.contentType} href={fileHref(file)} className="px-3 py-3 text-sm transition-colors hover:bg-muted/60" />)}
           </div> : <Empty><EmptyHeader><EmptyTitle>{files.length ? "folder is empty" : "no public files yet"}</EmptyTitle><EmptyDescription>{files.length ? "Choose another folder." : "Only files shared publicly appear here."}</EmptyDescription></EmptyHeader></Empty>}
         </section>
 

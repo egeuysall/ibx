@@ -1,20 +1,28 @@
 import { describe, expect, it } from "vitest";
 import { runPublicFileCommand, type PublicFile } from "./public-files-terminal";
 
-const files: PublicFile[] = [{
-  fileName: "image.png",
-  folderPath: ["content", "2026", "10", "25"],
-  href: "/egeuysall/content/2026/10/25/image.png",
-  contentType: "image/png",
-  size: 1024,
-}];
+const files: PublicFile[] = [
+  {
+    fileName: "image.png",
+    folderPath: ["content", "2026", "10", "25"],
+    href: "/egeuysall/content/2026/10/25/image.png",
+    contentType: "image/png",
+    size: 1024,
+  },
+  { fileName: "cover.jpg", folderPath: [], href: "/egeuysall/cover.jpg", contentType: "image/jpeg", size: 1024 },
+];
 
 describe("public files terminal", () => {
   it("shows nested directories in the read-only tree output", () => {
     expect(runPublicFileCommand("tree", "egeuysall", files)).toEqual([
       { text: "$ tree" },
       { text: "drive/" },
-      { text: "├── content/2026/10/25/image.png", file: files[0] },
+      { text: "├── content/" },
+      { text: "│   └── 2026/" },
+      { text: "│       └── 10/" },
+      { text: "│           └── 25/" },
+      { text: "│               └── image.png", file: files[0] },
+      { text: "└── cover.jpg", file: files[1] },
     ]);
   });
 
