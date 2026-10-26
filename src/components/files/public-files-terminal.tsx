@@ -30,7 +30,7 @@ export function PublicFilesTerminal({ username, files }: { username: string; fil
       </div>
       <form onSubmit={runCommand} className="flex items-center gap-2 border-t px-3 py-2 font-mono text-xs">
         <span aria-hidden="true">$</span>
-        <input aria-label="Public terminal command" value={input} onChange={(event) => setInput(event.target.value)} maxLength={32} placeholder="help, ls, tree" className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground" />
+        <input aria-label="Public terminal command" value={input} onChange={(event) => setInput(event.target.value)} maxLength={240} placeholder="help, ls, tree, open <file>" className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground" />
       </form>
     </section>
   );

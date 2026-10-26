@@ -61,6 +61,7 @@
     "convex-helpers": "^0.1.129",
     "date-fns": "^4.4.0",
     "dexie": "^4.4.4",
+    "facehash": "^0.1.0",
     "flags": "^4.2.0",
     "ink": "^7.1.0",
     "katex": "^0.17.0",

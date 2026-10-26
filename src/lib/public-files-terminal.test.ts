@@ -23,4 +23,11 @@ describe("public files terminal", () => {
     expect(runPublicFileCommand("clear", "egeuysall", files)).toEqual([]);
     expect(runPublicFileCommand("rm image.png", "egeuysall", files)[1]).toEqual({ text: "unknown command; type help" });
   });
+
+  it("opens a public file by name or directory path and handles ambiguous names", () => {
+    expect(runPublicFileCommand("open image.png", "egeuysall", files)[1]).toEqual({ text: "content/2026/10/25/image.png", file: files[0] });
+    expect(runPublicFileCommand("open drive/content/2026/10/25/image.png", "egeuysall", files)[1]).toEqual({ text: "content/2026/10/25/image.png", file: files[0] });
+    const duplicate = { ...files[0], folderPath: ["other"] };
+    expect(runPublicFileCommand("open image.png", "egeuysall", [...files, duplicate])[1]).toEqual({ text: "multiple files match; open one by path:" });
+  });
 });

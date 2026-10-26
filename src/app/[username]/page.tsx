@@ -5,6 +5,8 @@ import { api, convex } from "@/lib/convex-server";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
 import { PublicFilesTerminal } from "@/components/files/public-files-terminal";
+import { PublicProfileAvatar } from "@/components/public-profile-avatar";
+import { fileTypeLabel } from "@/components/files/file-utils";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Public files · ibx", description: "Public files and notes shared on ibx." };
@@ -28,9 +30,7 @@ export default async function ProfilePage({ params, searchParams }: {
     <section className="w-full animate-enter px-4 py-6 md:px-8 md:py-8">
       <div className="mx-auto w-full max-w-155 space-y-8">
         <header className="flex flex-col items-start gap-3">
-          <div aria-hidden="true" className="flex size-10 items-center justify-center rounded-sm border border-border bg-muted text-sm font-semibold text-muted-foreground">
-            {username.slice(0, 1).toUpperCase()}
-          </div>
+          <PublicProfileAvatar name={username} />
           <div className="space-y-2">
             <h1 className="break-all text-base font-semibold">@{username}</h1>
             <p className="text-xs text-muted-foreground">{notes.length} published notes · public files</p>
@@ -39,6 +39,21 @@ export default async function ProfilePage({ params, searchParams }: {
 
         <section className="space-y-3" aria-labelledby="public-files-title">
           <h2 id="public-files-title" className="text-xs text-muted-foreground">Published files</h2>
+          {files.page.length ? <div className="divide-y divide-border border-y border-border">
+            {files.page.map((file) => {
+              const href = `/${encodeURIComponent(username)}/${[...file.folderPath, file.fileName].map(encodeURIComponent).join("/")}`;
+              return <a key={file._id} href={href} target="_blank" rel="noreferrer" className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 px-3 py-3 no-underline transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:grid-cols-[minmax(0,1fr)_8rem_5rem]">
+                <span className="min-w-0 truncate text-sm text-foreground">{file.fileName}</span>
+                <span className="col-start-1 truncate text-[11px] text-muted-foreground sm:col-start-2" title={`drive/${file.folderPath.join("/")}`}>{file.folderPath.length ? `drive/${file.folderPath.join("/")}` : "drive"}</span>
+                <span className="row-span-2 text-right text-xs text-muted-foreground sm:row-span-1">{fileTypeLabel(file.contentType)} · {file.size >= 1024 * 1024 ? `${(file.size / 1024 / 1024).toFixed(1)} MB` : `${Math.ceil(file.size / 1024)} KB`}</span>
+              </a>;
+            })}
+          </div> : <Empty><EmptyHeader><EmptyTitle>no public files yet</EmptyTitle><EmptyDescription>Only files shared publicly appear here.</EmptyDescription></EmptyHeader></Empty>}
+          {!files.isDone && <Button variant="outline" render={<Link href={`/${encodeURIComponent(username)}?cursor=${encodeURIComponent(files.continueCursor)}`} />}>next files</Button>}
+        </section>
+
+        <section className="space-y-3" aria-labelledby="public-terminal-title">
+          <h2 id="public-terminal-title" className="text-xs text-muted-foreground">Terminal</h2>
           <PublicFilesTerminal username={username} files={files.page.map((file) => ({
             fileName: file.fileName,
             folderPath: file.folderPath,
@@ -46,8 +61,6 @@ export default async function ProfilePage({ params, searchParams }: {
             contentType: file.contentType,
             size: file.size,
           }))} />
-          {!files.page.length && <Empty><EmptyHeader><EmptyTitle>no public files yet</EmptyTitle><EmptyDescription>Only files shared publicly appear here.</EmptyDescription></EmptyHeader></Empty>}
-          {!files.isDone && <Button variant="outline" render={<Link href={`/${encodeURIComponent(username)}?cursor=${encodeURIComponent(files.continueCursor)}`} />}>next files</Button>}
         </section>
 
         <section className="space-y-3" aria-labelledby="public-notes-title">
