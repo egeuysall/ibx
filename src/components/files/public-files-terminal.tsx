@@ -28,7 +28,6 @@ export function PublicFilesTerminal({ username, files }: { username: string; fil
         <div role="log" aria-live="polite" className="whitespace-pre-wrap break-all">
           {lines.map((line, index) => <div key={`${index}:${line.text}`}>
             {line.file ? <a href={line.file.href} target="_blank" rel="noreferrer" className="text-foreground no-underline transition-opacity hover:opacity-70">{line.text}</a> : line.text}
-            {line.file && <span className="text-muted-foreground"> · {line.file.contentType.split("/")[1]} · {line.file.size >= 1024 * 1024 ? `${(line.file.size / 1024 / 1024).toFixed(1)} MB` : `${Math.ceil(line.file.size / 1024)} KB`}</span>}
           </div>)}
         </div>
       </div>
