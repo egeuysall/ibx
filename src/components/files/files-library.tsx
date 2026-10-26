@@ -185,8 +185,8 @@ export function FilesLibrary({ terminalStorageKey }: { terminalStorageKey: strin
   }
 
   const query = search.trim().toLowerCase();
-  const visibleFolders = page?.folders.filter((folder) => folder.parentFolderId === currentFolderId) ?? [];
-  const visibleFiles = page?.files.filter((file) => (file.folderId ?? null) === currentFolderId &&
+  const visibleFolders = query ? [] : page?.folders.filter((folder) => folder.parentFolderId === currentFolderId) ?? [];
+  const visibleFiles = page?.files.filter((file) => (query || (file.folderId ?? null) === currentFolderId) &&
     `${file.fileName} ${fileTypeLabel(file.contentType)} ${file.contentType}`.toLowerCase().includes(query)) ?? [];
   const folderById = new Map((page?.folders ?? []).map((folder) => [folder.id, folder]));
   const breadcrumbs: FilesPage["folders"] = [];
