@@ -737,6 +737,15 @@ paths:
                 folderId:
                   type: string
                   pattern: '^[a-z0-9]{20,64}$'
+                directory:
+                  type: string
+                  maxLength: 1400
+                  description: Owner-scoped path to create or reuse and attach the upload to; mutually exclusive with folderId.
+                  example: /content/2026/10/25
+                visibility:
+                  type: string
+                  enum: [public, private]
+                  description: Defaults to private. Set public to create the attachment with its public URL in one completion request.
                 fileName:
                   type: string
                   minLength: 1

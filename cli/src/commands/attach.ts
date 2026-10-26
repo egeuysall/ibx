@@ -85,14 +85,12 @@ export async function runAttachCommand(parsed: ParsedArgs) {
     });
   }
 
-  const destination = directory ? await requestJson<{ folder: { id: string; name: string } }>(
-    config, "/api/files", { method: "POST", body: JSON.stringify({ path: directory }) }, { action: "create attachment directory" },
-  ) : null;
-
   if (todoId) validateAttachmentSize(fileStats.size, 30 * 1024 * 1024);
   const contentType = inferContentType(filePath);
   const metadata: AttachmentMetadata = {
-    parentKind: todoId ? "todo" : "file", parentId: todoId ?? "library", ...(destination ? { folderId: destination.folder.id } : {}), fileName: basename(filePath), contentType, size: fileStats.size,
+    parentKind: todoId ? "todo" : "file", parentId: todoId ?? "library",
+    ...(directory ? { directory } : {}), ...(makePublic ? { visibility: "public" } : {}),
+    fileName: basename(filePath), contentType, size: fileStats.size,
   };
   const upload = await requestJson<AttachmentUpload>(
     config,
@@ -108,7 +106,7 @@ export async function runAttachCommand(parsed: ParsedArgs) {
   const fileBytes = await readFile(filePath);
   const completion = await uploadAttachmentBytes(upload, metadata, fileBytes);
 
-  let result = await requestJson<{
+  const result = await requestJson<{
     ok: true;
     id: string;
     fileName: string;
@@ -125,25 +123,10 @@ export async function runAttachCommand(parsed: ParsedArgs) {
     { action: "save attachment metadata" },
   );
 
-  if (makePublic) {
-    try {
-      await requestJson(config, `/api/files/${encodeURIComponent(result.id)}`, {
-        method: "PATCH", body: JSON.stringify({ visibility: "public" }),
-      }, { action: "make uploaded attachment public" });
-      const resolved = await requestJson<Pick<AttachmentResult, "url" | "publicUrl" | "visibility">>(
-        config, `/api/attachments/${encodeURIComponent(result.id)}/url`, { method: "GET" },
-        { action: "resolve public attachment URL" },
-      );
-      if (resolved.visibility !== "public" || !resolved.publicUrl) {
-        throw new CliError("The server did not return a public file URL.", { code: "ATTACH_PUBLIC_URL_MISSING" });
-      }
-      result = { ...result, ...resolved, url: resolved.publicUrl };
-    } catch (error) {
-      throw new CliError(`File uploaded (${result.id}), but public link could not be confirmed: ${error instanceof Error ? error.message : "unknown error"}`, {
-        exitCode: error instanceof CliError ? error.exitCode : EXIT_CODE.UNKNOWN,
-        code: "ATTACH_PUBLIC_FAILED", details: { id: result.id, uploaded: true },
-      });
-    }
+  if (makePublic && (result.visibility !== "public" || !result.publicUrl)) {
+    throw new CliError(`File uploaded (${result.id}), but the server did not return a public link.`, {
+      exitCode: EXIT_CODE.UNKNOWN, code: "ATTACH_PUBLIC_URL_MISSING", details: { id: result.id, uploaded: true },
+    });
   }
 
   if (outputJson) {

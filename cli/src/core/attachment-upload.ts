@@ -21,6 +21,8 @@ export type AttachmentMetadata = {
   parentKind: "todo" | "file";
   parentId: string;
   folderId?: string;
+  directory?: string;
+  visibility?: "public" | "private";
   fileName: string;
   contentType: string;
   size: number;

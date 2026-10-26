@@ -123,7 +123,7 @@ The **externalId** is the client-owned reconciliation key. Sync accepts pending,
 
 **Files** belong to a todo, thought, or the owner's Files library. Uploading, saving metadata, changing visibility, and deleting require write permission; listing and resolving files require read permission. Cookie-authenticated writes also require the same-origin CSRF signal described above. File bytes are stored in private Cloudflare R2; Convex stores ownership and metadata.
 
-1. **Request an upload URL** with authenticated `POST /api/attachments/upload-url`, sending `parentKind`, `parentId`, `fileName`, `contentType`, and `size` as JSON. Use `parentKind: "file"` and `parentId: "library"` for the Files library. The response contains a short-lived R2 `uploadUrl`, `method: "PUT"`, required `headers`, an opaque `uploadToken`, and `limits`.
+1. **Request an upload URL** with authenticated `POST /api/attachments/upload-url`, sending `parentKind`, `parentId`, `fileName`, `contentType`, and `size` as JSON. Use `parentKind: "file"` and `parentId: "library"` for the Files library. Optional `directory` creates or reuses a path (for example `/content/2026/10/25`) and places the file there; it cannot be combined with `folderId`. Set `visibility: "public"` to create a public file directly, avoiding separate visibility and URL-resolution requests. The response contains a short-lived R2 `uploadUrl`, `method: "PUT"`, required `headers`, an opaque `uploadToken`, and `limits`.
 2. **Upload raw bytes** with `PUT` to the returned URL using the returned headers. Do not use multipart form data or send your IBX Bearer key/session cookies to R2.
 3. **Complete the upload** with authenticated `POST /api/attachments` and `{ "uploadToken": "<returned token>" }`.
 

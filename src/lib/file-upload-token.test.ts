@@ -16,10 +16,14 @@ describe("file upload tickets", () => {
     expect(() => verifyUploadTicket(`${token}x`, "clerk:a", secret)).toThrow();
     expect(() => verifyUploadTicket(signUploadTicket({ ...ticket, expiresAt: 0 }, secret), "clerk:a", secret)).toThrow();
     expect(() => verifyUploadTicket(signUploadTicket({ ...ticket, r2Key: `${ownerStoragePrefix("clerk:b")}12345678-1234-1234-1234-123456789abc` }, secret), "clerk:a", secret)).toThrow();
+    const publicTicket = { ...ticket, visibility: "public" as const };
+    expect(verifyUploadTicket(signUploadTicket(publicTicket, secret), "clerk:a", secret)).toEqual(publicTicket);
   });
   test("rejects executable MIME types, empty files and oversized uploads", () => {
     expect(uploadMetadataSchema.safeParse({ ...ticket, size: 500 * 1024 * 1024 }).success).toBe(true);
     expect(uploadMetadataSchema.safeParse({ ...ticket, parentKind: "file", folderId: "abcdefghijklmnopqrst", fileName: "image.svg", contentType: "image/svg+xml" }).success).toBe(true);
+    expect(uploadMetadataSchema.safeParse({ ...ticket, directory: "/content/2026/10/25", visibility: "public" }).success).toBe(true);
+    expect(uploadMetadataSchema.safeParse({ ...ticket, folderId: "abcdefghijklmnopqrst", directory: "/content" }).success).toBe(false);
     for (const delta of [{ size: 0 }, { size: 500 * 1024 * 1024 + 1 }, { contentType: "text/html" }]) {
       expect(uploadMetadataSchema.safeParse({ ...ticket, ...delta }).success).toBe(false);
     }

@@ -92,6 +92,11 @@ describe("attachment privacy", () => {
     expect(files).toHaveLength(1);
     expect(files[0]).not.toHaveProperty("ownerKey");
     expect(files[0]).not.toHaveProperty("r2Key");
+    const createdPublic = await t.mutation(api.attachments.createR2Attachment, {
+      ...upload, fileName: "explicit-public.png", contentType: "image/png", r2Key: "objects/explicit-public", visibility: "public",
+    });
+    expect(await t.query(api.attachments.getAttachmentDetails, { ...auth, attachmentId: createdPublic.id }))
+      .toMatchObject({ visibility: "public", fileName: "explicit-public.png" });
   });
 
   it("makes R2 completion idempotent and reserves even deleted filenames and keys", async () => {

@@ -6,12 +6,16 @@ const uploadMetadataShape = z.object({
   parentKind: z.enum(["todo", "thought", "file"]),
   parentId: z.string().trim().min(1).max(128),
   folderId: z.string().regex(/^[a-z0-9]{20,64}$/).optional(),
+  directory: z.string().trim().min(1).max(1400).optional(),
+  visibility: z.enum(["public", "private"]).optional(),
   fileName: z.string().trim().min(1).max(180),
   contentType: z.string().refine((value) => ATTACHMENT_CONTENT_TYPES.includes(value)),
   size: z.number().int().min(1),
 });
-export const uploadMetadataSchema = uploadMetadataShape.refine((input) => isAllowedAttachmentSize(input.size, input.parentKind), { path: ["size"], message: "File exceeds the upload size limit." });
-const ticketSchema = uploadMetadataShape.extend({
+export const uploadMetadataSchema = uploadMetadataShape
+  .refine((input) => !(input.directory && input.folderId), { path: ["directory"], message: "Choose a directory or folderId, not both." })
+  .refine((input) => isAllowedAttachmentSize(input.size, input.parentKind), { path: ["size"], message: "File exceeds the upload size limit." });
+const ticketSchema = uploadMetadataShape.omit({ directory: true }).extend({
   ownerKey: z.string().nullable(),
   r2Key: z.string().regex(/^uploads\/[a-f0-9]{64}\/[a-f0-9-]{36}$/),
   expiresAt: z.number().int(),

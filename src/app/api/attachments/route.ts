@@ -44,8 +44,8 @@ export async function POST(request: NextRequest) {
   let created: { id: string; fileName: string };
   if (body?.uploadToken !== undefined) {
     try {
-      const { r2Key, parentKind, parentId, folderId, fileName, contentType, size } = await confirmR2Upload(body.uploadToken, ownerKey);
-      created = await convex.mutation(api.attachments.createR2Attachment, { ownerKey, r2Key, parentKind, parentId, ...(folderId ? { folderId: folderId as never } : {}), fileName, contentType, size });
+      const { r2Key, parentKind, parentId, folderId, fileName, contentType, size, visibility } = await confirmR2Upload(body.uploadToken, ownerKey);
+      created = await convex.mutation(api.attachments.createR2Attachment, { ownerKey, r2Key, parentKind, parentId, ...(folderId ? { folderId: folderId as never } : {}), fileName, contentType, size, visibility });
     } catch {
       return NextResponse.json({ error: "Upload ticket expired, invalid, or uploaded bytes do not match." }, { status: 400 });
     }
@@ -55,7 +55,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid attachment metadata." }, { status: 400 });
     }
     try {
-      const { folderId, ...uploadMetadata } = metadata.data;
+      const { folderId: requestedFolderId, directory, ...uploadMetadata } = metadata.data;
+      let folderId = requestedFolderId;
+      if (directory) {
+        const path = directory.trim().replace(/^\/+|\/+$/g, "").split("/");
+        if (path.length > 20 || path.some((part) => !part || part.length > 64 || part === "." || part === ".." || /[\\\u0000-\u001f\u007f]/.test(part))) {
+          return NextResponse.json({ error: "Folder path contains an invalid name." }, { status: 400 });
+        }
+        const ensuredFolderId = await convex.mutation(api.attachments.ensureFileFolderPath, { ownerKey, path });
+        if (!ensuredFolderId) throw new Error("Could not create attachment directory.");
+        folderId = ensuredFolderId;
+      }
       created = await convex.mutation(api.attachments.createAttachment, { ownerKey, ...uploadMetadata, ...(folderId ? { folderId: folderId as never } : {}), storageId: body.storageId as never });
     } catch {
       return NextResponse.json({ error: "Attachment metadata rejected." }, { status: 400 });
