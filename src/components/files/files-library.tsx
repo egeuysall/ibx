@@ -227,9 +227,9 @@ export function FilesLibrary({ terminalStorageKey }: { terminalStorageKey: strin
               <Button size="sm" variant={folder.id === currentFolderId ? "secondary" : "ghost"} onClick={() => navigateFolder(folder.id)}>{folder.name}</Button>
             </span>)}
           </nav>
-          <div className="flex items-center gap-2">
+          <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto">
             <Button variant="default" disabled={busy || loading} onClick={() => picker.current?.click()}>upload file</Button>
-            <form className="flex items-center gap-2" onSubmit={(event) => {
+            <form className="flex min-w-0 flex-1 items-center gap-2" onSubmit={(event) => {
               event.preventDefault();
               void run(async () => {
                 const { folder } = await request<{ folder: { id: string; name: string } }>("/api/files", {
@@ -242,8 +242,8 @@ export function FilesLibrary({ terminalStorageKey }: { terminalStorageKey: strin
               });
             }}>
               <Input aria-label="New folder name" placeholder="new folder" maxLength={64} value={newFolder}
-                onChange={(event) => setNewFolder(event.target.value)} disabled={busy} className="h-8 w-36 rounded-none border-0 bg-transparent p-0 shadow-none focus-visible:ring-0" />
-              <Button type="submit" variant="secondary" disabled={busy || !newFolder.trim()}>create folder</Button>
+                onChange={(event) => setNewFolder(event.target.value)} disabled={busy} className="h-8 w-24 min-w-0 flex-1 rounded-none sm:w-36 border-0 bg-transparent p-0 shadow-none focus-visible:ring-0" />
+              <Button type="submit" variant="secondary" disabled={busy || !newFolder.trim()}>create</Button>
             </form>
           </div>
         </div>
@@ -260,10 +260,10 @@ export function FilesLibrary({ terminalStorageKey }: { terminalStorageKey: strin
         {loading ? <div className="flex flex-col gap-3" aria-hidden><Skeleton className="h-20 w-full" /><Skeleton className="h-20 w-full" /></div>
           : visibleFolders.length + visibleFiles.length === 0 ? <Empty><EmptyHeader><EmptyTitle>{error ? "Files unavailable" : query ? "No matching loaded files" : "No files yet"}</EmptyTitle>
             <EmptyDescription>{query ? "Try another search." : "Upload a file to keep it in your library. Todo and thought attachments appear here too."}</EmptyDescription></EmptyHeader></Empty>
-          : <div className="-mx-4 w-[calc(100%+2rem)] md:-mx-6 md:w-[calc(100%+3rem)]">
-            <Table aria-label="Files" aria-busy={busy} className="border-y border-border">
+          : <div className="-mx-4 min-w-0 w-[calc(100%+2rem)] md:-mx-6 md:w-[calc(100%+3rem)]">
+            <Table aria-label="Files" aria-busy={busy} className="min-w-[64rem] border-y border-border">
             <TableHeader><TableRow>
-              <TableHead className="w-full text-xs font-normal text-muted-foreground">name</TableHead>
+              <TableHead className="w-full min-w-80 text-xs font-normal text-muted-foreground">name</TableHead>
               <TableHead className="text-xs font-normal text-muted-foreground">type</TableHead>
               <TableHead className="text-xs font-normal text-muted-foreground">modified</TableHead>
               <TableHead className="text-xs font-normal text-muted-foreground">public</TableHead>
@@ -273,20 +273,20 @@ export function FilesLibrary({ terminalStorageKey }: { terminalStorageKey: strin
               {visibleFolders.map((folder) => <TableRow key={folder.id} className={dropTargetId === folder.id ? "bg-accent" : ""}
                 onDragOver={(event) => { event.preventDefault(); setDropTargetId(folder.id); }} onDragLeave={() => setDropTargetId(null)}
                 onDrop={(event) => { event.preventDefault(); setDropTargetId(null); const id = event.dataTransfer.getData("text/plain"); const file = page?.files.find((item) => item.id === id); if (file) void run(() => moveFile(file, folder.id)); }}>
-                <TableCell>{editingFolderId === folder.id ? <div className="flex items-center gap-2"><span aria-hidden="true" className="w-4 shrink-0 text-center font-mono">/</span><Input autoFocus aria-label="Rename folder" maxLength={64} value={editingFolderName} disabled={busy} onChange={(event) => setEditingFolderName(event.target.value)} onBlur={() => saveFolderName(folder)} onKeyDown={(event) => {
+                <TableCell className="min-w-80 whitespace-normal">{editingFolderId === folder.id ? <div className="flex items-center gap-2"><span aria-hidden="true" className="w-4 shrink-0 text-center font-mono">/</span><Input autoFocus aria-label="Rename folder" maxLength={64} value={editingFolderName} disabled={busy} onChange={(event) => setEditingFolderName(event.target.value)} onBlur={() => saveFolderName(folder)} onKeyDown={(event) => {
                   if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); }
                   if (event.key === "Escape") { event.preventDefault(); cancelRename.current = true; setEditingFolderName(folder.name); setEditingFolderId(null); event.currentTarget.blur(); }
-                }} className="h-7 max-w-sm border-0 bg-transparent px-0 shadow-none focus-visible:ring-0" /></div> : <button type="button" className="flex items-center gap-2 text-left hover:underline" title="Press F2 to rename" onClick={() => navigateFolder(folder.id)} onKeyDown={(event) => { if (event.key === "F2") { event.preventDefault(); startFolderRename(folder); } }}><span aria-hidden="true" className="w-4 shrink-0 text-center font-mono">/</span>{folder.name}</button>}</TableCell>
+                }} className="h-7 max-w-sm border-0 bg-transparent px-0 shadow-none focus-visible:ring-0" /></div> : <button type="button" className="flex items-center gap-2 text-left [overflow-wrap:anywhere] hover:underline" title="Press F2 to rename" onClick={() => navigateFolder(folder.id)} onKeyDown={(event) => { if (event.key === "F2") { event.preventDefault(); startFolderRename(folder); } }}><span aria-hidden="true" className="w-4 shrink-0 text-center font-mono">/</span>{folder.name}</button>}</TableCell>
                 <TableCell className="text-xs text-muted-foreground">folder</TableCell><TableCell>—</TableCell><TableCell>—</TableCell><TableCell />
               </TableRow>)}
               {visibleFiles.map((file) => {
                 const publicUrl = file.visibility === "public" ? safeFileUrl(file.publicUrl) : null;
                 const selectedFolder = folderOptions.find((option) => option.id === (file.folderId ?? "root")) ?? folderOptions[0];
                 return <TableRow key={file.id} draggable onDragStart={(event) => { event.dataTransfer.setData("text/plain", file.id); event.dataTransfer.effectAllowed = "move"; }}>
-                  <TableCell className="max-w-0"><div className="flex min-w-0 items-center gap-2"><span aria-hidden="true" className="w-4 shrink-0 text-center font-mono">-</span>{editingFileId === file.id ? <Input autoFocus aria-label="Rename file" maxLength={180} value={editingFileName} disabled={busy} onChange={(event) => setEditingFileName(event.target.value)} onBlur={() => saveFileName(file)} onKeyDown={(event) => {
+                  <TableCell className="min-w-80 max-w-0 whitespace-normal"><div className="flex min-w-0 items-center gap-2"><span aria-hidden="true" className="w-4 shrink-0 text-center font-mono">-</span>{editingFileId === file.id ? <Input autoFocus aria-label="Rename file" maxLength={180} value={editingFileName} disabled={busy} onChange={(event) => setEditingFileName(event.target.value)} onBlur={() => saveFileName(file)} onKeyDown={(event) => {
                     if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); }
                     if (event.key === "Escape") { event.preventDefault(); cancelRename.current = true; setEditingFileName(file.fileName); setEditingFileId(null); event.currentTarget.blur(); }
-                  }} className="h-7 min-w-0 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0" /> : <button type="button" className="min-w-0 truncate text-left hover:underline" title={file.fileName} onClick={() => openPreview(file)}>{file.fileName}</button>}</div></TableCell>
+                  }} className="h-7 min-w-0 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0" /> : <button type="button" className="min-w-0 text-left [overflow-wrap:anywhere] hover:underline" title={file.fileName} onClick={() => openPreview(file)}>{file.fileName}</button>}</div></TableCell>
                   <TableCell><Badge variant="secondary">{fileTypeLabel(file.contentType)}</Badge><span className="sr-only">{file.size < 1024 * 1024 ? `${Math.ceil(file.size / 1024)} KB` : `${(file.size / 1024 / 1024).toFixed(1)} MB`}</span></TableCell>
                   <TableCell><time className="whitespace-nowrap text-xs text-muted-foreground" dateTime={new Date(file.createdAt).toISOString()}>{new Date(file.createdAt).toLocaleDateString()}</time></TableCell>
                   <TableCell><div className="flex items-center gap-2 text-xs text-muted-foreground"><Switch checked={file.visibility === "public"} disabled={busy} aria-label={`Public access for ${file.fileName}`} onCheckedChange={(checked) => void run(() => changeVisibility(file, checked))} /><span>{file.visibility}</span></div></TableCell>
