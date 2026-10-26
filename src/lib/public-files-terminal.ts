@@ -7,6 +7,7 @@ export type PublicFile = {
 };
 
 export type TerminalLine = { text: string; file?: PublicFile };
+export type PublicTerminalResult = { lines: TerminalLine[]; directory: string[] };
 
 type PublicTreeNode = { type: "folder"; name: string; children: PublicTreeNode[] } | { type: "file"; name: string; file: PublicFile };
 
@@ -45,35 +46,80 @@ function renderPublicTree(files: PublicFile[]): TerminalLine[] {
   return lines;
 }
 
-export function runPublicFileCommand(command: string, username: string, files: PublicFile[]): TerminalLine[] {
+function resolvePath(directory: string[], value: string) {
+  const normalized = value.trim().replace(/\\/g, "/");
+  const absolute = normalized.startsWith("/");
+  const parts = absolute ? [] : [...directory];
+  const segments = normalized.split("/").filter(Boolean);
+  if (segments[0]?.toLowerCase() === "drive") {
+    parts.length = 0;
+    segments.shift();
+  }
+  for (const segment of segments) {
+    if (segment === ".") continue;
+    if (segment === "..") parts.pop();
+    else parts.push(segment);
+  }
+  return parts;
+}
+
+function filesAtDirectory(files: PublicFile[], directory: string[]) {
+  return files
+    .filter((file) => directory.every((segment, index) => file.folderPath[index] === segment))
+    .map((file) => ({ ...file, folderPath: file.folderPath.slice(directory.length) }));
+}
+
+export function runPublicFileCommand(
+  command: string,
+  username: string,
+  files: PublicFile[],
+  directory: string[] = [],
+): PublicTerminalResult {
   const value = command.trim();
   const normalized = value.toLowerCase();
+  const result = (lines: TerminalLine[], nextDirectory = directory): PublicTerminalResult => ({ lines, directory: nextDirectory });
+  const currentFiles = filesAtDirectory(files, directory);
+  if (normalized === "cd" || normalized.startsWith("cd ")) {
+    const target = value.slice(2).trim();
+    if (!target) return result([{ text: "$ cd" }, { text: "usage: cd <directory>" }]);
+    const nextDirectory = resolvePath(directory, target);
+    const exists = nextDirectory.length === 0 || files.some((file) =>
+      nextDirectory.every((segment, index) => file.folderPath[index] === segment),
+    );
+    if (!exists) return result([{ text: `$ cd ${target}` }, { text: "directory not found" }]);
+    return result(
+      [{ text: `$ cd ${target}` }, { text: `/${username}${nextDirectory.length ? `/${nextDirectory.join("/")}` : ""}` }],
+      nextDirectory,
+    );
+  }
   if (normalized === "open" || normalized.startsWith("open ")) {
-    const target = value.slice(4).trim().replace(/^\/+/, "").replace(/^drive\//i, "");
-    if (!target) return [{ text: "$ open" }, { text: "usage: open <file name or path>" }];
+    const target = value.slice(4).trim();
+    if (!target) return result([{ text: "$ open" }, { text: "usage: open <file name or path>" }]);
+    const targetPath = resolvePath(directory, target).join("/");
+    const hasPath = /[\\/]/.test(target);
     const matches = files.filter((file) => {
-      const path = [...file.folderPath, file.fileName].join("/");
-      return path.toLowerCase() === target.toLowerCase() || (!target.includes("/") && file.fileName.toLowerCase() === target.toLowerCase());
+      const path = [...file.folderPath, file.fileName].join("/").toLowerCase();
+      return path === targetPath.toLowerCase() || (!hasPath && directory.length === 0 && file.fileName.toLowerCase() === target.toLowerCase());
     });
-    if (matches.length === 1) return [{ text: `$ open ${target}` }, { text: [...matches[0].folderPath, matches[0].fileName].join("/"), file: matches[0] }];
-    if (matches.length > 1) return [{ text: `$ open ${target}` }, { text: "multiple files match; open one by path:" }, ...matches.map((file) => ({ text: [...file.folderPath, file.fileName].join("/"), file }))];
-    return [{ text: `$ open ${target}` }, { text: "file not found" }];
+    if (matches.length === 1) return result([{ text: `$ open ${target}` }, { text: [...matches[0].folderPath, matches[0].fileName].join("/"), file: matches[0] }]);
+    if (matches.length > 1) return result([{ text: `$ open ${target}` }, { text: "multiple files match; open one by path:" }, ...matches.map((file) => ({ text: [...file.folderPath, file.fileName].join("/"), file }))]);
+    return result([{ text: `$ open ${target}` }, { text: "file not found" }]);
   }
   switch (normalized) {
     case "tree":
-      return [{ text: "$ tree" }, { text: "drive/" }, ...renderPublicTree(files)];
+      return result([{ text: "$ tree" }, { text: `${directory.length ? `drive/${directory.join("/")}` : "drive"}/` }, ...renderPublicTree(currentFiles)]);
     case "ls":
-      return [{ text: "$ ls" }, ...files.map((file) => ({
+      return result([{ text: "$ ls" }, ...currentFiles.map((file) => ({
         text: `  ${file.folderPath.length ? `${file.folderPath.join("/")}/` : ""}${file.fileName}`,
         file,
-      }))];
+      }))]);
     case "pwd":
-      return [{ text: "$ pwd" }, { text: `/${username}` }];
+      return result([{ text: "$ pwd" }, { text: `/${username}${directory.length ? `/${directory.join("/")}` : ""}` }]);
     case "help":
-      return [{ text: "$ help" }, { text: "commands: help, pwd, ls, tree, open <file>, clear" }, { text: "read-only public file browser" }];
+      return result([{ text: "$ help" }, { text: "commands: help, pwd, cd <directory>, ls, tree, open <file>, clear" }, { text: "read-only public file browser" }]);
     case "clear":
-      return [];
+      return result([]);
     default:
-      return [{ text: `$ ${value}` }, { text: "unknown command; type help" }];
+      return result([{ text: `$ ${value}` }, { text: "unknown command; type help" }]);
   }
 }

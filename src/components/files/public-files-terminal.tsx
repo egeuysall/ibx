@@ -5,17 +5,19 @@ import { runPublicFileCommand, type PublicFile, type TerminalLine } from "@/lib/
 
 export function PublicFilesTerminal({ username, files }: { username: string; files: PublicFile[] }) {
   const [input, setInput] = useState("");
-  const [lines, setLines] = useState(() => runPublicFileCommand("tree", username, files));
+  const [directory, setDirectory] = useState<string[]>([]);
+  const [lines, setLines] = useState(() => runPublicFileCommand("tree", username, files).lines);
 
   function runCommand(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const command = input.trim();
     if (!command) return;
     setInput("");
-    const result = runPublicFileCommand(command, username, files);
-    setLines(result);
-    if (/^open\s+/i.test(command) && result.length === 2 && result[1].file) {
-      window.open(result[1].file.href, "_blank", "noopener,noreferrer");
+    const result = runPublicFileCommand(command, username, files, directory);
+    setLines(result.lines);
+    setDirectory(result.directory);
+    if (/^open\s+/i.test(command) && result.lines.length === 2 && result.lines[1].file) {
+      window.open(result.lines[1].file.href, "_blank", "noopener,noreferrer");
     }
   }
 
@@ -33,7 +35,7 @@ export function PublicFilesTerminal({ username, files }: { username: string; fil
       </div>
       <form onSubmit={runCommand} className="flex items-center gap-2 border-t px-3 py-2 font-mono text-xs">
         <span aria-hidden="true">$</span>
-        <input aria-label="Public terminal command" value={input} onChange={(event) => setInput(event.target.value)} maxLength={240} placeholder="help, ls, tree, open <file>" className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground" />
+        <input aria-label="Public terminal command" value={input} onChange={(event) => setInput(event.target.value)} maxLength={240} placeholder="help, cd, ls, tree, open <file>" className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground" />
       </form>
     </section>
   );
