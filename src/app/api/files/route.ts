@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
   if (cursor && cursor.length > 4_000) return NextResponse.json({ error: "Invalid cursor." }, { status: 400 });
   try {
     const [result, folders, username] = await Promise.all([
-      convex.query(api.attachments.paginateFiles, { ownerKey: getRouteAuthOwnerKey(auth), paginationOpts: { numItems: 50, cursor } }),
+      convex.query(api.attachments.paginateFiles, { ownerKey: getRouteAuthOwnerKey(auth), paginationOpts: { numItems: 100, cursor } }),
       convex.query(api.attachments.listFileFolders, { ownerKey: getRouteAuthOwnerKey(auth) }),
       getRouteAuthUsername(auth),
     ]);

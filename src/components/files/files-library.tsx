@@ -53,29 +53,43 @@ export function FilesLibrary({ terminalStorageKey }: { terminalStorageKey: strin
   const operation = useRef(false);
   const cancelRename = useRef(false);
 
-  const refresh = useCallback(async (minimum = 1) => {
+  const loadAllFiles = useCallback(async () => {
     let result = await request<FilesPage>("/api/files");
     const files = new Map(result.files.map((file) => [file.id, file]));
     const cursors = new Set<string>();
-    // Keep already-loaded pages available after an upload or visibility change.
-    while (!result.isDone && result.cursor && files.size < minimum && !cursors.has(result.cursor)) {
+    while (!result.isDone && result.cursor && !cursors.has(result.cursor)) {
       cursors.add(result.cursor);
       result = await request<FilesPage>(`/api/files?cursor=${encodeURIComponent(result.cursor)}`);
       for (const file of result.files) files.set(file.id, file);
     }
-    setPage({ ...result, files: [...files.values()] });
+    return { ...result, files: [...files.values()] };
+  }, []);
+
+  const refresh = useCallback(async () => {
+    setPage(await loadAllFiles());
     setError(null);
+  }, [loadAllFiles]);
+
+  const navigateFolder = useCallback((folderId: string | null, replace = false) => {
+    setCurrentFolderId(folderId);
+    const url = new URL(window.location.href);
+    if (folderId) url.searchParams.set("folder", folderId);
+    else url.searchParams.delete("folder");
+    window.history[replace ? "replaceState" : "pushState"](window.history.state, "", url);
   }, []);
 
   useEffect(() => {
     let active = true;
-    request<FilesPage>("/api/files").then((result) => {
+    const syncFolderFromUrl = () => setCurrentFolderId(new URLSearchParams(window.location.search).get("folder"));
+    syncFolderFromUrl();
+    window.addEventListener("popstate", syncFolderFromUrl);
+    loadAllFiles().then((result) => {
       if (active) setPage(result);
     }).catch((cause: unknown) => {
       if (active) setError(cause instanceof Error ? cause.message : "Could not load files.");
     }).finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
-  }, []);
+    return () => { active = false; window.removeEventListener("popstate", syncFolderFromUrl); };
+  }, [loadAllFiles]);
 
   async function run(action: () => Promise<void>) {
     if (operation.current) return;
@@ -93,13 +107,6 @@ export function FilesLibrary({ terminalStorageKey }: { terminalStorageKey: strin
     }
   }
 
-  async function loadMore() {
-    if (!page?.cursor || page.isDone) return;
-    const next = await request<FilesPage>(`/api/files?cursor=${encodeURIComponent(page.cursor)}`);
-    setPage((current) => ({ ...next, files: [...new Map([...(current?.files ?? []), ...next.files].map((file) => [file.id, file])).values()] }));
-    setError(null);
-  }
-
   async function changeVisibility(file: FileRecord, isPublic: boolean) {
     const visibility = isPublic ? "public" : "private";
     await request(`/api/files/${encodeURIComponent(file.id)}`, {
@@ -109,7 +116,7 @@ export function FilesLibrary({ terminalStorageKey }: { terminalStorageKey: strin
     setPage((current) => current && ({ ...current, files: current.files.map((item) => item.id === file.id
       ? { ...item, visibility, publicUrl: null } : item) }));
     toast.success(isPublic ? "File is public. Anyone with the link can access it." : "File is private.");
-    await refresh(page?.files.length);
+    await refresh();
   }
 
   async function moveFile(file: FileRecord, folderId: string | null) {
@@ -167,7 +174,7 @@ export function FilesLibrary({ terminalStorageKey }: { terminalStorageKey: strin
     void run(async () => {
       await apiClient.renameFile(folder.id, name);
       setEditingFolderId(null);
-      await refresh(page?.files.length);
+      await refresh();
       toast.success(`Renamed folder to ${name}.`);
     });
   }
@@ -207,22 +214,17 @@ export function FilesLibrary({ terminalStorageKey }: { terminalStorageKey: strin
             const invalid = uploadError(file);
             if (invalid) { toast.error(invalid); return; }
             void run(async () => {
-              const uploaded = await apiClient.uploadAttachmentFile({ parentKind: "file", parentId: "library", file });
-              if (currentFolderId) {
-                await request(`/api/files/${encodeURIComponent(uploaded.id)}`, {
-                  method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ folderId: currentFolderId }),
-                });
-              }
+              await apiClient.uploadAttachmentFile({ parentKind: "file", parentId: "library", ...(currentFolderId ? { folderId: currentFolderId } : {}), file });
               toast.success("File uploaded privately.");
-              await refresh((page?.files.length ?? 0) + 1);
+              await refresh();
             });
           }} />
         <div className="flex flex-wrap items-center justify-between gap-3" aria-label="File folders">
           <nav aria-label="Folder location" className="flex min-w-0 flex-wrap items-center gap-1 text-sm">
-            <button type="button" className="text-sm text-foreground hover:underline" onClick={() => setCurrentFolderId(null)}>drive</button>
+            <button type="button" className="text-sm text-foreground hover:underline" onClick={() => navigateFolder(null)}>drive</button>
             {breadcrumbs.map((folder) => <span key={folder.id} className="flex items-center gap-1">
               <span aria-hidden="true" className="text-muted-foreground">/</span>
-              <Button size="sm" variant={folder.id === currentFolderId ? "secondary" : "ghost"} onClick={() => setCurrentFolderId(folder.id)}>{folder.name}</Button>
+              <Button size="sm" variant={folder.id === currentFolderId ? "secondary" : "ghost"} onClick={() => navigateFolder(folder.id)}>{folder.name}</Button>
             </span>)}
           </nav>
           <div className="flex items-center gap-2">
@@ -234,8 +236,8 @@ export function FilesLibrary({ terminalStorageKey }: { terminalStorageKey: strin
                   method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: newFolder, parentFolderId: currentFolderId }),
                 });
                 setNewFolder("");
-                setCurrentFolderId(folder.id);
-                await refresh(page?.files.length);
+                navigateFolder(folder.id);
+                await refresh();
                 toast.success("Folder created.");
               });
             }}>
@@ -247,17 +249,17 @@ export function FilesLibrary({ terminalStorageKey }: { terminalStorageKey: strin
         </div>
         <div className="flex min-w-0 items-center gap-2">
           <span aria-hidden="true" className="font-mono text-sm text-muted-foreground">&gt;</span>
-          <Input id="files-search" type="search" aria-label="Search loaded files" placeholder="search loaded files" value={search} onChange={(event) => setSearch(event.target.value)} className="h-8 min-w-0 flex-1 rounded-none border-0 bg-transparent p-0 shadow-none focus-visible:ring-0" />
+          <Input id="files-search" type="search" aria-label="Search files" placeholder="search files" value={search} onChange={(event) => setSearch(event.target.value)} className="h-8 min-w-0 flex-1 rounded-none border-0 bg-transparent p-0 shadow-none focus-visible:ring-0" />
         </div>
         {error && <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-destructive">
-          <p>{error}</p><Button variant="outline" size="sm" disabled={busy} onClick={() => void run(() => refresh(page?.files.length))}>retry</Button>
+          <p>{error}</p><Button variant="outline" size="sm" disabled={busy} onClick={() => void run(refresh)}>retry</Button>
         </div>}
         <p role="status" className="text-xs text-muted-foreground">
-          {loading ? "loading files…" : `${visibleFolders.length + visibleFiles.length} shown · ${page?.files.length ?? 0} loaded${page && !page.isDone ? " · load more to search more files" : ""}${busy ? " · working…" : ""}`}
+          {loading ? "loading files…" : `${visibleFolders.length + visibleFiles.length} shown${busy ? " · working…" : ""}`}
         </p>
         {loading ? <div className="flex flex-col gap-3" aria-hidden><Skeleton className="h-20 w-full" /><Skeleton className="h-20 w-full" /></div>
           : visibleFolders.length + visibleFiles.length === 0 ? <Empty><EmptyHeader><EmptyTitle>{error ? "Files unavailable" : query ? "No matching loaded files" : "No files yet"}</EmptyTitle>
-            <EmptyDescription>{query ? "Try another search or load more files below." : "Upload a file to keep it in your library. Todo and thought attachments appear here too."}</EmptyDescription></EmptyHeader></Empty>
+            <EmptyDescription>{query ? "Try another search." : "Upload a file to keep it in your library. Todo and thought attachments appear here too."}</EmptyDescription></EmptyHeader></Empty>
           : <div className="-mx-4 w-[calc(100%+2rem)] md:-mx-6 md:w-[calc(100%+3rem)]">
             <Table aria-label="Files" aria-busy={busy} className="border-y border-border">
             <TableHeader><TableRow>
@@ -274,7 +276,7 @@ export function FilesLibrary({ terminalStorageKey }: { terminalStorageKey: strin
                 <TableCell>{editingFolderId === folder.id ? <div className="flex items-center gap-2"><span aria-hidden="true" className="w-4 shrink-0 text-center font-mono">/</span><Input autoFocus aria-label="Rename folder" maxLength={64} value={editingFolderName} disabled={busy} onChange={(event) => setEditingFolderName(event.target.value)} onBlur={() => saveFolderName(folder)} onKeyDown={(event) => {
                   if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); }
                   if (event.key === "Escape") { event.preventDefault(); cancelRename.current = true; setEditingFolderName(folder.name); setEditingFolderId(null); event.currentTarget.blur(); }
-                }} className="h-7 max-w-sm border-0 bg-transparent px-0 shadow-none focus-visible:ring-0" /></div> : <button type="button" className="flex items-center gap-2 text-left hover:underline" title="Press F2 to rename" onClick={() => setCurrentFolderId(folder.id)} onKeyDown={(event) => { if (event.key === "F2") { event.preventDefault(); startFolderRename(folder); } }}><span aria-hidden="true" className="w-4 shrink-0 text-center font-mono">/</span>{folder.name}</button>}</TableCell>
+                }} className="h-7 max-w-sm border-0 bg-transparent px-0 shadow-none focus-visible:ring-0" /></div> : <button type="button" className="flex items-center gap-2 text-left hover:underline" title="Press F2 to rename" onClick={() => navigateFolder(folder.id)} onKeyDown={(event) => { if (event.key === "F2") { event.preventDefault(); startFolderRename(folder); } }}><span aria-hidden="true" className="w-4 shrink-0 text-center font-mono">/</span>{folder.name}</button>}</TableCell>
                 <TableCell className="text-xs text-muted-foreground">folder</TableCell><TableCell>—</TableCell><TableCell>—</TableCell><TableCell />
               </TableRow>)}
               {visibleFiles.map((file) => {
@@ -303,7 +305,6 @@ export function FilesLibrary({ terminalStorageKey }: { terminalStorageKey: strin
             </TableBody>
             </Table>
           </div>}
-        {page && !page.isDone && page.cursor && <Button variant="outline" className="self-start" disabled={busy} onClick={() => void run(loadMore)}>load more</Button>}
       </FilesShell>
       <Dialog open={preview !== null} onOpenChange={(open) => { if (!open) setPreview(null); }}>
         <DialogContent className="max-w-[min(56rem,calc(100%-2rem))] gap-3 p-3 sm:max-w-3xl">

@@ -5,6 +5,7 @@ import { uploadMetadataSchema } from "@/lib/file-upload-token";
 import { confirmR2Upload, r2Configured } from "@/lib/r2-storage";
 import { migrateFileToR2, serializeFile } from "@/lib/files-server";
 import { buildFolderPaths, folderSlug } from "@/lib/file-folders";
+import { buildAttachmentUrl } from "@/lib/attachment-url";
 
 export async function GET(request: NextRequest) {
   const auth = await getRouteAuth(request);
@@ -43,12 +44,32 @@ export async function POST(request: NextRequest) {
   const ownerKey = getRouteAuthOwnerKey(auth);
   let created: { id: string; fileName: string };
   if (body?.uploadToken !== undefined) {
+    let folderId: string | undefined;
+    let visibility: "public" | "private" = "private";
     try {
-      const { r2Key, parentKind, parentId, folderId, fileName, contentType, size, visibility } = await confirmR2Upload(body.uploadToken, ownerKey);
+      const ticket = await confirmR2Upload(body.uploadToken, ownerKey);
+      const { r2Key, parentKind, parentId, fileName, contentType, size } = ticket;
+      folderId = ticket.folderId;
+      visibility = ticket.visibility ?? "private";
       created = await convex.mutation(api.attachments.createR2Attachment, { ownerKey, r2Key, parentKind, parentId, ...(folderId ? { folderId: folderId as never } : {}), fileName, contentType, size, visibility });
     } catch {
       return NextResponse.json({ error: "Upload ticket expired, invalid, or uploaded bytes do not match." }, { status: 400 });
     }
+    let publicUrl: string | null = null;
+    if (visibility === "public") {
+      const [username, folders] = await Promise.all([
+        getRouteAuthUsername(auth), convex.query(api.attachments.listFileFolders, { ownerKey }),
+      ]);
+      const paths = buildFolderPaths(folders.map((folder) => ({
+        id: folder._id, name: folder.name, slug: folder.slug || folderSlug(folder.name),
+        parentFolderId: folder.parentFolderId ?? null,
+      })));
+      if (username) publicUrl = buildAttachmentUrl(request.nextUrl.origin, username, created.id, created.fileName,
+        folderId ? paths.get(folderId) ?? [] : []);
+    }
+    return NextResponse.json({ ok: true, id: created.id, fileName: created.fileName,
+      url: publicUrl ?? `${request.nextUrl.origin}/api/attachments/${created.id}/file`, publicUrl, visibility },
+      { headers: { "Cache-Control": "private, no-store" } });
   } else {
     const metadata = uploadMetadataSchema.safeParse(body);
     if (!metadata.success || typeof body?.storageId !== "string" || !/^[a-z0-9]{20,64}$/.test(body.storageId)) {

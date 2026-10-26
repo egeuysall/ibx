@@ -28,12 +28,18 @@ export async function storedFileUrl(file: Doc<"attachments">) {
   });
 }
 
-export async function streamStoredFile(file: Doc<"attachments">, request: Request, publicAccess: boolean) {
+export async function streamStoredFile(file: Doc<"attachments">, _request: Request, publicAccess: boolean) {
   const url = await storedFileUrl(file);
   if (!url) return Response.json({ error: "File not found." }, { status: 404 });
+  if (file.contentType.startsWith("image/")) {
+    const headers = new Headers({ Location: url, "Cache-Control": "private, no-store", "X-Robots-Tag": "noindex, nofollow" });
+    if (publicAccess) headers.set("Access-Control-Allow-Origin", "*");
+    return new Response(null, { status: 302, headers });
+  }
+
   const upstreamHeaders = new Headers({ "Accept-Encoding": "identity" });
   for (const name of ["range", "if-range"]) {
-    const value = request.headers.get(name);
+    const value = _request.headers.get(name);
     if (value) upstreamHeaders.set(name, value);
   }
   const upstream = await fetch(url, { headers: upstreamHeaders, cache: "no-store" });
