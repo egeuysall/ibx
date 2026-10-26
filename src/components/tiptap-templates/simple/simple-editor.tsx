@@ -732,7 +732,7 @@ export function SimpleEditor({
               align="start"
               side="bottom"
               sideOffset={4}
-              className="w-80 max-h-64"
+              className="w-80 max-h-[min(70vh,32rem)]"
               finalFocus={() => editor.view.dom}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && matchingPublicFiles[0]) {
