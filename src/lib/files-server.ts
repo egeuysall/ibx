@@ -31,9 +31,8 @@ export async function storedFileUrl(file: Doc<"attachments">) {
 export async function streamStoredFile(file: Doc<"attachments">, _request: Request, publicAccess: boolean) {
   const url = await storedFileUrl(file);
   if (!url) return Response.json({ error: "File not found." }, { status: 404 });
-  if (file.contentType.startsWith("image/")) {
+  if (file.contentType.startsWith("image/") && !publicAccess) {
     const headers = new Headers({ Location: url, "Cache-Control": "private, no-store", "X-Robots-Tag": "noindex, nofollow" });
-    if (publicAccess) headers.set("Access-Control-Allow-Origin", "*");
     return new Response(null, { status: 302, headers });
   }
 
