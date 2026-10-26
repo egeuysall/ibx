@@ -5,6 +5,7 @@ import type { FunctionReturnType } from "convex/server";
 import { api, convex } from "@/lib/convex-server";
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
+import { Toaster } from "@/components/ui/sonner";
 import { PublicFilesTerminal } from "@/components/files/public-files-terminal";
 import { PublicFileViewer } from "@/components/files/public-file-viewer";
 import { PublicProfileAvatar } from "@/components/public-profile-avatar";
@@ -159,5 +160,6 @@ export default async function ProfilePage({ params, searchParams }: {
         </section>
       </div>
     </section>
+    <Toaster position="bottom-right" />
   </main>;
 }
