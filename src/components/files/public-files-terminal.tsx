@@ -12,7 +12,11 @@ export function PublicFilesTerminal({ username, files }: { username: string; fil
     const command = input.trim();
     if (!command) return;
     setInput("");
-    setLines(runPublicFileCommand(command, username, files));
+    const result = runPublicFileCommand(command, username, files);
+    setLines(result);
+    if (/^open\s+/i.test(command) && result.length === 2 && result[1].file) {
+      window.open(result[1].file.href, "_blank", "noopener,noreferrer");
+    }
   }
 
   return (
