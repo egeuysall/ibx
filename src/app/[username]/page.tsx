@@ -6,6 +6,7 @@ import { api, convex } from "@/lib/convex-server";
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 import { PublicFilesTerminal } from "@/components/files/public-files-terminal";
+import { PublicImageViewer } from "@/components/files/public-image-viewer";
 import { PublicProfileAvatar } from "@/components/public-profile-avatar";
 import { browsePublicFiles } from "@/lib/public-drive";
 
@@ -109,6 +110,17 @@ export default async function ProfilePage({ params, searchParams }: {
           </div>
         </header>
 
+        <section className="space-y-3" aria-labelledby="public-terminal-title">
+          <h2 id="public-terminal-title" className="text-xs text-muted-foreground">Terminal</h2>
+          <PublicFilesTerminal username={username} files={files.map((file) => ({
+            fileName: file.fileName,
+            folderPath: file.folderPath,
+            href: fileHref(file),
+            contentType: file.contentType,
+            size: file.size,
+          }))} />
+        </section>
+
         <section className="space-y-3" aria-labelledby="public-files-title">
           <h2 id="public-files-title" className="text-xs text-muted-foreground">Published files</h2>
           <nav aria-label="Folder location" className="flex flex-wrap items-center gap-1 text-sm">
@@ -122,21 +134,12 @@ export default async function ProfilePage({ params, searchParams }: {
             {childFolders.map((folder) => <Link key={folder} href={folderHref(username, [...currentPath, folder], notePage)} className="flex items-center gap-3 px-3 py-3 text-sm no-underline transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               <span aria-hidden="true" className="w-4 shrink-0 text-center font-mono">/</span><span>{folder}</span>
             </Link>)}
-            {visibleFiles.map((file) => <a key={file._id} href={fileHref(file)} target="_blank" rel="noreferrer" className="flex items-center gap-3 px-3 py-3 text-sm no-underline transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-              <span aria-hidden="true" className="w-4 shrink-0 text-center font-mono">-</span><span className="truncate">{file.fileName}</span>
-            </a>)}
+            {visibleFiles.map((file) => file.contentType.startsWith("image/")
+              ? <PublicImageViewer key={file._id} fileName={file.fileName} href={fileHref(file)} className="flex w-full items-center gap-3 px-3 py-3 text-left text-sm transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+              : <a key={file._id} href={fileHref(file)} target="_blank" rel="noreferrer" className="flex items-center gap-3 px-3 py-3 text-sm no-underline transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                <span aria-hidden="true" className="w-4 shrink-0 text-center font-mono">-</span><span className="truncate">{file.fileName}</span>
+              </a>)}
           </div> : <Empty><EmptyHeader><EmptyTitle>{files.length ? "folder is empty" : "no public files yet"}</EmptyTitle><EmptyDescription>{files.length ? "Choose another folder." : "Only files shared publicly appear here."}</EmptyDescription></EmptyHeader></Empty>}
-        </section>
-
-        <section className="space-y-3" aria-labelledby="public-terminal-title">
-          <h2 id="public-terminal-title" className="text-xs text-muted-foreground">Terminal</h2>
-          <PublicFilesTerminal username={username} files={files.map((file) => ({
-            fileName: file.fileName,
-            folderPath: file.folderPath,
-            href: fileHref(file),
-            contentType: file.contentType,
-            size: file.size,
-          }))} />
         </section>
 
         <section className="space-y-3" aria-labelledby="public-notes-title">

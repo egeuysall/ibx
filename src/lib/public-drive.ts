@@ -7,11 +7,10 @@ export function browsePublicFiles<T extends { fileName: string; folderPath: stri
   }
 
   const path = folderPaths.has(requestedPath.join("/")) ? requestedPath : [];
-  const folders = [...new Set(files.flatMap((file) =>
-    file.folderPath.slice(0, path.length).every((part, index) => part === path[index]) && file.folderPath.length > path.length
-      ? [file.folderPath[path.length]]
-      : []
-  ))].sort((a, b) => a.localeCompare(b));
+  const folders = [...new Set(files.flatMap((file) => {
+    const folder = file.folderPath[path.length];
+    return file.folderPath.slice(0, path.length).every((part, index) => part === path[index]) && folder !== undefined ? [folder] : [];
+  }))].sort((a, b) => a.localeCompare(b));
   const visibleFiles = files.filter((file) =>
     file.folderPath.length === path.length && file.folderPath.every((part, index) => part === path[index])
   ).sort((a, b) => a.fileName.localeCompare(b.fileName));
