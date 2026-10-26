@@ -732,7 +732,7 @@ export function SimpleEditor({
               align="start"
               side="bottom"
               sideOffset={4}
-              className="w-80"
+              className="w-80 [scrollbar-width:thin] [scrollbar-color:var(--muted-foreground)_transparent] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/50"
               finalFocus={() => editor.view.dom}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && matchingPublicFiles[0]) {
