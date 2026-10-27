@@ -212,6 +212,30 @@ describe("attachment privacy", () => {
     await expect(t.mutation(api.attachments.renameFileItem, { ...auth, itemId: folderId, name: "../Private" })).rejects.toThrow("cannot contain slashes");
   });
 
+  it("deletes nested folders only after all contained attachments are removed", async () => {
+    const t = convexTest(schema, modules);
+    const rootId = await t.mutation(api.attachments.createFileFolder, { ...auth, name: "Projects" });
+    const childId = await t.mutation(api.attachments.createFileFolder, { ...auth, name: "Drafts", parentFolderId: rootId });
+    const siblingId = await t.mutation(api.attachments.createFileFolder, { ...auth, name: "Keep" });
+    const file = await t.mutation(api.attachments.createR2Attachment, {
+      ...upload, folderId: childId, r2Key: "objects/nested-report",
+    });
+
+    const page = await t.query(api.attachments.paginateFilesInFolder, {
+      ...auth, folderId: childId, paginationOpts: { numItems: 10, cursor: null },
+    });
+    expect(page.page.map((item) => item._id)).toEqual([file.id]);
+    await expect(t.mutation(api.attachments.deleteFileFolderTree, { ...auth, folderId: rootId }))
+      .rejects.toThrow("Folder still contains files");
+    expect(await t.mutation(api.attachments.deleteFileFolderTree, { ...auth, ownerKey: "owner-b", folderId: rootId })).toBeNull();
+
+    await t.mutation(api.attachments.deleteAttachment, { ...auth, attachmentId: file.id });
+    expect(await t.mutation(api.attachments.deleteFileFolderTree, { ...auth, folderId: rootId }))
+      .toEqual({ deletedFolders: 2 });
+    expect((await t.query(api.attachments.listFileFolders, auth)).map((folder) => folder._id)).toEqual([siblingId]);
+    expect(await t.query(api.attachments.getAttachmentDetails, { ...auth, attachmentId: file.id })).toBeNull();
+  });
+
   it("allows same file name in separate folders and resolves each public path", async () => {
     const t = convexTest(schema, modules);
     const leftFolderId = await t.mutation(api.attachments.createFileFolder, { ...auth, name: "Left" });

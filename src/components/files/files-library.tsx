@@ -21,7 +21,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import { FilesShell } from "./files-shell";
 import { fileTypeLabel, safeFileUrl, uploadError } from "./file-utils";
-import type { FileRecord, FilesPage } from "./types";
+import type { FileRecord, FilesPage, FolderRecord } from "./types";
+
+type PendingDelete = { type: "file"; file: FileRecord } | { type: "folder"; folder: FolderRecord };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, { ...init, cache: "no-store", signal: AbortSignal.timeout(30_000) });
@@ -43,7 +45,7 @@ export function FilesLibrary({ terminalStorageKey }: { terminalStorageKey: strin
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<FileRecord | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
   const [preview, setPreview] = useState<FileRecord | null>(null);
   const [editingFileId, setEditingFileId] = useState<string | null>(null);
   const [editingFileName, setEditingFileName] = useState("");
@@ -260,24 +262,28 @@ export function FilesLibrary({ terminalStorageKey }: { terminalStorageKey: strin
         {loading ? <div className="flex flex-col gap-3" aria-hidden><Skeleton className="h-20 w-full" /><Skeleton className="h-20 w-full" /></div>
           : visibleFolders.length + visibleFiles.length === 0 ? <Empty><EmptyHeader><EmptyTitle>{error ? "Files unavailable" : query ? "No matching loaded files" : "No files yet"}</EmptyTitle>
             <EmptyDescription>{query ? "Try another search." : "Upload a file to keep it in your library. Todo and thought attachments appear here too."}</EmptyDescription></EmptyHeader></Empty>
-          : <div className="-mx-4 min-w-0 w-[calc(100%+2rem)] md:-mx-6 md:w-[calc(100%+3rem)]">
-            <Table aria-label="Files" aria-busy={busy} className="min-w-[64rem] border-y border-border">
+          : <div className="-mx-4 min-w-0 w-[calc(100%+2rem)] md:-mx-6 md:w-[calc(100%+3rem)] overflow-x-auto">
+            <Table aria-label="Files" aria-busy={busy} className="min-w-[1100px] table-fixed border-y border-border">
             <TableHeader><TableRow>
-              <TableHead className="w-full min-w-80 text-xs font-normal text-muted-foreground">name</TableHead>
-              <TableHead className="text-xs font-normal text-muted-foreground">type</TableHead>
-              <TableHead className="text-xs font-normal text-muted-foreground">modified</TableHead>
-              <TableHead className="text-xs font-normal text-muted-foreground">public</TableHead>
-              <TableHead className="text-right text-xs font-normal text-muted-foreground">actions</TableHead>
+              <TableHead className="w-[35%] text-xs font-normal text-muted-foreground">name</TableHead>
+              <TableHead className="w-[8%] text-xs font-normal text-muted-foreground">type</TableHead>
+              <TableHead className="w-[12%] text-xs font-normal text-muted-foreground">modified</TableHead>
+              <TableHead className="w-[13%] text-xs font-normal text-muted-foreground">public</TableHead>
+              <TableHead className="w-[32%] text-xs font-normal text-muted-foreground">actions</TableHead>
             </TableRow></TableHeader>
             <TableBody>
               {visibleFolders.map((folder) => <TableRow key={folder.id} className={dropTargetId === folder.id ? "bg-accent" : ""}
                 onDragOver={(event) => { event.preventDefault(); setDropTargetId(folder.id); }} onDragLeave={() => setDropTargetId(null)}
                 onDrop={(event) => { event.preventDefault(); setDropTargetId(null); const id = event.dataTransfer.getData("text/plain"); const file = page?.files.find((item) => item.id === id); if (file) void run(() => moveFile(file, folder.id)); }}>
-                <TableCell className="min-w-80 max-w-0">{editingFolderId === folder.id ? <div className="flex items-center gap-2"><span aria-hidden="true" className="w-4 shrink-0 text-center font-mono">/</span><Input autoFocus aria-label="Rename folder" maxLength={64} value={editingFolderName} disabled={busy} onChange={(event) => setEditingFolderName(event.target.value)} onBlur={() => saveFolderName(folder)} onKeyDown={(event) => {
+                <TableCell className="min-w-0 max-w-0">{editingFolderId === folder.id ? <div className="flex min-w-0 items-center gap-2"><span aria-hidden="true" className="w-4 shrink-0 text-center font-mono">/</span><Input autoFocus aria-label="Rename folder" maxLength={64} value={editingFolderName} disabled={busy} onChange={(event) => setEditingFolderName(event.target.value)} onBlur={() => saveFolderName(folder)} onKeyDown={(event) => {
                   if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); }
                   if (event.key === "Escape") { event.preventDefault(); cancelRename.current = true; setEditingFolderName(folder.name); setEditingFolderId(null); event.currentTarget.blur(); }
-                }} className="h-7 max-w-sm border-0 bg-transparent px-0 shadow-none focus-visible:ring-0" /></div> : <button type="button" className="flex w-full min-w-0 items-center gap-2 text-left hover:underline" title="Press F2 to rename" onClick={() => navigateFolder(folder.id)} onKeyDown={(event) => { if (event.key === "F2") { event.preventDefault(); startFolderRename(folder); } }}><span aria-hidden="true" className="w-4 shrink-0 text-center font-mono">/</span><span className="truncate">{folder.name}</span></button>}</TableCell>
-                <TableCell className="text-xs text-muted-foreground">folder</TableCell><TableCell>—</TableCell><TableCell>—</TableCell><TableCell />
+                }} className="h-7 min-w-0 max-w-sm border-0 bg-transparent px-0 shadow-none focus-visible:ring-0" /></div> : <button type="button" className="flex min-w-0 items-center gap-2 text-left hover:underline" title="Press F2 to rename" onClick={() => navigateFolder(folder.id)} onKeyDown={(event) => { if (event.key === "F2") { event.preventDefault(); startFolderRename(folder); } }}><span aria-hidden="true" className="w-4 shrink-0 text-center font-mono">/</span><span className="truncate">{folder.name}</span></button>}</TableCell>
+                <TableCell><Badge variant="secondary" className="border-border bg-accent text-accent-foreground">folder</Badge></TableCell><TableCell>—</TableCell><TableCell>—</TableCell>
+                <TableCell><div className="flex items-center gap-2">
+                  <Button variant="ghost" size="sm" disabled={busy} aria-label={`Rename ${folder.name}`} onClick={() => startFolderRename(folder)}>rename</Button>
+                  <Button variant="ghost" size="sm" disabled={busy} aria-label={`Delete ${folder.name}`} onClick={() => setPendingDelete({ type: "folder", folder })}>delete</Button>
+                </div></TableCell>
               </TableRow>)}
               {visibleFiles.map((file) => {
                 const publicUrl = file.visibility === "public" ? safeFileUrl(file.publicUrl) : null;
@@ -287,10 +293,10 @@ export function FilesLibrary({ terminalStorageKey }: { terminalStorageKey: strin
                     if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); }
                     if (event.key === "Escape") { event.preventDefault(); cancelRename.current = true; setEditingFileName(file.fileName); setEditingFileId(null); event.currentTarget.blur(); }
                   }} className="h-7 min-w-0 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0" /> : <button type="button" className="min-w-0 truncate text-left hover:underline" title={file.fileName} onClick={() => openPreview(file)}>{file.fileName}</button>}</div></TableCell>
-                  <TableCell><Badge variant="secondary">{fileTypeLabel(file.contentType)}</Badge><span className="sr-only">{file.size < 1024 * 1024 ? `${Math.ceil(file.size / 1024)} KB` : `${(file.size / 1024 / 1024).toFixed(1)} MB`}</span></TableCell>
+                  <TableCell><Badge variant="secondary" className="border-border bg-accent text-accent-foreground">{fileTypeLabel(file.contentType)}</Badge><span className="sr-only">{file.size < 1024 * 1024 ? `${Math.ceil(file.size / 1024)} KB` : `${(file.size / 1024 / 1024).toFixed(1)} MB`}</span></TableCell>
                   <TableCell><time className="whitespace-nowrap text-xs text-muted-foreground" dateTime={new Date(file.createdAt).toISOString()}>{new Date(file.createdAt).toLocaleDateString()}</time></TableCell>
                   <TableCell><div className="flex items-center gap-2 text-xs text-muted-foreground"><Switch checked={file.visibility === "public"} disabled={busy} aria-label={`Public access for ${file.fileName}`} onCheckedChange={(checked) => void run(() => changeVisibility(file, checked))} /><span>{file.visibility}</span></div></TableCell>
-                  <TableCell><div className="flex items-center justify-end gap-2">
+                  <TableCell><div className="flex items-center gap-2">
                     <Combobox items={folderOptions} value={selectedFolder} itemToStringValue={(option) => option.label}
                       onValueChange={(option) => { if (option) void run(() => moveFile(file, option.id === "root" ? null : option.id)); }}>
                       <ComboboxInput aria-label={`Move ${file.fileName} to folder`} disabled={busy} className="h-8 w-40" />
@@ -298,7 +304,7 @@ export function FilesLibrary({ terminalStorageKey }: { terminalStorageKey: strin
                     </Combobox>
                     {publicUrl && <Button variant="outline" size="sm" disabled={busy} onClick={() => void run(async () => { await navigator.clipboard.writeText(new URL(publicUrl, window.location.origin).href); toast.success("Public link copied."); })}>copy public link</Button>}
                     <Button variant="ghost" size="sm" disabled={busy} aria-label={`Rename ${file.fileName}`} onClick={() => startRename(file)}>rename</Button>
-                    <Button variant="ghost" size="sm" disabled={busy} aria-label={`Delete ${file.fileName}`} onClick={() => setPendingDelete(file)}>delete</Button>
+                    <Button variant="ghost" size="sm" disabled={busy} aria-label={`Delete ${file.fileName}`} onClick={() => setPendingDelete({ type: "file", file })}>delete</Button>
                   </div></TableCell>
                 </TableRow>;
               })}
@@ -333,17 +339,27 @@ export function FilesLibrary({ terminalStorageKey }: { terminalStorageKey: strin
       </Dialog>
       <AlertDialog open={pendingDelete !== null} onOpenChange={(open) => { if (!open && !busy) setPendingDelete(null); }}>
         <AlertDialogContent size="sm">
-          <AlertDialogHeader><AlertDialogTitle>delete file?</AlertDialogTitle>
-            <AlertDialogDescription>This permanently removes {pendingDelete?.fileName}, including its attachment and public link. This cannot be undone.</AlertDialogDescription>
+          <AlertDialogHeader><AlertDialogTitle>delete {pendingDelete?.type ?? "file"}?</AlertDialogTitle>
+            <AlertDialogDescription>{pendingDelete?.type === "folder"
+              ? `This permanently deletes ${pendingDelete.folder.name} and every file and nested folder inside it. This cannot be undone.`
+              : `This permanently removes ${pendingDelete?.type === "file" ? pendingDelete.file.fileName : "this file"}, including its attachment and public link. This cannot be undone.`}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter><AlertDialogCancel disabled={busy}>cancel</AlertDialogCancel>
             <Button variant="destructive" disabled={busy} onClick={() => void run(async () => {
-              if (!pendingDelete) return;
-              await request(`/api/files/${encodeURIComponent(pendingDelete.id)}`, { method: "DELETE" });
-              setPage((current) => current && ({ ...current, files: current.files.filter((file) => file.id !== pendingDelete.id) }));
+              const target = pendingDelete;
+              if (!target) return;
+              if (target.type === "file") {
+                await request(`/api/files/${encodeURIComponent(target.file.id)}`, { method: "DELETE" });
+                setPage((current) => current && ({ ...current, files: current.files.filter((file) => file.id !== target.file.id) }));
+              } else {
+                await request(`/api/files/${encodeURIComponent(target.folder.id)}`, {
+                  method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "folder" }),
+                });
+                await refresh();
+              }
               setPendingDelete(null);
               setError(null);
-              toast.success("File deleted.");
+              toast.success(target.type === "folder" ? "Folder and contents deleted." : "File deleted.");
             })}>{busy ? "deleting…" : "delete"}</Button>
           </AlertDialogFooter>
         </AlertDialogContent>

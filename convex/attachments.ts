@@ -503,6 +503,74 @@ export const listFileFolders = query({
   },
 });
 
+export const paginateFilesInFolder = query({
+  args: {
+    serverToken: v.string(), ownerKey: v.union(v.string(), v.null()),
+    folderId: v.id("fileFolders"), paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
+    const folder = await ctx.db.get(args.folderId);
+    if (!folder || !ownerMatches(folder, args.ownerKey)) {
+      return { page: [], isDone: true, continueCursor: "" };
+    }
+    const result = await ctx.db.query("attachments")
+      .withIndex("by_ownerKey_and_folderId_and_status", (q) =>
+        q.eq("ownerKey", args.ownerKey).eq("folderId", args.folderId).eq("status", "uploaded"),
+      ).order("desc").paginate({
+        ...args.paginationOpts,
+        numItems: pageSize(args.paginationOpts.numItems),
+      });
+    return { ...result, page: result.page.filter(isActive) };
+  },
+});
+
+export const deleteFileFolderTree = mutation({
+  args: {
+    serverToken: v.string(), ownerKey: v.union(v.string(), v.null()),
+    folderId: v.id("fileFolders"),
+  },
+  handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
+    const root = await ctx.db.get(args.folderId);
+    if (!root || !ownerMatches(root, args.ownerKey)) return null;
+
+    const folders = await ctx.db.query("fileFolders")
+      .withIndex("by_ownerKey_and_name", (q) => q.eq("ownerKey", args.ownerKey))
+      .take(200);
+    const descendants = new Set([args.folderId]);
+    let added = true;
+    while (added) {
+      added = false;
+      for (const folder of folders) {
+        if (folder.parentFolderId && descendants.has(folder.parentFolderId) && !descendants.has(folder._id)) {
+          descendants.add(folder._id);
+          added = true;
+        }
+      }
+    }
+    if (descendants.size !== folders.filter((folder) => descendants.has(folder._id)).length) {
+      throw new Error("Folder tree changed; reload and retry deletion.");
+    }
+
+    for (const folderId of descendants) {
+      const [uploaded, pending] = await Promise.all([
+        ctx.db.query("attachments").withIndex("by_ownerKey_and_folderId_and_status", (q) =>
+          q.eq("ownerKey", args.ownerKey).eq("folderId", folderId).eq("status", "uploaded"),
+        ).first(),
+        ctx.db.query("attachments").withIndex("by_ownerKey_and_folderId_and_status", (q) =>
+          q.eq("ownerKey", args.ownerKey).eq("folderId", folderId).eq("status", "pendingDelete"),
+        ).first(),
+      ]);
+      if (uploaded || pending) throw new Error("Folder still contains files; retry deletion.");
+    }
+
+    const toDelete = folders.filter((folder) => descendants.has(folder._id));
+    for (const folder of toDelete) await ctx.db.delete(folder._id);
+    return { deletedFolders: toDelete.length };
+  },
+});
+
 export const createFileFolder = mutation({
   args: {
     serverToken: v.string(), ownerKey: v.union(v.string(), v.null()), name: v.string(),

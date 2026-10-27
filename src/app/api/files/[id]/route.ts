@@ -1,12 +1,73 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRouteAuth, getRouteAuthOwnerKey, getRouteAuthUsername, unauthorizedJson, validateApiKeyPermission, validateCsrfForSessionAuth } from "@/lib/auth-server";
 import { api, convex } from "@/lib/convex-server";
-import { migrateFileToR2, serializeFile } from "@/lib/files-server";
+import { deleteStoredFile, migrateFileToR2, serializeFile } from "@/lib/files-server";
 import { buildFolderPaths, folderSlug } from "@/lib/file-folders";
 import { DELETE as deleteAttachment } from "../../attachments/[attachmentId]/route";
+import type { Doc } from "../../../../../convex/_generated/dataModel";
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const body = await request.clone().json().catch(() => null);
+  if (body?.type === "folder") {
+    const auth = await getRouteAuth(request);
+    if (!auth) return unauthorizedJson();
+    const denied = validateCsrfForSessionAuth(request, auth) ?? validateApiKeyPermission(request, auth);
+    if (denied) return denied;
+    if (!/^[a-z0-9]{20,64}$/.test(id)) return NextResponse.json({ error: "Folder not found." }, { status: 404 });
+
+    const ownerKey = getRouteAuthOwnerKey(auth);
+    try {
+      const folders = await convex.query(api.attachments.listFileFolders, { ownerKey });
+      if (!folders.some((folder) => folder._id === id)) return NextResponse.json({ error: "Folder not found." }, { status: 404 });
+      const folderIds = new Set([id]);
+      let added = true;
+      while (added) {
+        added = false;
+        for (const folder of folders) {
+          if (folder.parentFolderId && folderIds.has(folder.parentFolderId) && !folderIds.has(folder._id)) {
+            folderIds.add(folder._id);
+            added = true;
+          }
+        }
+      }
+
+      const files: Doc<"attachments">[] = [];
+      for (const folderId of folderIds) {
+        let cursor: string | null = null;
+        const cursors = new Set<string>();
+        while (true) {
+          const result: {
+            page: Doc<"attachments">[];
+            isDone: boolean;
+            continueCursor: string;
+          } = await convex.query(api.attachments.paginateFilesInFolder, {
+            ownerKey,
+            folderId: folderId as never,
+            paginationOpts: { numItems: 100, cursor },
+          });
+          files.push(...result.page);
+          if (result.isDone || !result.continueCursor || cursors.has(result.continueCursor)) break;
+          cursors.add(result.continueCursor);
+          cursor = result.continueCursor;
+        }
+      }
+
+      for (let index = 0; index < files.length; index += 8) {
+        const results = await Promise.allSettled(files.slice(index, index + 8).map(deleteStoredFile));
+        if (results.some((result) => result.status === "rejected")) {
+          return NextResponse.json({ error: "Could not delete every file in this folder. Retry to finish; already deleted files stay deleted." }, { status: 500 });
+        }
+      }
+
+      const deleted = await convex.mutation(api.attachments.deleteFileFolderTree, { ownerKey, folderId: id as never });
+      if (!deleted) return NextResponse.json({ error: "Folder not found." }, { status: 404 });
+      return NextResponse.json({ ok: true, deletedFiles: files.length, deletedFolders: deleted.deletedFolders },
+        { headers: { "Cache-Control": "private, no-store" } });
+    } catch {
+      return NextResponse.json({ error: "Could not delete the folder. Reload and retry; any files already deleted stay deleted." }, { status: 500 });
+    }
+  }
   return deleteAttachment(request, { params: Promise.resolve({ attachmentId: id }) });
 }
 

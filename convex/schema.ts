@@ -157,6 +157,7 @@ export default defineSchema({
       "ownerKey", "visibility", "status", "createdAt",
     ])
     .index("by_ownerKey_and_folderId", ["ownerKey", "folderId"])
+    .index("by_ownerKey_and_folderId_and_status", ["ownerKey", "folderId", "status"])
     .index("by_ownerKey_and_fileName_and_createdAt", [
       "ownerKey",
       "fileName",

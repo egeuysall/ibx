@@ -14,9 +14,17 @@ export type FileRecord = {
   storageProvider: "convex" | "r2";
 };
 
+export type FolderRecord = {
+  id: string;
+  name: string;
+  slug: string;
+  parentFolderId: string | null;
+  path: string[];
+};
+
 export type FilesPage = {
   files: FileRecord[];
-  folders: Array<{ id: string; name: string; slug: string; parentFolderId: string | null; path: string[] }>;
+  folders: FolderRecord[];
   cursor: string | null;
   isDone: boolean;
   username: string | null;
