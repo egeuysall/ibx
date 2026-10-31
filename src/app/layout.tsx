@@ -15,6 +15,24 @@ const geistMono = Geist_Mono({
 
 const ICON_VERSION = "20260408";
 
+const clerkAppearance = {
+  variables: {
+    colorBackground: "var(--auth-card-background)",
+    colorForeground: "var(--secondary-foreground)",
+    colorPrimary: "var(--primary)",
+    colorPrimaryForeground: "var(--primary-foreground)",
+    colorMuted: "var(--muted)",
+    colorMutedForeground: "var(--muted-foreground)",
+    colorInput: "var(--input)",
+    colorInputForeground: "var(--foreground)",
+    colorBorder: "var(--auth-card-border)",
+    colorNeutral: "var(--foreground)",
+    colorRing: "var(--ring)",
+    colorDanger: "var(--destructive)",
+  },
+  elements: { cardBox: "rounded-xl shadow-none" },
+};
+
 export const metadata: Metadata = {
   metadataBase: new URL((process.env.NEXT_PUBLIC_SITE_URL ?? "https://ibx.egeuysal.com").replace(/\/+$/, "")),
   title: {
@@ -80,7 +98,7 @@ export default function RootLayout({
             document.documentElement.dataset.theme = dark ? "dark" : "light";
           } catch {}`}
         </Script>
-        <ClerkProvider>
+        <ClerkProvider appearance={clerkAppearance}>
           <TooltipProvider delay={120}>
             <ServiceWorkerRegister />
             {children}
