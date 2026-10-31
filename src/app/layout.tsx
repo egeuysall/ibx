@@ -30,7 +30,11 @@ const clerkAppearance = {
     colorRing: "var(--ring)",
     colorDanger: "var(--destructive)",
   },
-  elements: { cardBox: "rounded-xl shadow-none" },
+  elements: {
+    cardBox: "rounded-xl shadow-none bg-[var(--auth-card-background)]",
+    footerAction: "border-t-0",
+    footer: "border-t-0",
+  },
 };
 
 export const metadata: Metadata = {

@@ -1,4 +1,3 @@
-import { SignUpButton } from "@clerk/nextjs";
 import type { CSSProperties } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -59,9 +58,7 @@ async function LandingPage() {
         <Link href="/" className="text-sm font-semibold tracking-normal text-foreground" prefetch={false}>ibx</Link>
         <nav className="flex items-center gap-4 text-xs text-muted-foreground" aria-label="account">
           <Link href="/sign-in?redirect_url=/app" className="hover:text-foreground" prefetch={false}>sign in</Link>
-          <SignUpButton mode="modal" fallbackRedirectUrl="/app" forceRedirectUrl="/app">
-            <button className="hover:text-foreground" type="button">sign up</button>
-          </SignUpButton>
+          <Link href="/sign-up?redirect_url=/app" className="hover:text-foreground" prefetch={false}>sign up</Link>
         </nav>
       </header>
 
