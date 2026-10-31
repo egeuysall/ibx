@@ -20,6 +20,23 @@
   --auth-card-border: #404047;
 }
 
+.cl-cardBox,
+.cl-card {
+  background-color: var(--auth-card-background) !important;
+}
+
+.cl-cardBox {
+  border: 0 !important;
+  border-radius: 0.75rem !important;
+  box-shadow: none !important;
+  overflow: hidden;
+}
+
+.cl-footerAction,
+.cl-footer {
+  border-top: 0 !important;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
