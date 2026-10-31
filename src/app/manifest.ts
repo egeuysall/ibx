@@ -6,7 +6,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "ibx",
     short_name: "ibx",
-    description: "Private thought ibx and todo generator.",
+    description: "Plan tasks, organize notes and files, and continue across the web, CLI, and phone.",
     start_url: "/",
     display: "standalone",
     background_color: "#f8f8f8",

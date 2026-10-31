@@ -5,9 +5,9 @@ export default function robots(): MetadataRoute.Robots {
   const siteUrl = getIbxSiteUrl();
   return {
     rules: [
-      { userAgent: "*", allow: ["/", "/docs", "/egeuysall"], disallow: ["/api/", "/app", "/settings", "/sign-in", "/sign-up", "/landing-drive"] },
+      { userAgent: "*", allow: ["/", "/docs", "/egeuysall"], disallow: ["/api/", "/app", "/settings", "/files", "/cli-auth", "/landing-drive"] },
     ],
     sitemap: `${siteUrl}/sitemap.xml`,
-    host: siteUrl,
+    host: new URL(siteUrl).host,
   };
 }

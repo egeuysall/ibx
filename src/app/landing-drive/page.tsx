@@ -1,9 +1,11 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { LandingDriveView } from "@/components/landing/landing-drive-view";
 import { IbxCliTerminal } from "@/components/landing/ibx-cli-terminal";
 import { getPublicLandingFiles, type LandingDriveItem } from "@/lib/landing-public-data";
 
 export const dynamic = "force-dynamic";
+export const metadata: Metadata = { robots: { index: false, follow: false } };
 
 export default async function LandingDrivePage({
   searchParams,

@@ -1,6 +1,8 @@
 import { SignIn } from "@clerk/nextjs";
-
+import type { Metadata } from "next";
 import { ApiKeySignInForm } from "@/components/auth/api-key-sign-in-form";
+
+export const metadata: Metadata = { robots: { index: false, follow: false } };
 
 function normalizeRedirectUrl(value: string | string[] | undefined) {
   const candidate = Array.isArray(value) ? value[0] : value;

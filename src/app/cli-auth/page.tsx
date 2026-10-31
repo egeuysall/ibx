@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import type { Metadata } from "next";
 
 import { Button } from "@/components/ui/button";
 import { getServerSession } from "@/lib/auth-server";
@@ -8,6 +9,7 @@ import {
 } from "@/lib/cli-auth";
 
 export const dynamic = "force-dynamic";
+export const metadata: Metadata = { robots: { index: false, follow: false } };
 
 function getStringParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;

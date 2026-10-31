@@ -1,4 +1,7 @@
 import { SignUp } from "@clerk/nextjs";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { robots: { index: false, follow: false } };
 
 function normalizeRedirectUrl(value: string | string[] | undefined) {
   const candidate = Array.isArray(value) ? value[0] : value;

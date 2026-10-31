@@ -14,8 +14,11 @@ import { browsePublicFiles } from "@/lib/public-drive";
 import { getIbxSiteUrl } from "@/lib/landing-public-data";
 
 export const dynamic = "force-dynamic";
-export async function generateMetadata({ params }: { params: Promise<{ username: string }> }): Promise<Metadata> {
-  const { username } = await params;
+export async function generateMetadata({ params, searchParams }: {
+  params: Promise<{ username: string }>;
+  searchParams: Promise<{ notePage?: string | string[] }>;
+}): Promise<Metadata> {
+  const [{ username }, query] = await Promise.all([params, searchParams]);
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(username)) {
     return { title: "profile not found", robots: { index: false, follow: false } };
   }
@@ -23,9 +26,12 @@ export async function generateMetadata({ params }: { params: Promise<{ username:
   if (!users.some((user) => user.username === username)) {
     return { title: "profile not found", robots: { index: false, follow: false } };
   }
-  const title = `@${username.toLowerCase()} · public files and notes · ibx`;
+  const title = `@${username.toLowerCase()} · public files and notes`;
   const description = `browse public files and notes shared by @${username.toLowerCase()} on ibx.`;
-  const canonical = `${getIbxSiteUrl()}/${encodeURIComponent(username)}`;
+  const canonicalUrl = new URL(`/${encodeURIComponent(username)}`, getIbxSiteUrl());
+  const notePage = parsePage(query.notePage);
+  if (notePage > 1) canonicalUrl.searchParams.set("notePage", String(notePage));
+  const canonical = canonicalUrl.toString();
   return {
     title,
     description,
@@ -121,10 +127,22 @@ export default async function ProfilePage({ params, searchParams }: {
   const requestedPath = requestedPathValue.split("/").filter(Boolean);
   const { path: currentPath, folders: childFolders, files: visibleFiles } = browsePublicFiles(files, requestedPath);
   const fileHref = (file: typeof files[number]) => `/${encodeURIComponent(username)}/${[...file.folderPath, file.fileName].map(encodeURIComponent).join("/")}`;
+  const profileJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "ProfilePage",
+    mainEntity: {
+      "@type": "Person",
+      name: `@${username}`,
+      alternateName: username,
+      url: `${getIbxSiteUrl()}/${encodeURIComponent(username)}`,
+    },
+  };
 
-  return <main className="min-h-dvh bg-background text-foreground">
-    <section className="w-full animate-enter px-4 py-6 md:px-8 md:py-8">
-      <div className="mx-auto w-full max-w-155 space-y-8">
+  return <>
+    <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(profileJsonLd).replace(/</g, "\\u003c") }} />
+    <main className="min-h-dvh bg-background text-foreground">
+      <section className="w-full animate-enter px-4 py-6 md:px-8 md:py-8">
+        <div className="mx-auto w-full max-w-155 space-y-8">
         <header className="flex flex-col items-start gap-3">
           <PublicProfileAvatar name={username} />
           <div className="space-y-2">
@@ -180,8 +198,9 @@ export default async function ProfilePage({ params, searchParams }: {
             </PaginationContent>
           </Pagination>}
         </section>
-      </div>
-    </section>
-    <Toaster position="bottom-right" />
-  </main>;
+        </div>
+      </section>
+      <Toaster position="bottom-right" />
+    </main>
+  </>;
 }

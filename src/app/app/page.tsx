@@ -1,9 +1,11 @@
 import { redirect } from "next/navigation";
+import type { Metadata } from "next";
 
 import { AppShell } from "@/components/layout/app-shell";
 import { getServerSession } from "@/lib/auth-server";
 
 export const dynamic = "force-dynamic";
+export const metadata: Metadata = { robots: { index: false, follow: false } };
 
 function normalizeFilter(value: string | string[] | undefined) {
   const candidate = Array.isArray(value) ? value[0] : value;
