@@ -39,8 +39,8 @@ export default async function SignInPage({
             forceRedirectUrl={redirectUrl}
             appearance={{
               variables: {
-                colorBackground: "var(--card)",
-                colorForeground: "var(--card-foreground)",
+                colorBackground: "var(--secondary)",
+                colorForeground: "var(--secondary-foreground)",
                 colorPrimary: "var(--primary)",
                 colorPrimaryForeground: "var(--primary-foreground)",
                 colorMuted: "var(--muted)",
@@ -52,7 +52,11 @@ export default async function SignInPage({
                 colorRing: "var(--ring)",
                 colorDanger: "var(--destructive)",
               },
-              elements: { card: "shadow-none p-0", footer: "hidden" },
+              elements: {
+                cardBox: "border border-border rounded-xl shadow-none",
+                card: "bg-transparent shadow-none p-0",
+                footer: "hidden",
+              },
             }}
           />
           <ApiKeySignInForm redirectUrl={redirectUrl} />
