@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   Field,
-  FieldDescription,
   FieldError,
   FieldGroup,
   FieldLabel,
@@ -77,19 +76,17 @@ export function ApiKeySignInForm({ redirectUrl }: ApiKeySignInFormProps) {
               autoComplete="off"
               spellCheck={false}
               placeholder="ibx_..."
+              className="font-mono text-xs"
               value={apiKey}
               aria-invalid={Boolean(error)}
               onChange={(event) => setApiKey(event.target.value)}
             />
-            <FieldDescription className="text-xs">
-              Full-access keys only. The key is sealed into an HttpOnly cookie.
-            </FieldDescription>
             {error ? <FieldError>{error}</FieldError> : null}
           </Field>
         </FieldGroup>
       </FieldSet>
 
-      <Button type="submit" className="w-full" disabled={isPending}>
+      <Button type="submit" variant="outline" className="w-full" disabled={isPending}>
         {isPending ? "Checking..." : "continue with API key"}
       </Button>
     </form>

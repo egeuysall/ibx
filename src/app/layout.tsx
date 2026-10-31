@@ -1,5 +1,4 @@
 import { ClerkProvider } from "@clerk/nextjs";
-import { shadcn } from "@clerk/ui/themes";
 import Script from "next/script";
 import type { Metadata, Viewport } from "next";
 import { Geist_Mono } from "next/font/google";
@@ -81,7 +80,7 @@ export default function RootLayout({
             document.documentElement.dataset.theme = dark ? "dark" : "light";
           } catch {}`}
         </Script>
-        <ClerkProvider appearance={{ theme: shadcn }}>
+        <ClerkProvider>
           <TooltipProvider delay={120}>
             <ServiceWorkerRegister />
             {children}
