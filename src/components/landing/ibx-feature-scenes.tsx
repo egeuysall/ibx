@@ -52,7 +52,7 @@ export function IbxFeatureScenes({ initialData }: { initialData: PreviewData }) 
       <section aria-labelledby="drive-title" className="animate-enter" style={{ "--delay": "780ms" } as CSSProperties}>
         <h2 id="drive-title" className="text-sm font-semibold leading-5">drive</h2>
         <ul className="mt-3 space-y-2 text-[13px] leading-5">
-          {data.drive.slice(0, 10).map((item, index) => (
+          {data.drive.slice(0, 5).map((item, index) => (
             <li key={item.id} className="animate-enter flex items-baseline gap-3" style={{ "--delay": `${840 + index * 55}ms` } as CSSProperties}>
               <a href={item.href} className="min-w-0 flex-1 truncate hover:underline" title={item.path}>
                 {item.path.toLowerCase()}
