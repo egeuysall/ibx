@@ -9,14 +9,6 @@ type PreviewData = {
   drive: LandingDriveItem[];
 };
 
-function driveItemTone(path: string) {
-  const extension = path.split(".").at(-1)?.toLowerCase();
-  if (["png", "jpg", "jpeg", "webp", "gif", "svg"].includes(extension ?? "")) return "text-emerald-300";
-  if (["ts", "tsx", "js", "jsx", "json", "py", "sh"].includes(extension ?? "")) return "text-sky-300";
-  if (["md", "txt", "pdf", "doc", "docx"].includes(extension ?? "")) return "text-amber-300";
-  return "text-neutral-200";
-}
-
 export function IbxFeatureScenes({ initialData }: { initialData: PreviewData }) {
   const [data, setData] = useState<PreviewData>(initialData);
 
@@ -62,7 +54,7 @@ export function IbxFeatureScenes({ initialData }: { initialData: PreviewData }) 
         <ul className="mt-3 space-y-2 text-[13px] leading-5">
           {data.drive.slice(0, 5).map((item, index) => (
             <li key={item.id} className="animate-enter flex items-baseline gap-3" style={{ "--delay": `${840 + index * 55}ms` } as CSSProperties}>
-              <a href={item.href} className={`min-w-0 flex-1 truncate hover:underline ${driveItemTone(item.path)}`} title={item.path}>
+              <a href={item.href} className={`min-w-0 flex-1 truncate hover:underline ${index % 2 === 0 ? "text-emerald-300" : "text-orange-300"}`} title={item.path}>
                 {item.path.toLowerCase()}
               </a>
               <span className="shrink-0 text-xs text-muted-foreground">{item.size}</span>
