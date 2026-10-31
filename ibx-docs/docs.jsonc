@@ -1,7 +1,7 @@
 {
   "$schema": "https://holocron.so/docs.json",
-  "name": "IBX",
-  "description": "Turn raw thoughts into executable todos with an offline-first app, API, and CLI.",
+  "name": "ibx",
+  "description": "turn raw thoughts into executable todos with an offline-first app, api, and cli.",
   "favicon": "/favicon.ico",
   "colors": {
     "primary": "#d4d4d4"
@@ -18,7 +18,7 @@
     ],
     "primary": {
       "type": "button",
-      "label": "Open IBX",
+      "label": "open ibx",
       "href": "https://ibx.egeuysal.com"
     }
   },
@@ -69,13 +69,13 @@
     "global": {
       "anchors": [
         {
-          "anchor": "IBX",
+          "anchor": "ibx",
           "href": "https://ibx.egeuysal.com",
           "icon": "lucide:home",
           "placement": "tabs"
         },
         {
-          "anchor": "GitHub",
+          "anchor": "github",
           "href": "https://github.com/egeuysall/ibx",
           "icon": "lucide:github",
           "placement": "tabs"

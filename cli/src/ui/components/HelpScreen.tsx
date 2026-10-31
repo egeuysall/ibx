@@ -2,16 +2,13 @@ import { Badge } from "@inkjs/ui";
 import { Box, Text } from "ink";
 import React from "react";
 
-import { APP_TIMEZONE, DEFAULT_BASE_URL, VERSION } from "../../core/constants.js";
-
-type CommandRow = {
-  command: string;
-  description: string;
-};
+import { CLI_COMMANDS } from "../../command-manifest.js";
+import { DEFAULT_BASE_URL, VERSION } from "../../core/constants.js";
 
 type CommandSection = {
   title: string;
-  rows: CommandRow[];
+  description: string;
+  examples: string[];
 };
 
 const accent = "#ff8a5c";
@@ -28,56 +25,13 @@ const logo = [
   " ╚═╝╚═════╝ ╚═╝  ╚═╝",
 ];
 
-const sections: CommandSection[] = [
-  {
-    title: "Capture",
-    rows: [
-      { command: 'ibx add "ship plan"', description: "Generate tasks from text" },
-      { command: 'ibx n --input "follow up"', description: "Quick note alias" },
-      { command: "ibx", description: "Prompt capture mode" },
-    ],
-  },
-  {
-    title: "Tasks",
-    rows: [
-      { command: "ibx t l --view today", description: "List today's open tasks" },
-      { command: "ibx td --json", description: `Done today (${APP_TIMEZONE})` },
-      { command: "ibx t x --id <todoId>", description: "Mark task done" },
-      { command: "ibx t s --id <todoId> --start 14:00", description: "Edit task fields" },
-      { command: 'ibx page create "launch notes"', description: "Create task page" },
-      { command: "ibx sync", description: "Pull latest sync state" },
-      { command: "ibx attach ./file.pdf", description: "Upload privately to Files" },
-      { command: "ibx attach ./file.pdf --directory /content/YYYY/MM/DD", description: "Create path and upload into Files" },
-      { command: "ibx mkdir /content/YYYY/MM/DD", description: "Create nested Files directories" },
-      { command: "ibx attach <todoId> ./file.pdf", description: "Attach privately to a todo" },
-      { command: "ibx attach <todoId> <file> --public", description: "Attach and share a public link" },
-      { command: "ibx attach list <todoId>", description: "List attachment URLs" },
-      { command: "ibx attach list --all", description: "List all attachment URLs" },
-      { command: "ibx files tree", description: "Browse files and folders" },
-      { command: "ibx files list --json", description: "List files and sharing state" },
-      { command: "ibx files upload ./image.png", description: "Upload to the Files library" },
-      { command: 'ibx files rename <itemId> "new name.png"', description: "Rename a file or folder" },
-      { command: "ibx publish <todoId>", description: "Publish page to Bri" },
-    ],
-  },
-  {
-    title: "Calendar",
-    rows: [
-      { command: "ibx cal s", description: "Show feed status" },
-      { command: "ibx cal r", description: "Rotate private feed URL" },
-    ],
-  },
-  {
-    title: "Account",
-    rows: [
-      { command: "ibx login", description: "Open Clerk login in browser" },
-      { command: "ibx login --api-key iak_...", description: "Save API key for automation" },
-      { command: "ibx whoami --json", description: "Check saved auth" },
-      { command: "ibx logout", description: "Forget local auth" },
-      { command: "ibx self-update", description: "Update from GitHub Releases" },
-    ],
-  },
-];
+const sections: CommandSection[] = Object.entries(CLI_COMMANDS).map(
+  ([title, command]) => ({
+    title,
+    description: command.description,
+    examples: command.examples,
+  }),
+);
 
 function CommandTable({ section }: { section: CommandSection }) {
   return (
@@ -86,15 +40,14 @@ function CommandTable({ section }: { section: CommandSection }) {
         <Text color={accent} bold>
           {section.title}
         </Text>
-        <Text color="#5f5b55"> {"─".repeat(Math.max(8, 28 - section.title.length))}</Text>
       </Box>
-      {section.rows.map((row) => (
-        <Box key={row.command}>
+      <Text color={muted}>{section.description}</Text>
+      {section.examples.map((command) => (
+        <Box key={command}>
           <Box width={38}>
             <Text color={accent}>{">"} </Text>
-            <Text color={fg}>{row.command}</Text>
+            <Text color={fg}>{command}</Text>
           </Box>
-          <Text color={muted}>{row.description}</Text>
         </Box>
       ))}
     </Box>
@@ -125,7 +78,7 @@ export default function HelpScreen() {
             <Text color={muted}> v{VERSION}</Text>
           </Box>
           <Text color={accent}>Task capture, schedule, and calendar feed from terminal</Text>
-          <Text color={muted}>Auth, AI task runs, JSON output, private calendar rotation.</Text>
+          <Text color={muted}>Command list is generated from the router manifest.</Text>
         </Box>
       </Box>
 

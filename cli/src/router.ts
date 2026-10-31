@@ -6,16 +6,7 @@ import { checkForCliUpdates } from "./core/update-check.js";
 import { CliError } from "./core/errors.js";
 import { color, print } from "./core/output.js";
 import type { ParsedArgs } from "./core/types.js";
-import { runAddCommand } from "./commands/add.js";
-import { runAttachCommand } from "./commands/attach.js";
-import { runAuthCommand } from "./commands/auth.js";
-import { runCalendarCommand } from "./commands/calendar.js";
-import { runPageCommand } from "./commands/page.js";
-import { runPublishCommand } from "./commands/publish.js";
-import { runSelfUpdateCommand } from "./commands/self-update.js";
-import { runSyncCommand } from "./commands/sync.js";
-import { runTodosCommand } from "./commands/todos.js";
-import { runFilesCommand } from "./commands/files.js";
+import { CLI_COMMANDS } from "./command-manifest.js";
 import { renderHelpUi } from "./ui/pastel.js";
 
 function normalizeTopLevelCommand(parsed: ParsedArgs) {
@@ -27,6 +18,8 @@ function normalizeTopLevelCommand(parsed: ParsedArgs) {
       ? "auth"
       : first === "n"
         ? "add"
+        : first === "list"
+          ? "todos"
         : first === "t"
           ? "todos"
           : first === "cal" || first === "c"
@@ -56,6 +49,14 @@ function normalizeTopLevelCommand(parsed: ParsedArgs) {
         }
       : first === "mkdir"
         ? { ...parsed, positionals: ["files", "mkdir", ...parsed.positionals.slice(1)] }
+      : first === "list"
+        ? {
+            ...parsed,
+            positionals: ["todos", "list", ...parsed.positionals.slice(1)],
+            options: parsed.options.view === undefined
+              ? { ...parsed.options, view: "all" }
+              : parsed.options,
+          }
       : first === "a" || first === "n" || first === "t" || first === "cal" || first === "c"
         ? {
             ...parsed,
@@ -83,7 +84,7 @@ export async function main(argv = process.argv.slice(2)) {
   if (!normalizedFirst) {
     await checkForCliUpdates(normalizedFirst, normalizedParsed);
     print(`${color.bold("ibx")} ${color.gray("quick capture")}`);
-    await runAddCommand({
+    await CLI_COMMANDS.add.run({
       ...normalizedParsed,
       positionals: ["add"],
     });
@@ -92,53 +93,9 @@ export async function main(argv = process.argv.slice(2)) {
 
   await checkForCliUpdates(normalizedFirst, normalizedParsed);
 
-  if (normalizedFirst === "auth") {
-    await runAuthCommand(normalizedParsed);
-    return;
-  }
-
-  if (normalizedFirst === "add") {
-    await runAddCommand(normalizedParsed);
-    return;
-  }
-
-  if (normalizedFirst === "todos") {
-    await runTodosCommand(normalizedParsed);
-    return;
-  }
-
-  if (normalizedFirst === "calendar") {
-    await runCalendarCommand(normalizedParsed);
-    return;
-  }
-
-  if (normalizedFirst === "sync") {
-    await runSyncCommand(normalizedParsed);
-    return;
-  }
-
-  if (normalizedFirst === "self-update") {
-    await runSelfUpdateCommand();
-    return;
-  }
-
-  if (normalizedFirst === "page") {
-    await runPageCommand(normalizedParsed);
-    return;
-  }
-
-  if (normalizedFirst === "publish") {
-    await runPublishCommand(normalizedParsed);
-    return;
-  }
-
-  if (normalizedFirst === "attach") {
-    await runAttachCommand(normalizedParsed);
-    return;
-  }
-
-  if (normalizedFirst === "files") {
-    await runFilesCommand(normalizedParsed);
+  const command = CLI_COMMANDS[normalizedFirst as keyof typeof CLI_COMMANDS];
+  if (command) {
+    await command.run(normalizedParsed);
     return;
   }
 

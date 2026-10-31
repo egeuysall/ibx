@@ -17,8 +17,38 @@ const geistMono = Geist_Mono({
 const ICON_VERSION = "20260408";
 
 export const metadata: Metadata = {
-  title: "ibx",
-  description: "Private thought ibx and todo generator.",
+  metadataBase: new URL((process.env.NEXT_PUBLIC_SITE_URL ?? "https://ibx.egeuysal.com").replace(/\/+$/, "")),
+  title: {
+    default: "ibx | tasks, notes, drive, and cli",
+    template: "%s | ibx",
+  },
+  description: "turn thoughts into tasks, keep notes and files together, and continue across the web, cli, and phone.",
+  applicationName: "ibx",
+  authors: [{ name: "Ege Uysal", url: "https://egeuysal.com" }],
+  creator: "Ege Uysal",
+  publisher: "ibx",
+  category: "productivity",
+  referrer: "strict-origin-when-cross-origin",
+  formatDetection: { telephone: false, email: false, address: false },
+  keywords: ["ibx", "task manager", "todo", "notes", "file drive", "cli", "calendar", "offline productivity"],
+  alternates: { canonical: "/" },
+  openGraph: {
+    type: "website",
+    url: "/",
+    title: "ibx | tasks, notes, drive, and cli",
+    description: "turn thoughts into tasks, keep notes and files together, and continue across the web, cli, and phone.",
+    siteName: "ibx",
+    locale: "en_US",
+    images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: "ibx tasks, notes, drive, and cli" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "ibx | tasks, notes, drive, and cli",
+    description: "turn thoughts into tasks, keep notes and files together, and continue across the web, cli, and phone.",
+    creator: "@egecreates",
+    images: ["/opengraph-image"],
+  },
+  robots: { index: true, follow: true, googleBot: { index: true, follow: true, "max-image-preview": "large" } },
   icons: {
     icon: `/icon?size=512&v=${ICON_VERSION}`,
     apple: `/apple-icon?v=${ICON_VERSION}`,

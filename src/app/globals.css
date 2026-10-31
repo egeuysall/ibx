@@ -4,6 +4,7 @@
 @import "../styles/_keyframe-animations.scss";
 
 @import "tailwindcss";
+
 @import "@clerk/ui/themes/shadcn.css";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -54,7 +55,82 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+.cli-workspace-panel {
+  position: fixed;
+  inset: 0 0 0 auto !important;
+  right: 0 !important;
+  left: auto !important;
+  z-index: 50;
+  width: var(--cli-workspace-width, 50vw);
+  transform: translateX(100%);
+  transition: transform 360ms cubic-bezier(.2, .75, .25, 1), border-color 180ms ease;
+  will-change: transform;
+}
+.cli-workspace-panel[data-open="true"] { transform: translateX(0); }
+.cli-workspace-panel:has(.cli-workspace-resizer:hover),
+.cli-workspace-panel:has(.cli-workspace-resizer:focus-visible) {
+  border-left-color: var(--foreground);
+}
+
+body { transition: margin-right 360ms cubic-bezier(.2, .75, .25, 1); }
+body.ibx-cli-workspace-open { margin-right: var(--cli-workspace-width, 50vw); }
+
+.cli-workspace-resizer {
+  position: absolute;
+  z-index: 2;
+  inset: 0 auto 0 -0.5rem;
+  width: 1rem;
+  cursor: col-resize;
+  touch-action: none;
+  background: transparent;
+  outline: none;
+}
+
+body.ibx-cli-workspace-resizing,
+body.ibx-cli-workspace-resizing * { cursor: col-resize !important; user-select: none !important; }
+
+@media (max-width: 640px) {
+  .cli-workspace-resizer { display: none; }
+  [aria-label="ibx cli workspace"] { width: 100vw !important; }
+  body.ibx-cli-workspace-open { margin-right: 0 !important; }
+}
+
+@media (prefers-reduced-motion: reduce) { body, .cli-workspace-panel { transition-duration: .01ms; } }
+
+.animate-enter {
+  opacity: 1;
+  transform: none;
+  animation: landing-rise 720ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: var(--delay, 0ms);
+}
+
+@keyframes landing-rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-enter { opacity: 1; transform: none; animation: none; }
+}
+
 :root {
+  --code-highlight-bg: #f4f4f5;
+  --terminal-ansi-0: #18181b;
+  --terminal-ansi-1: #b42318;
+  --terminal-ansi-2: #18794e;
+  --terminal-ansi-3: #8a5a00;
+  --terminal-ansi-4: #175cd3;
+  --terminal-ansi-5: #9e2a7b;
+  --terminal-ansi-6: #087e8b;
+  --terminal-ansi-7: #52525b;
+  --terminal-ansi-8: #71717a;
+  --terminal-ansi-9: #d92d20;
+  --terminal-ansi-10: #15803d;
+  --terminal-ansi-11: #a16207;
+  --terminal-ansi-12: #2563eb;
+  --terminal-ansi-13: #c0268c;
+  --terminal-ansi-14: #0e7490;
+  --terminal-ansi-15: #09090b;
   --caret-color: #000000;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -70,7 +146,7 @@
   --muted-foreground: oklch(0.45 0 0);
   --accent: oklch(0.94 0 0);
   --accent-foreground: oklch(0.2 0 0);
-  --destructive: oklch(0.56 0.22 23);
+  --destructive: oklch(0.42 0 0);
   --border: oklch(0.88 0 0);
   --input: oklch(0.9 0 0);
   --ring: oklch(0.35 0 0 / 35%);
@@ -91,6 +167,23 @@
 }
 
 .dark {
+  --code-highlight-bg: #101010;
+  --terminal-ansi-0: #000000;
+  --terminal-ansi-1: #cd0000;
+  --terminal-ansi-2: #00cd00;
+  --terminal-ansi-3: #cdcd00;
+  --terminal-ansi-4: #0000ee;
+  --terminal-ansi-5: #cd00cd;
+  --terminal-ansi-6: #00cdcd;
+  --terminal-ansi-7: #e5e5e5;
+  --terminal-ansi-8: #7f7f7f;
+  --terminal-ansi-9: #ff5555;
+  --terminal-ansi-10: #50fa7b;
+  --terminal-ansi-11: #f1fa8c;
+  --terminal-ansi-12: #8be9fd;
+  --terminal-ansi-13: #ff79c6;
+  --terminal-ansi-14: #8be9fd;
+  --terminal-ansi-15: #ffffff;
   --caret-color: #ffffff;
   --background: oklch(0.09 0 0);
   --foreground: oklch(0.94 0 0);
@@ -106,7 +199,7 @@
   --muted-foreground: oklch(0.67 0 0);
   --accent: oklch(0.19 0 0);
   --accent-foreground: oklch(0.94 0 0);
-  --destructive: oklch(0.64 0.2 23);
+  --destructive: oklch(0.72 0 0);
   --border: oklch(0.27 0 0);
   --input: oklch(0.23 0 0);
   --ring: oklch(0.75 0 0 / 32%);
@@ -139,6 +232,17 @@
     @apply bg-background text-foreground;
     background-image: none;
     caret-color: var(--caret-color);
+    text-transform: lowercase;
+  }
+
+  body * {
+    text-transform: lowercase !important;
+  }
+
+  img,
+  video,
+  svg {
+    filter: grayscale(1);
   }
 
   input,
@@ -149,11 +253,8 @@
 
   .dark body {
     background-image:
-      linear-gradient(to bottom, oklch(1 0 0 / 0.03), transparent 120px),
-      radial-gradient(oklch(0.2 0 0 / 0.04) 0.5px, transparent 0.5px);
-    background-size:
-      100% 100%,
-      12px 12px;
+      linear-gradient(to bottom, oklch(1 0 0 / 0.035), transparent 32rem);
+    background-size: 100% 100%;
   }
 
   ::selection {

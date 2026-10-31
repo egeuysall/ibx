@@ -3,7 +3,7 @@ import { dirname } from "node:path";
 
 import { safeJsonStringify } from "flags";
 
-import { API_KEY_PREFIX, CONFIG_FILE, EXIT_CODE } from "./constants.js";
+import { API_KEY_PREFIX, CONFIG_FILE, DEFAULT_BASE_URL, EXIT_CODE } from "./constants.js";
 import {
   deleteStoredApiKey,
   readStoredCredential,
@@ -15,6 +15,20 @@ import type { CliConfig } from "./types.js";
 import { normalizeBaseUrl } from "./url.js";
 
 export async function loadConfig(): Promise<CliConfig | null> {
+  const demoApiKey = process.env.IBX_PUBLIC_DEMO_API_KEY?.trim();
+  if (demoApiKey?.startsWith(API_KEY_PREFIX)) {
+    try {
+      return {
+        baseUrl: normalizeBaseUrl(process.env.IBX_BASE_URL?.trim() || DEFAULT_BASE_URL),
+        apiKey: demoApiKey,
+        createdAt: "environment",
+        credentialStore: "config-file",
+      };
+    } catch {
+      return null;
+    }
+  }
+
   const raw = await readFile(CONFIG_FILE, "utf8").catch(() => null);
   if (!raw) {
     return null;

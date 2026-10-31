@@ -28,6 +28,17 @@ function flattenFiles(nodes: Node[], folderPath: string[] = []): Array<{ file: F
     : node.file ? [{ file: { ...node.file, fileName: node.name }, path: folderPath }] : []);
 }
 
+function findNode(nodes: Node[], id: string): Node | undefined {
+  for (const node of nodes) {
+    if (node.id === id) return node;
+    if (node.type === "folder") {
+      const child = findNode(node.children ?? [], id);
+      if (child) return child;
+    }
+  }
+  return undefined;
+}
+
 export async function runFilesCommand(parsed: ParsedArgs) {
   const config = await requireConfig();
   const action = parsed.positionals[1] ?? "list";
@@ -74,13 +85,16 @@ export async function runFilesCommand(parsed: ParsedArgs) {
     const id = parsed.positionals[2] ?? getStringOption(parsed, "id");
     if (!id) throw new CliError(`Usage: ibx files ${action} <fileId>${action === "move" ? " <folderId|root>" : ""}.`, { exitCode: EXIT_CODE.VALIDATION, code: "FILES_ID_REQUIRED" });
     const method = action === "delete" ? "DELETE" : "PATCH";
+    const node = action === "delete"
+      ? findNode((await requestJson<{ tree: Node[] }>(config, "/api/files/tree", { method: "GET" }, { action: "find file or folder" })).tree, id)
+      : undefined;
     const body = action === "move"
       ? { folderId: parsed.positionals[3] === "root" ? null : parsed.positionals[3] ?? null }
-      : { visibility: action };
+      : action === "delete" ? (node?.type === "folder" ? { type: "folder" } : undefined) : { visibility: action };
     const result = await requestJson<{ ok: boolean; folderId?: string | null }>(config, `/api/files/${encodeURIComponent(id)}`, {
-      method, ...(method === "PATCH" ? { body: JSON.stringify(body) } : {}),
+      method, ...(body ? { body: JSON.stringify(body) } : {}),
     }, { action: `${action} file` });
-    if (outputJson) printJson(result); else printOk(action === "delete" ? "file deleted" : `file ${action === "move" ? "moved" : `is ${action}`}`);
+    if (outputJson) printJson(result); else printOk(action === "delete" ? `${node?.type === "folder" ? "folder" : "file"} deleted` : `file ${action === "move" ? "moved" : `is ${action}`}`);
     return;
   }
 

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { clerkClient } from "@clerk/nextjs/server";
 import type { FunctionReturnType } from "convex/server";
@@ -10,9 +11,30 @@ import { PublicFilesTerminal } from "@/components/files/public-files-terminal";
 import { PublicFileViewer } from "@/components/files/public-file-viewer";
 import { PublicProfileAvatar } from "@/components/public-profile-avatar";
 import { browsePublicFiles } from "@/lib/public-drive";
+import { getIbxSiteUrl } from "@/lib/landing-public-data";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Public files · ibx", description: "Public files and notes shared on ibx." };
+export async function generateMetadata({ params }: { params: Promise<{ username: string }> }): Promise<Metadata> {
+  const { username } = await params;
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(username)) {
+    return { title: "profile not found", robots: { index: false, follow: false } };
+  }
+  const { data: users } = await (await clerkClient()).users.getUserList({ username: [username], limit: 1 }).catch(() => ({ data: [] }));
+  if (!users.some((user) => user.username === username)) {
+    return { title: "profile not found", robots: { index: false, follow: false } };
+  }
+  const title = `@${username.toLowerCase()} · public files and notes · ibx`;
+  const description = `browse public files and notes shared by @${username.toLowerCase()} on ibx.`;
+  const canonical = `${getIbxSiteUrl()}/${encodeURIComponent(username)}`;
+  return {
+    title,
+    description,
+    alternates: { canonical },
+    openGraph: { type: "website", url: canonical, title, description, siteName: "ibx", images: ["/opengraph-image"] },
+    twitter: { card: "summary_large_image", title, description, images: ["/opengraph-image"] },
+    robots: { index: true, follow: true, googleBot: { index: true, follow: true, "max-image-preview": "large" } },
+  };
+}
 
 const NOTES_PER_PAGE = 5;
 type PublicFilesPage = FunctionReturnType<typeof api.attachments.paginatePublicFiles>;

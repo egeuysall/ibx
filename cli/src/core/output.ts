@@ -4,7 +4,7 @@ import { safeJsonStringify } from "flags";
 
 type LogLevel = "info" | "warn" | "error";
 
-const useColor = Boolean(process.stdout.isTTY) && !process.env.NO_COLOR;
+const useColor = Boolean(process.stdout.isTTY || process.env.FORCE_COLOR) && !process.env.NO_COLOR;
 
 export const color = {
   dim: (value: string) => (useColor ? `\x1b[2m${value}\x1b[0m` : value),
