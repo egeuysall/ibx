@@ -39,16 +39,19 @@ export function LandingDriveView({ initialItems, initialFolder, folderId, demoSe
     <section className="animate-enter" style={{ "--delay": "120ms" } as CSSProperties}>
       <h1 className="text-sm font-semibold leading-5">{folderName}</h1>
       <ul className="mt-5 space-y-3 text-[13px] leading-5">
-        {items.map((item) => (
-          <li key={item.id} className="flex items-baseline justify-between gap-4">
-            {item.size === "folder" ? (
-              <Link className="min-w-0 truncate hover:underline" href={item.href}>{leafName(item.path)}/</Link>
-            ) : (
-              <a className="min-w-0 truncate hover:underline" href={item.href}>{leafName(item.path)}</a>
-            )}
-            <span className="shrink-0 text-xs text-muted-foreground">{item.size}</span>
-          </li>
-        ))}
+        {items.map((item, index) => {
+          const fileIndex = items.slice(0, index).filter((entry) => entry.size !== "folder").length;
+          return (
+            <li key={item.id} className="flex items-baseline justify-between gap-4">
+              {item.size === "folder" ? (
+                <Link className="min-w-0 truncate hover:underline" href={item.href}>{leafName(item.path)}/</Link>
+              ) : (
+                <a className={`min-w-0 truncate hover:underline ${fileIndex % 2 === 0 ? "text-[#99FFE4]" : "text-[#FFC799]"}`} href={item.href}>{leafName(item.path)}</a>
+              )}
+              <span className="shrink-0 text-xs text-muted-foreground">{item.size}</span>
+            </li>
+          );
+        })}
         {items.length === 0 && <li className="text-xs text-muted-foreground">no files in this folder</li>}
       </ul>
     </section>
