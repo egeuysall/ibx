@@ -65,20 +65,23 @@ export function ApiKeySignInForm({ redirectUrl }: ApiKeySignInFormProps) {
   };
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-4">
+    <form onSubmit={onSubmit} className="mt-8 w-full space-y-3 border-t border-border pt-6">
       <FieldSet>
         <FieldGroup>
-          <Field data-invalid={Boolean(error)}>
-            <FieldLabel htmlFor="api-key">API key</FieldLabel>
+          <Field data-invalid={Boolean(error)} className="space-y-2">
+            <FieldLabel htmlFor="api-key" className="text-xs text-muted-foreground">API key</FieldLabel>
             <Input
               id="api-key"
+              name="apiKey"
               type="password"
               autoComplete="off"
+              spellCheck={false}
+              placeholder="ibx_..."
               value={apiKey}
               aria-invalid={Boolean(error)}
               onChange={(event) => setApiKey(event.target.value)}
             />
-            <FieldDescription>
+            <FieldDescription className="text-xs">
               Full-access keys only. The key is sealed into an HttpOnly cookie.
             </FieldDescription>
             {error ? <FieldError>{error}</FieldError> : null}
@@ -86,7 +89,7 @@ export function ApiKeySignInForm({ redirectUrl }: ApiKeySignInFormProps) {
         </FieldGroup>
       </FieldSet>
 
-      <Button type="submit" disabled={isPending}>
+      <Button type="submit" className="w-full" disabled={isPending}>
         {isPending ? "Checking..." : "continue with API key"}
       </Button>
     </form>

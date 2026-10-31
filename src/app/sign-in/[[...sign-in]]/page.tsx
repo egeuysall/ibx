@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { SignIn } from "@clerk/nextjs";
 import type { Metadata } from "next";
 import { ApiKeySignInForm } from "@/components/auth/api-key-sign-in-form";
@@ -21,25 +22,32 @@ export default async function SignInPage({
   const redirectUrl = normalizeRedirectUrl((await searchParams).redirect_url);
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-5 py-10">
-      <div className="grid w-full max-w-4xl gap-6 md:grid-cols-2">
-        <div className="flex justify-center">
-          <SignIn fallbackRedirectUrl={redirectUrl} forceRedirectUrl={redirectUrl} />
+    <div className="mx-auto flex min-h-screen w-full max-w-[620px] flex-col px-6 py-8 sm:px-8 sm:py-10">
+      <header className="pb-8">
+        <div className="flex items-end justify-between gap-6 pb-5">
+          <Link href="/" className="text-[15px] text-foreground hover:text-muted-foreground focus-visible:text-muted-foreground">ibx</Link>
+          <p className="text-xs text-muted-foreground">authentication</p>
         </div>
-
-        <section className="flex flex-col justify-center gap-5 rounded-lg border bg-card p-6">
-          <header className="flex flex-col gap-2">
-            <p className="text-xs text-muted-foreground">{"///"} API access</p>
-            <h1 className="text-xl font-medium tracking-tight">
-              Sign in with an API key
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Use an existing full-access key for this browser session.
-            </p>
-          </header>
+      </header>
+      <main className="flex flex-1 items-center justify-center">
+        <div className="w-full max-w-[400px]">
+          <SignIn
+            routing="path"
+            path="/sign-in"
+            signUpUrl="/sign-up"
+            fallbackRedirectUrl={redirectUrl}
+            forceRedirectUrl={redirectUrl}
+            appearance={{ elements: { card: "bg-transparent shadow-none p-0", footer: "hidden" } }}
+          />
           <ApiKeySignInForm redirectUrl={redirectUrl} />
-        </section>
-      </div>
+        </div>
+      </main>
+      <footer className="pt-8 text-xs text-muted-foreground">
+        <div className="flex items-center justify-between gap-4 pt-5">
+          <a href="https://github.com/egeuysall/ibx" target="_blank" rel="noopener noreferrer" className="hover:text-foreground focus-visible:text-foreground">github</a>
+          <p>&copy; {new Date().getFullYear()}</p>
+        </div>
+      </footer>
     </div>
   );
 }
