@@ -1,10 +1,10 @@
-import { ClerkProvider } from "@clerk/nextjs";
 import Script from "next/script";
 import type { Metadata, Viewport } from "next";
 import { Geist_Mono } from "next/font/google";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ServiceWorkerRegister } from "@/components/layout/sw-register";
+import { ThemeAwareClerkProvider } from "@/components/auth/theme-aware-clerk-provider";
 
 import "./globals.css";
 
@@ -80,12 +80,12 @@ export default function RootLayout({
             document.documentElement.dataset.theme = dark ? "dark" : "light";
           } catch {}`}
         </Script>
-        <ClerkProvider>
+        <ThemeAwareClerkProvider>
           <TooltipProvider delay={120}>
             <ServiceWorkerRegister />
             {children}
           </TooltipProvider>
-        </ClerkProvider>
+        </ThemeAwareClerkProvider>
       </body>
     </html>
   );
