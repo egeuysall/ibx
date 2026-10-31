@@ -67,7 +67,7 @@ async function LandingPage() {
 
       <main className="flex-1 pb-8">
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareApplication).replace(/</g, "\\u003c") }} />
-        <section aria-labelledby="landing-title" className="animate-enter" style={{ "--delay": "40ms" } as CSSProperties}>
+        <section aria-labelledby="landing-title" className="animate-enter" style={{ "--delay": "80ms" } as CSSProperties}>
           <h1 id="landing-title" className="text-sm font-semibold leading-5 tracking-normal text-foreground">
             make room for what matters.
           </h1>
@@ -85,7 +85,7 @@ async function LandingPage() {
           ],
           drive: publicFiles.slice(0, 10),
         }} />
-        <div className="animate-enter" style={{ "--delay": "280ms" } as CSSProperties}>
+        <div className="animate-enter" style={{ "--delay": "1450ms" } as CSSProperties}>
           <IbxCliTerminal />
         </div>
 

@@ -38,7 +38,7 @@ export function IbxFeatureScenes({ initialData }: { initialData: PreviewData }) 
         <h2 id="focus-title" className="text-sm font-semibold leading-5">today</h2>
         <ul className="mt-3 space-y-2 text-[13px] leading-5">
           {data.tasks.slice(0, 10).map((task, index) => (
-            <li key={`${task.title}-${index}`} className="flex items-baseline gap-3">
+            <li key={`${task.title}-${index}`} className="animate-enter flex items-baseline gap-3" style={{ "--delay": `${260 + index * 55}ms` } as CSSProperties}>
               <span className="min-w-0 flex-1">{task.title}</span>
               <span className="shrink-0 text-right text-xs leading-4 text-muted-foreground">
                 {[task.when, task.detail].filter(Boolean).join(" · ")}
@@ -49,11 +49,11 @@ export function IbxFeatureScenes({ initialData }: { initialData: PreviewData }) 
         </ul>
       </section>
 
-      <section aria-labelledby="drive-title" className="animate-enter" style={{ "--delay": "200ms" } as CSSProperties}>
+      <section aria-labelledby="drive-title" className="animate-enter" style={{ "--delay": "780ms" } as CSSProperties}>
         <h2 id="drive-title" className="text-sm font-semibold leading-5">drive</h2>
         <ul className="mt-3 space-y-2 text-[13px] leading-5">
-          {data.drive.slice(0, 10).map((item) => (
-            <li key={item.id} className="flex items-baseline gap-3">
+          {data.drive.slice(0, 10).map((item, index) => (
+            <li key={item.id} className="animate-enter flex items-baseline gap-3" style={{ "--delay": `${840 + index * 55}ms` } as CSSProperties}>
               <a href={item.href} className="min-w-0 flex-1 truncate hover:underline" title={item.path}>
                 {item.path.toLowerCase()}
               </a>

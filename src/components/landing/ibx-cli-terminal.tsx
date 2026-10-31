@@ -10,6 +10,7 @@ type Entry = { command: string; output: string };
 type ShellBuiltin = "clear" | "history" | "help" | "exit";
 const installCommand = "curl -fsSL https://ibx.egeuysal.com/install.sh | bash";
 const terminalStorageKey = "ibx:landing-cli:v1";
+const terminalOpenKey = "ibx:landing-cli-open:v1";
 const terminalWidthKey = "ibx:landing-cli-width:v1";
 const minPanelWidth = 320;
 
@@ -121,11 +122,14 @@ export function IbxCliTerminal() {
   const hasSavedWidthRef = useRef(false);
   const [restored, setRestored] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [transitionsReady, setTransitionsReady] = useState(false);
 
   useEffect(() => {
     try {
       const navigation = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
       if (navigation?.type === "reload") sessionStorage.removeItem(terminalStorageKey);
+      const savedOpen = sessionStorage.getItem(terminalOpenKey);
+      if (savedOpen === "true" || savedOpen === "false") setOpen(savedOpen === "true");
       const saved = navigation?.type === "reload" ? null : sessionStorage.getItem(terminalStorageKey);
       if (saved) {
         const state = JSON.parse(saved) as { sessionId?: string; command?: string; entries?: Entry[]; history?: string[]; open?: boolean };
@@ -148,18 +152,21 @@ export function IbxCliTerminal() {
     }
     setRestored(true);
     setMounted(true);
+    const timeout = window.setTimeout(() => setTransitionsReady(true), 50);
+    return () => window.clearTimeout(timeout);
   }, []);
 
   useEffect(() => {
     if (!restored) return;
     try {
       sessionStorage.setItem(terminalStorageKey, JSON.stringify({ sessionId: sessionIdRef.current, command, entries, history, open }));
+      sessionStorage.setItem(terminalOpenKey, String(open));
     } catch { /* terminal continues without browser storage */ }
   }, [command, entries, history, open, restored]);
 
   useEffect(() => {
     document.body.classList.toggle("ibx-cli-workspace-open", open);
-    document.body.style.transition = "margin-right 360ms cubic-bezier(.2, .75, .25, 1)";
+    document.body.style.transition = transitionsReady ? "margin-right 360ms cubic-bezier(.2, .75, .25, 1)" : "none";
     const syncPageWidth = () => {
       document.body.style.marginRight = open && window.innerWidth > 640 ? `${panelWidth}px` : "0px";
     };
@@ -172,7 +179,7 @@ export function IbxCliTerminal() {
       document.body.style.marginRight = "";
       document.body.style.transition = "";
     };
-  }, [open, panelWidth]);
+  }, [open, panelWidth, transitionsReady]);
 
   useEffect(() => {
     const onResize = () => {
@@ -344,6 +351,7 @@ export function IbxCliTerminal() {
           aria-hidden={!open}
           inert={!open}
           data-open={open}
+          data-ready={transitionsReady}
           className="cli-workspace-panel fixed inset-y-0 right-0 z-50 flex w-full flex-col border-l border-border bg-background text-foreground md:w-[var(--cli-workspace-width,50vw)]"
           style={{ width: "var(--cli-workspace-width, 50vw)" }}
         >

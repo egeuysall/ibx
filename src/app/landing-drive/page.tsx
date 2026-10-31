@@ -1,5 +1,4 @@
 import Link from "next/link";
-import type { CSSProperties } from "react";
 import { LandingDriveView } from "@/components/landing/landing-drive-view";
 import { IbxCliTerminal } from "@/components/landing/ibx-cli-terminal";
 import { getPublicLandingFiles, type LandingDriveItem } from "@/lib/landing-public-data";
@@ -29,7 +28,7 @@ export default async function LandingDrivePage({
 
   return (
     <main className="mx-auto min-h-dvh w-full max-w-[620px] px-6 py-10 font-mono sm:px-8 sm:py-12">
-      <header className="animate-enter flex items-center justify-between pb-10 text-xs text-muted-foreground" style={{ "--delay": "40ms" } as CSSProperties}>
+      <header className="flex items-center justify-between pb-10 text-xs text-muted-foreground">
         <Link href="/" className="text-sm font-semibold text-foreground">ibx</Link>
         <Link href="/" className="hover:text-foreground">back</Link>
       </header>
