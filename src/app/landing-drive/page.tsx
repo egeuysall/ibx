@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { CSSProperties } from "react";
 import { LandingDriveView } from "@/components/landing/landing-drive-view";
+import { IbxCliTerminal } from "@/components/landing/ibx-cli-terminal";
 import { getPublicLandingFiles, type LandingDriveItem } from "@/lib/landing-public-data";
 
 export const dynamic = "force-dynamic";
@@ -33,6 +34,7 @@ export default async function LandingDrivePage({
         <Link href="/" className="hover:text-foreground">back</Link>
       </header>
       <LandingDriveView initialItems={initialItems} initialFolder={selectedPath.split("/").at(-1)?.toLowerCase() ?? "drive"} folderId={folder ?? null} demoSession={demoSession ?? null} />
+      <IbxCliTerminal />
     </main>
   );
 }

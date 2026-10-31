@@ -19,6 +19,7 @@ export function LandingDriveView({ initialItems, initialFolder, folderId, demoSe
     if (navigationType?.type === "reload") return;
 
     let active = true;
+    const refresh = () => {
       const folderQuery = folderId ? `?folder=${encodeURIComponent(folderId)}` : "";
       void fetch(`/api/landing-workspace${folderQuery}`, { cache: "no-store", headers: { "x-ibx-demo-session": demoSession } })
       .then(async (response) => response.ok ? await response.json() as { drive?: LandingDriveItem[]; folderName?: string } : null)
@@ -28,7 +29,10 @@ export function LandingDriveView({ initialItems, initialFolder, folderId, demoSe
         setItems(payload.drive.slice(0, 10));
       })
       .catch(() => undefined);
-    return () => { active = false; };
+    };
+    refresh();
+    window.addEventListener("ibx:landing-workspace-updated", refresh);
+    return () => { active = false; window.removeEventListener("ibx:landing-workspace-updated", refresh); };
   }, [demoSession, folderId]);
 
   return (

@@ -124,9 +124,18 @@ export function IbxCliTerminal() {
 
   useEffect(() => {
     try {
-      // Commands and output belong to this page load; never restore them on refresh.
-      sessionStorage.removeItem(terminalStorageKey);
-      sessionIdRef.current = crypto.randomUUID().replaceAll("-", "");
+      const navigation = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+      if (navigation?.type === "reload") sessionStorage.removeItem(terminalStorageKey);
+      const saved = navigation?.type === "reload" ? null : sessionStorage.getItem(terminalStorageKey);
+      if (saved) {
+        const state = JSON.parse(saved) as { sessionId?: string; command?: string; entries?: Entry[]; history?: string[]; open?: boolean };
+        if (state.sessionId && /^[A-Za-z0-9_-]{32}$/.test(state.sessionId)) sessionIdRef.current = state.sessionId;
+        if (typeof state.command === "string") setCommand(state.command);
+        if (Array.isArray(state.entries)) setEntries(state.entries.slice(-10));
+        if (Array.isArray(state.history)) setHistory(state.history.slice(-100));
+        if (typeof state.open === "boolean") setOpen(state.open);
+      }
+      sessionIdRef.current ??= crypto.randomUUID().replaceAll("-", "");
       const width = Number(localStorage.getItem(terminalWidthKey));
       hasSavedWidthRef.current = Number.isFinite(width) && width > 0;
       const initialWidth = clampPanelWidth(hasSavedWidthRef.current ? width : window.innerWidth / 2);
@@ -144,7 +153,7 @@ export function IbxCliTerminal() {
   useEffect(() => {
     if (!restored) return;
     try {
-      sessionStorage.removeItem(terminalStorageKey);
+      sessionStorage.setItem(terminalStorageKey, JSON.stringify({ sessionId: sessionIdRef.current, command, entries, history, open }));
     } catch { /* terminal continues without browser storage */ }
   }, [command, entries, history, open, restored]);
 
@@ -318,6 +327,7 @@ export function IbxCliTerminal() {
         <span className="text-xs text-muted-foreground">$</span>
         <input
           ref={inputRef}
+          autoFocus
           aria-label="try an ibx cli command"
           autoComplete="off"
           className="min-w-0 flex-1 bg-transparent font-mono text-[13px] outline-none placeholder:text-muted-foreground/70"
