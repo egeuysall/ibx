@@ -1,4 +1,5 @@
 import { ClerkProvider } from "@clerk/nextjs";
+import { dark } from "@clerk/ui/themes";
 import Script from "next/script";
 import type { Metadata, Viewport } from "next";
 import { Geist_Mono } from "next/font/google";
@@ -14,28 +15,6 @@ const geistMono = Geist_Mono({
 });
 
 const ICON_VERSION = "20260408";
-
-const clerkAppearance = {
-  variables: {
-    colorBackground: "var(--auth-card-background)",
-    colorForeground: "var(--secondary-foreground)",
-    colorPrimary: "var(--primary)",
-    colorPrimaryForeground: "var(--primary-foreground)",
-    colorMuted: "var(--muted)",
-    colorMutedForeground: "var(--muted-foreground)",
-    colorInput: "var(--input)",
-    colorInputForeground: "var(--foreground)",
-    colorBorder: "var(--auth-card-border)",
-    colorNeutral: "var(--foreground)",
-    colorRing: "var(--ring)",
-    colorDanger: "var(--destructive)",
-  },
-  elements: {
-    cardBox: "rounded-xl shadow-none bg-[var(--auth-card-background)]",
-    footerAction: "border-t-0",
-    footer: "border-t-0",
-  },
-};
 
 export const metadata: Metadata = {
   metadataBase: new URL((process.env.NEXT_PUBLIC_SITE_URL ?? "https://ibx.egeuysal.com").replace(/\/+$/, "")),
@@ -102,7 +81,7 @@ export default function RootLayout({
             document.documentElement.dataset.theme = dark ? "dark" : "light";
           } catch {}`}
         </Script>
-        <ClerkProvider appearance={clerkAppearance}>
+        <ClerkProvider appearance={{ theme: dark }}>
           <TooltipProvider delay={120}>
             <ServiceWorkerRegister />
             {children}
