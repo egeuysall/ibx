@@ -39,7 +39,7 @@ export default async function SignInPage({
             forceRedirectUrl={redirectUrl}
             appearance={{
               variables: {
-                colorBackground: "var(--secondary)",
+                colorBackground: "var(--auth-card-background)",
                 colorForeground: "var(--secondary-foreground)",
                 colorPrimary: "var(--primary)",
                 colorPrimaryForeground: "var(--primary-foreground)",
@@ -47,13 +47,13 @@ export default async function SignInPage({
                 colorMutedForeground: "var(--muted-foreground)",
                 colorInput: "var(--input)",
                 colorInputForeground: "var(--foreground)",
-                colorBorder: "var(--border)",
+                colorBorder: "var(--auth-card-border)",
                 colorNeutral: "var(--foreground)",
                 colorRing: "var(--ring)",
                 colorDanger: "var(--destructive)",
               },
               elements: {
-                cardBox: "border border-border rounded-xl shadow-none",
+                cardBox: "border border-[var(--auth-card-border)] rounded-xl shadow-none",
                 card: "bg-transparent shadow-none p-0",
                 footer: "hidden",
               },
