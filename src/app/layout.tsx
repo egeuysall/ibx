@@ -19,8 +19,8 @@ const ICON_VERSION = "20260408";
 export const metadata: Metadata = {
   metadataBase: new URL((process.env.NEXT_PUBLIC_SITE_URL ?? "https://ibx.egeuysal.com").replace(/\/+$/, "")),
   title: {
-    default: "ibx | tasks, notes, drive, and cli",
-    template: "%s | ibx",
+    default: "ibx: tasks, notes, drive, and cli",
+    template: "%s: ibx",
   },
   description: "turn thoughts into tasks, keep notes and files together, and continue across the web, cli, and phone.",
   applicationName: "ibx",
@@ -35,7 +35,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     url: "/",
-    title: "ibx | tasks, notes, drive, and cli",
+    title: "ibx: tasks, notes, drive, and cli",
     description: "turn thoughts into tasks, keep notes and files together, and continue across the web, cli, and phone.",
     siteName: "ibx",
     locale: "en_US",
@@ -43,7 +43,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "ibx | tasks, notes, drive, and cli",
+    title: "ibx: tasks, notes, drive, and cli",
     description: "turn thoughts into tasks, keep notes and files together, and continue across the web, cli, and phone.",
     creator: "@egecreates",
     images: ["/opengraph-image"],
