@@ -44,7 +44,7 @@ async function LandingPage() {
     name: "ibx",
     applicationCategory: "ProductivityApplication",
     operatingSystem: "Web, iOS, macOS, Windows, Linux",
-    description: "turn thoughts into tasks, keep notes and files together, and continue across the web, cli, and phone.",
+    description: "capture a thought, plan the next step, and keep the files beside it. work from the web or cli.",
     url: getIbxSiteUrl(),
     image: `${getIbxSiteUrl()}/opengraph-image`,
     author: { "@type": "Person", name: "Ege Uysal", url: "https://egeuysal.com" },
@@ -69,10 +69,10 @@ async function LandingPage() {
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareApplication).replace(/</g, "\\u003c") }} />
         <section aria-labelledby="landing-title" className="animate-enter" style={{ "--delay": "80ms" } as CSSProperties}>
           <h1 id="landing-title" className="text-sm font-semibold leading-5 tracking-normal text-foreground">
-            make room for what matters.
+            your tasks, notes, and files. together.
           </h1>
           <p className="mt-1 text-[13px] leading-5 text-muted-foreground">
-            keep your tasks, files, notes, and next steps together. pick up from the web, drive, cli, or phone.
+            capture a thought, plan the next step, and keep the files beside it. work from the web or cli.
           </p>
         </section>
 

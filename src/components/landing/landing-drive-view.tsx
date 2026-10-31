@@ -46,7 +46,7 @@ export function LandingDriveView({ initialItems, initialFolder, folderId, demoSe
               {item.size === "folder" ? (
                 <Link className="min-w-0 truncate hover:underline" href={item.href}>{leafName(item.path)}/</Link>
               ) : (
-                <a className={`min-w-0 truncate hover:underline ${fileIndex % 2 === 0 ? "text-[#99FFE4]" : "text-[#FFC799]"}`} href={item.href}>{leafName(item.path)}</a>
+                <a className={`min-w-0 truncate hover:underline ${fileIndex % 2 === 0 ? "text-[var(--vesper-green)]" : "text-[var(--vesper-orange)]"}`} href={item.href}>{leafName(item.path)}</a>
               )}
               <span className="shrink-0 text-xs text-muted-foreground">{item.size}</span>
             </li>

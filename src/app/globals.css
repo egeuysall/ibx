@@ -115,6 +115,8 @@ body.ibx-cli-workspace-resizing * { cursor: col-resize !important; user-select: 
 }
 
 :root {
+  --vesper-green: #147a65;
+  --vesper-orange: #b45a20;
   --code-highlight-bg: #f4f4f5;
   --terminal-ansi-0: #18181b;
   --terminal-ansi-1: #b42318;
@@ -168,6 +170,8 @@ body.ibx-cli-workspace-resizing * { cursor: col-resize !important; user-select: 
 }
 
 .dark {
+  --vesper-green: #99ffe4;
+  --vesper-orange: #ffc799;
   --code-highlight-bg: #101010;
   --terminal-ansi-0: #000000;
   --terminal-ansi-1: #cd0000;

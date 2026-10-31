@@ -325,8 +325,8 @@ export function IbxCliTerminal() {
     <section className="mt-10" aria-labelledby="ibx-terminal-title">
       <div className="flex items-baseline justify-between gap-4">
         <div>
-          <h2 id="ibx-terminal-title" className="text-sm font-semibold leading-5 text-foreground">cli</h2>
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">try the current cli in a persistent terminal session.</p>
+          <h2 id="ibx-terminal-title" className="text-sm font-semibold leading-5 text-foreground">try the cli</h2>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">try ibx --help or ibx files list. commands run in an isolated demo account, not your own.</p>
         </div>
       </div>
       <InstallCommand />
@@ -381,7 +381,7 @@ export function IbxCliTerminal() {
           <header className="flex h-12 shrink-0 items-center justify-between border-b border-border px-4 font-mono text-xs">
             <div className="flex h-full items-stretch gap-5">
               <span className="flex items-center border-b border-foreground px-1 text-foreground">terminal</span>
-              <a className="flex items-center text-muted-foreground hover:text-foreground" href="https://ibx.egeuysal.com/docs/guides/cli" target="_blank" rel="noreferrer">all commands</a>
+              <a className="flex items-center text-muted-foreground hover:text-foreground" href="https://ibx.egeuysal.com/docs/guides/cli" target="_blank" rel="noreferrer">command reference</a>
             </div>
             <button className="text-muted-foreground hover:text-foreground" type="button" onClick={closeWorkspace} aria-label="close cli workspace">close</button>
           </header>
