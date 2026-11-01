@@ -146,7 +146,7 @@ export default async function ProfilePage({ params, searchParams }: {
       <section className="w-full px-4 py-6 md:px-8 md:py-8">
         <div className="mx-auto w-full max-w-155 space-y-8">
         <header className="animate-enter flex flex-col items-start gap-3" style={{ "--delay": "40ms" } as CSSProperties}>
-          <PublicProfileAvatar name={username} imageUrl={owner.hasImage ? owner.imageUrl : undefined} />
+          <PublicProfileAvatar name={username} />
           <div className="space-y-2">
             <h1 className="break-all text-base font-semibold">@{username}</h1>
             <p className="text-xs text-muted-foreground">{notes.length} published notes · public files</p>
