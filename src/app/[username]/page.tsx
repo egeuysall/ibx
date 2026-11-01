@@ -180,7 +180,7 @@ export default async function ProfilePage({ params, searchParams }: {
               <span aria-hidden="true" className="w-4 shrink-0 text-center font-mono">/</span><span>{folder}</span>
             </Link>)}
             {visibleFiles.map((file, index) => <div key={file._id} className="animate-enter" style={{ "--delay": `${430 + (childFolders.length + index) * 45}ms` } as CSSProperties}>
-              <PublicFileViewer fileName={file.fileName} contentType={file.contentType} href={fileHref(file)} className="px-3 py-3 text-sm transition-colors hover:bg-muted/60" />
+              <PublicFileViewer fileName={file.fileName} contentType={file.contentType} href={fileHref(file)} className="px-3 py-2 text-sm transition-colors hover:bg-muted/60" />
             </div>)}
           </div> : <div className="animate-enter" style={{ "--delay": "430ms" } as CSSProperties}><Empty><EmptyHeader><EmptyTitle>{files.length ? "folder is empty" : "no public files yet"}</EmptyTitle><EmptyDescription>{files.length ? "Choose another folder." : "Only files shared publicly appear here."}</EmptyDescription></EmptyHeader></Empty></div>}
         </section>
