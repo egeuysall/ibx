@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
+import type { CSSProperties } from "react";
 import { notFound } from "next/navigation";
 import { clerkClient } from "@clerk/nextjs/server";
 import type { FunctionReturnType } from "convex/server";
@@ -126,6 +127,7 @@ export default async function ProfilePage({ params, searchParams }: {
   const requestedPathValue = Array.isArray(query.folder) ? query.folder[0] : query.folder ?? "";
   const requestedPath = requestedPathValue.split("/").filter(Boolean);
   const { path: currentPath, folders: childFolders, files: visibleFiles } = browsePublicFiles(files, requestedPath);
+  const notesDelay = 520 + (childFolders.length + visibleFiles.length) * 45;
   const fileHref = (file: typeof files[number]) => `/${encodeURIComponent(username)}/${[...file.folderPath, file.fileName].map(encodeURIComponent).join("/")}`;
   const profileJsonLd = {
     "@context": "https://schema.org",
@@ -141,10 +143,10 @@ export default async function ProfilePage({ params, searchParams }: {
   return <>
     <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(profileJsonLd).replace(/</g, "\\u003c") }} />
     <main className="min-h-dvh bg-background text-foreground">
-      <section className="w-full animate-enter px-4 py-6 md:px-8 md:py-8">
+      <section className="w-full px-4 py-6 md:px-8 md:py-8">
         <div className="mx-auto w-full max-w-155 space-y-8">
-        <header className="flex flex-col items-start gap-3">
-          <PublicProfileAvatar name={username} />
+        <header className="animate-enter flex flex-col items-start gap-3" style={{ "--delay": "40ms" } as CSSProperties}>
+          <PublicProfileAvatar name={username} imageUrl={owner.hasImage ? owner.imageUrl : undefined} />
           <div className="space-y-2">
             <h1 className="break-all text-base font-semibold">@{username}</h1>
             <p className="text-xs text-muted-foreground">{notes.length} published notes · public files</p>
@@ -152,19 +154,21 @@ export default async function ProfilePage({ params, searchParams }: {
         </header>
 
         <section className="space-y-3" aria-labelledby="public-terminal-title">
-          <h2 id="public-terminal-title" className="text-xs text-muted-foreground">Terminal</h2>
-          <PublicFilesTerminal username={username} files={files.map((file) => ({
-            fileName: file.fileName,
-            folderPath: file.folderPath,
-            href: fileHref(file),
-            contentType: file.contentType,
-            size: file.size,
-          }))} />
+          <h2 id="public-terminal-title" className="animate-enter text-xs text-muted-foreground" style={{ "--delay": "140ms" } as CSSProperties}>Terminal</h2>
+          <div className="animate-enter" style={{ "--delay": "200ms" } as CSSProperties}>
+            <PublicFilesTerminal username={username} files={files.map((file) => ({
+              fileName: file.fileName,
+              folderPath: file.folderPath,
+              href: fileHref(file),
+              contentType: file.contentType,
+              size: file.size,
+            }))} />
+          </div>
         </section>
 
         <section className="space-y-3" aria-labelledby="public-files-title">
-          <h2 id="public-files-title" className="text-xs text-muted-foreground">Published files</h2>
-          <nav aria-label="Folder location" className="flex flex-wrap items-center gap-1 text-sm">
+          <h2 id="public-files-title" className="animate-enter text-xs text-muted-foreground" style={{ "--delay": "320ms" } as CSSProperties}>Published files</h2>
+          <nav aria-label="Folder location" className="animate-enter flex flex-wrap items-center gap-1 text-sm" style={{ "--delay": "375ms" } as CSSProperties}>
             <Link href={folderHref(username, [], notePage)} className="hover:underline">drive</Link>
             {currentPath.map((segment, index) => <span key={index} className="flex items-center gap-1">
               <span aria-hidden="true" className="text-muted-foreground">/</span>
@@ -172,28 +176,30 @@ export default async function ProfilePage({ params, searchParams }: {
             </span>)}
           </nav>
           {childFolders.length + visibleFiles.length ? <div className="divide-y divide-border border-y border-border">
-            {childFolders.map((folder) => <Link key={folder} href={folderHref(username, [...currentPath, folder], notePage)} className="flex items-center gap-3 px-3 py-3 text-sm no-underline transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            {childFolders.map((folder, index) => <Link key={folder} href={folderHref(username, [...currentPath, folder], notePage)} className="animate-enter flex items-center gap-3 px-3 py-3 text-sm no-underline transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" style={{ "--delay": `${430 + index * 45}ms` } as CSSProperties}>
               <span aria-hidden="true" className="w-4 shrink-0 text-center font-mono">/</span><span>{folder}</span>
             </Link>)}
-            {visibleFiles.map((file) => <PublicFileViewer key={file._id} fileName={file.fileName} contentType={file.contentType} href={fileHref(file)} className="px-3 py-3 text-sm transition-colors hover:bg-muted/60" />)}
-          </div> : <Empty><EmptyHeader><EmptyTitle>{files.length ? "folder is empty" : "no public files yet"}</EmptyTitle><EmptyDescription>{files.length ? "Choose another folder." : "Only files shared publicly appear here."}</EmptyDescription></EmptyHeader></Empty>}
+            {visibleFiles.map((file, index) => <div key={file._id} className="animate-enter" style={{ "--delay": `${430 + (childFolders.length + index) * 45}ms` } as CSSProperties}>
+              <PublicFileViewer fileName={file.fileName} contentType={file.contentType} href={fileHref(file)} className="px-3 py-3 text-sm transition-colors hover:bg-muted/60" />
+            </div>)}
+          </div> : <div className="animate-enter" style={{ "--delay": "430ms" } as CSSProperties}><Empty><EmptyHeader><EmptyTitle>{files.length ? "folder is empty" : "no public files yet"}</EmptyTitle><EmptyDescription>{files.length ? "Choose another folder." : "Only files shared publicly appear here."}</EmptyDescription></EmptyHeader></Empty></div>}
         </section>
 
         <section className="space-y-3" aria-labelledby="public-notes-title">
-          <h2 id="public-notes-title" className="text-xs text-muted-foreground">Published notes</h2>
-          {notes.length ? visibleNotes.map((note) => {
+          <h2 id="public-notes-title" className="animate-enter text-xs text-muted-foreground" style={{ "--delay": `${notesDelay}ms` } as CSSProperties}>Published notes</h2>
+          {notes.length ? visibleNotes.map((note, index) => {
             try {
               const url = new URL(note.url);
-              return url.protocol === "https:" ? <a key={note.url} href={url.href} className="block rounded-sm border border-border px-3 py-3 no-underline transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              return url.protocol === "https:" ? <a key={note.url} href={url.href} className="animate-enter block rounded-sm border border-border px-3 py-3 no-underline transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" style={{ "--delay": `${notesDelay + 55 + index * 55}ms` } as CSSProperties}>
                 <p className="text-sm">{note.title}</p>
                 <p className="mt-1 truncate text-[11px] text-muted-foreground">{url.hostname}{url.pathname}</p>
               </a> : null;
             } catch { return null; }
-          }) : <p className="text-xs text-muted-foreground">No published notes.</p>}
-          {pageCount > 1 && <Pagination>
+          }) : <p className="animate-enter text-xs text-muted-foreground" style={{ "--delay": `${notesDelay + 55}ms` } as CSSProperties}>No published notes.</p>}
+          {pageCount > 1 && <Pagination className="animate-enter" style={{ "--delay": `${notesDelay + 55 + visibleNotes.length * 55}ms` } as CSSProperties}>
             <PaginationContent>
               <PaginationItem><PaginationPrevious disabled={notePage <= 1} render={notePage > 1 ? <Link href={folderHref(username, currentPath, notePage - 1)} /> : undefined} /></PaginationItem>
-              <PaginationItem><PaginationLink size="default" isActive disabled>{notePage} / {pageCount}</PaginationLink></PaginationItem>
+              <PaginationItem><PaginationLink size="default" isActive disabled className="border-0 dark:border">{notePage} / {pageCount}</PaginationLink></PaginationItem>
               <PaginationItem><PaginationNext disabled={notePage >= pageCount} render={notePage < pageCount ? <Link href={folderHref(username, currentPath, notePage + 1)} /> : undefined} /></PaginationItem>
             </PaginationContent>
           </Pagination>}
