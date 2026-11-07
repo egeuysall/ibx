@@ -6,7 +6,6 @@ import { clerkClient } from "@clerk/nextjs/server";
 import type { FunctionReturnType } from "convex/server";
 import { api, convex } from "@/lib/convex-server";
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
-import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 import { Toaster } from "@/components/ui/sonner";
 import { PublicFilesTerminal } from "@/components/files/public-files-terminal";
 import { PublicFileViewer } from "@/components/files/public-file-viewer";
@@ -15,11 +14,10 @@ import { browsePublicFiles } from "@/lib/public-drive";
 import { getIbxSiteUrl } from "@/lib/landing-public-data";
 
 export const dynamic = "force-dynamic";
-export async function generateMetadata({ params, searchParams }: {
+export async function generateMetadata({ params }: {
   params: Promise<{ username: string }>;
-  searchParams: Promise<{ notePage?: string | string[] }>;
 }): Promise<Metadata> {
-  const [{ username }, query] = await Promise.all([params, searchParams]);
+  const { username } = await params;
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(username)) {
     return { title: "profile not found", robots: { index: false, follow: false } };
   }
@@ -30,8 +28,6 @@ export async function generateMetadata({ params, searchParams }: {
   const title = `@${username.toLowerCase()} · public files and notes`;
   const description = `browse public files and notes shared by @${username.toLowerCase()} on ibx.`;
   const canonicalUrl = new URL(`/${encodeURIComponent(username)}`, getIbxSiteUrl());
-  const notePage = parsePage(query.notePage);
-  if (notePage > 1) canonicalUrl.searchParams.set("notePage", String(notePage));
   const canonical = canonicalUrl.toString();
   return {
     title,
@@ -43,21 +39,14 @@ export async function generateMetadata({ params, searchParams }: {
   };
 }
 
-const NOTES_PER_PAGE = 5;
 type PublicFilesPage = FunctionReturnType<typeof api.attachments.paginatePublicFiles>;
 
 type PublicNote = { title: string; url: string; createdAt: number; folderPath: string[] };
 
-function parsePage(value: string | string[] | undefined) {
-  const parsed = Number.parseInt(Array.isArray(value) ? value[0] : value ?? "", 10);
-  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : 1;
-}
-
-function folderHref(username: string, path: string[], notePath: string[], notePage: number) {
+function folderHref(username: string, path: string[], notePath: string[]) {
   const query = new URLSearchParams();
   if (path.length) query.set("folder", path.join("/"));
   if (notePath.length) query.set("noteFolder", notePath.join("/"));
-  if (notePage > 1) query.set("notePage", String(notePage));
   const suffix = query.size ? `?${query}` : "";
   return `/${encodeURIComponent(username)}${suffix}`;
 }
@@ -106,7 +95,7 @@ async function listBriPublicNotes(username: string): Promise<PublicNote[] | null
 
 export default async function ProfilePage({ params, searchParams }: {
   params: Promise<{ username: string }>;
-  searchParams: Promise<{ folder?: string | string[]; noteFolder?: string | string[]; notePage?: string | string[] }>;
+  searchParams: Promise<{ folder?: string | string[]; noteFolder?: string | string[] }>;
 }) {
   const { username } = await params;
   const query = await searchParams;
@@ -129,9 +118,6 @@ export default async function ProfilePage({ params, searchParams }: {
   const { path: currentPath, folders: childFolders, files: visibleFiles } = browsePublicFiles(files, requestedPath);
   const requestedNotePathValue = Array.isArray(query.noteFolder) ? query.noteFolder[0] : query.noteFolder ?? "";
   const { path: currentNotePath, folders: childNoteFolders, files: folderNotes } = browsePublicFiles(notes.map((note) => ({ ...note, fileName: note.title })), requestedNotePathValue.split("/").filter(Boolean));
-  const pageCount = Math.max(1, Math.ceil(folderNotes.length / NOTES_PER_PAGE));
-  const notePage = Math.min(parsePage(query.notePage), pageCount);
-  const visibleNotes = folderNotes.slice((notePage - 1) * NOTES_PER_PAGE, notePage * NOTES_PER_PAGE);
   const notesDelay = 520 + (childFolders.length + visibleFiles.length) * 45;
   const fileHref = (file: typeof files[number]) => `/${encodeURIComponent(username)}/${[...file.folderPath, file.fileName].map(encodeURIComponent).join("/")}`;
   const profileJsonLd = {
@@ -174,14 +160,14 @@ export default async function ProfilePage({ params, searchParams }: {
         <section className="space-y-3" aria-labelledby="public-files-title">
           <h2 id="public-files-title" className="animate-enter text-xs text-muted-foreground" style={{ "--delay": "320ms" } as CSSProperties}>Published files</h2>
           <nav aria-label="Folder location" className="animate-enter flex flex-wrap items-center gap-1 text-sm" style={{ "--delay": "375ms" } as CSSProperties}>
-            <Link href={folderHref(username, [], currentNotePath, notePage)} className="hover:underline">drive</Link>
+            <Link href={folderHref(username, [], currentNotePath)} className="hover:underline">drive</Link>
             {currentPath.map((segment, index) => <span key={index} className="flex items-center gap-1">
               <span aria-hidden="true" className="text-muted-foreground">/</span>
-              <Link href={folderHref(username, currentPath.slice(0, index + 1), currentNotePath, notePage)} className="hover:underline">{segment}</Link>
+              <Link href={folderHref(username, currentPath.slice(0, index + 1), currentNotePath)} className="hover:underline">{segment}</Link>
             </span>)}
           </nav>
           {childFolders.length + visibleFiles.length ? <div className="divide-y divide-border border-y border-border">
-            {childFolders.map((folder, index) => <Link key={folder} href={folderHref(username, [...currentPath, folder], currentNotePath, notePage)} className="animate-enter flex items-center gap-3 px-3 py-3 text-sm no-underline transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" style={{ "--delay": `${430 + index * 45}ms` } as CSSProperties}>
+            {childFolders.map((folder, index) => <Link key={folder} href={folderHref(username, [...currentPath, folder], currentNotePath)} className="animate-enter flex items-center gap-3 px-3 py-3 text-sm no-underline transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" style={{ "--delay": `${430 + index * 45}ms` } as CSSProperties}>
               <span aria-hidden="true" className="w-4 shrink-0 text-center font-mono">/</span><span>{folder}</span>
             </Link>)}
             {visibleFiles.map((file, index) => <div key={file._id} className="animate-enter" style={{ "--delay": `${430 + (childFolders.length + index) * 45}ms` } as CSSProperties}>
@@ -193,27 +179,20 @@ export default async function ProfilePage({ params, searchParams }: {
         <section className="space-y-3" aria-labelledby="public-notes-title">
           <h2 id="public-notes-title" className="animate-enter text-xs text-muted-foreground" style={{ "--delay": `${notesDelay}ms` } as CSSProperties}>Published notes</h2>
           <nav aria-label="Notes folder location" className="flex flex-wrap items-center gap-1 text-sm">
-            <Link href={folderHref(username, currentPath, [], 1)} className="hover:underline">notes</Link>
+            <Link href={folderHref(username, currentPath, [])} className="hover:underline">notes</Link>
             {currentNotePath.map((segment, index) => <span key={index} className="flex items-center gap-1">
               <span aria-hidden="true" className="text-muted-foreground">/</span>
-              <Link href={folderHref(username, currentPath, currentNotePath.slice(0, index + 1), 1)} className="hover:underline">{segment}</Link>
+              <Link href={folderHref(username, currentPath, currentNotePath.slice(0, index + 1))} className="hover:underline">{segment}</Link>
             </span>)}
           </nav>
           {childNoteFolders.length + folderNotes.length ? <div className="divide-y divide-border border-y border-border">
-            {childNoteFolders.map((folder) => <Link key={folder} href={folderHref(username, currentPath, [...currentNotePath, folder], 1)} className="flex items-center gap-3 px-3 py-3 text-sm no-underline transition-colors hover:bg-muted/60">
+            {childNoteFolders.map((folder) => <Link key={folder} href={folderHref(username, currentPath, [...currentNotePath, folder])} className="flex items-center gap-3 px-3 py-3 text-sm no-underline transition-colors hover:bg-muted/60">
               <span aria-hidden="true" className="w-4 shrink-0 text-center font-mono">/</span><span>{folder}</span>
             </Link>)}
-            {visibleNotes.map((note) => <a key={note.url} href={note.url} className="flex items-center gap-3 px-3 py-3 text-sm no-underline transition-colors hover:bg-muted/60">
+            {folderNotes.map((note) => <a key={note.url} href={note.url} className="flex items-center gap-3 px-3 py-3 text-sm no-underline transition-colors hover:bg-muted/60">
               <span aria-hidden="true" className="w-4 shrink-0 text-center font-mono">-</span><span>{note.title}</span>
             </a>)}
           </div> : <p className="text-xs text-muted-foreground">{notes.length ? "No published notes here." : "No published notes."}</p>}
-          {pageCount > 1 && <Pagination className="animate-enter" style={{ "--delay": `${notesDelay + 55 + visibleNotes.length * 55}ms` } as CSSProperties}>
-            <PaginationContent>
-              <PaginationItem><PaginationPrevious disabled={notePage <= 1} render={notePage > 1 ? <Link href={folderHref(username, currentPath, currentNotePath, notePage - 1)} /> : undefined} /></PaginationItem>
-              <PaginationItem><PaginationLink size="default" isActive disabled className="border-0 dark:border">{notePage} / {pageCount}</PaginationLink></PaginationItem>
-              <PaginationItem><PaginationNext disabled={notePage >= pageCount} render={notePage < pageCount ? <Link href={folderHref(username, currentPath, currentNotePath, notePage + 1)} /> : undefined} /></PaginationItem>
-            </PaginationContent>
-          </Pagination>}
         </section>
         </div>
       </section>
