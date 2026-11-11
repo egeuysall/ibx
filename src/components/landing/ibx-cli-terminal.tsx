@@ -340,6 +340,9 @@ export function IbxCliTerminal() {
           ref={inputRef}
           aria-label="try an ibx cli command"
           autoComplete="off"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
           className="min-w-0 flex-1 bg-transparent font-mono text-[13px] outline-none placeholder:text-muted-foreground/70"
           placeholder="ibx --help"
           value={command}
@@ -401,7 +404,7 @@ export function IbxCliTerminal() {
           </div>
           <form className="flex shrink-0 items-center gap-3 border-t border-border px-5 py-4 font-mono text-[13px] sm:px-7" onSubmit={(event) => { event.preventDefault(); void run(); }}>
             <span className="text-xs text-muted-foreground">$</span>
-            <input ref={workspaceInputRef} aria-label="cli command" autoComplete="off" className="min-w-0 flex-1 bg-transparent font-mono text-[13px] outline-none placeholder:text-muted-foreground/70" placeholder="ibx --help" value={command} onChange={(event) => { historyCursorRef.current = -1; setCommand(event.target.value); }} onKeyDown={handleInputKeyDown} />
+            <input ref={workspaceInputRef} aria-label="cli command" autoComplete="off" autoCapitalize="none" autoCorrect="off" spellCheck={false}className="min-w-0 flex-1 bg-transparent font-mono text-[13px] outline-none placeholder:text-muted-foreground/70" placeholder="ibx --help" value={command} onChange={(event) => { historyCursorRef.current = -1; setCommand(event.target.value); }} onKeyDown={handleInputKeyDown} />
             <button className="text-xs hover:text-muted-foreground disabled:opacity-50" disabled={busy || !command.trim()} type="submit">run</button>
           </form>
         </aside>

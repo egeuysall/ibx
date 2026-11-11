@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import { api, convex } from "@/lib/convex-server";
+import { callCliRunner, getCliRunner } from "@/lib/cli-runner";
 import { LANDING_SESSION_PATTERN } from "@/lib/landing-demo";
 import { initializeLandingDemoWorkspace } from "@/lib/landing-demo-workspace";
 import { runLandingShellCommand } from "@/lib/landing-shell";
@@ -88,7 +89,7 @@ export async function POST(request: Request) {
   }
 
   const args = rawArgs as string[];
-  const cliArgs = args[0] === "ibx" ? args.slice(1) : args;
+  const cliArgs = args[0]?.toLowerCase() === "ibx" ? args.slice(1) : args;
   if (cliArgs.length === 0) cliArgs.push("--help");
 
   const requestedSession = request.headers.get("x-ibx-demo-session");
@@ -105,15 +106,20 @@ export async function POST(request: Request) {
   const appBaseUrl = process.env.NODE_ENV === "development"
     ? new URL(request.url).origin
     : (process.env.NEXT_PUBLIC_SITE_URL ?? "https://ibx.egeuysal.com").replace(/\/+$/, "");
+  const runner = getCliRunner();
   try {
-    const previous = await stat(home).catch(() => null);
-    if (previous && Date.now() - previous.mtimeMs > SESSION_MAX_AGE * 1000) {
-      await rm(home, { recursive: true, force: true });
+    if (!runner) {
+      const previous = await stat(home).catch(() => null);
+      if (previous && Date.now() - previous.mtimeMs > SESSION_MAX_AGE * 1000) {
+        await rm(home, { recursive: true, force: true });
+      }
+      await mkdir(home, { recursive: true, mode: 0o700 });
     }
-    await mkdir(home, { recursive: true, mode: 0o700 });
 
     if (args[0]?.toLowerCase() !== "ibx") {
-      const output = await runLandingShellCommand(cliArgs, home, appBaseUrl);
+      const output = runner
+        ? (await callCliRunner(runner, sessionId, { kind: "shell", args: cliArgs, origin: appBaseUrl })).output
+        : await runLandingShellCommand(cliArgs, home, appBaseUrl);
       return sendResult(request, sessionId, { output: output ?? "" });
     }
 
@@ -137,6 +143,14 @@ export async function POST(request: Request) {
       IBX_DISABLE_UPDATE_CHECK: "1",
       IBX_BASE_URL: appBaseUrl,
     };
+    if (runner) {
+      const result = await callCliRunner(runner, sessionId, {
+        kind: "cli",
+        args: cliArgs,
+        env: { IBX_PUBLIC_DEMO_API_KEY: demoApiKey, IBX_BASE_URL: appBaseUrl, IBX_DISABLE_UPDATE_CHECK: "1" },
+      });
+      return sendResult(request, sessionId, { output: result.output });
+    }
     const { stdout, stderr } = await execFileAsync(process.execPath, [cliPath, ...cliArgs], {
       cwd: home,
       timeout: 6000,

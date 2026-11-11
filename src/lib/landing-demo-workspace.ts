@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { api, convex } from "@/lib/convex-server";
 import { ensureSessionDemoAccount } from "@/lib/landing-demo";
+import { callCliRunner, getCliRunner } from "@/lib/cli-runner";
 
 const execFileAsync = promisify(execFile);
 const cliPath = join(process.cwd(), "public", "ibx");
@@ -30,7 +31,8 @@ export function initializeLandingDemoWorkspace(sessionId: string, siteUrl: strin
 async function seedWorkspace(sessionId: string, siteUrl: string) {
   const demo = await ensureSessionDemoAccount(sessionId);
   const home = join(tmpdir(), "ibx-cli-demo-workspaces", sessionId);
-  await mkdir(home, { recursive: true, mode: 0o700 });
+  const runner = getCliRunner();
+  if (!runner) await mkdir(home, { recursive: true, mode: 0o700 });
   const env = {
     NODE_ENV: process.env.NODE_ENV ?? "production",
     PATH: process.env.PATH ?? "",
@@ -42,12 +44,19 @@ async function seedWorkspace(sessionId: string, siteUrl: string) {
     IBX_DISABLE_UPDATE_CHECK: "1",
     IBX_BASE_URL: siteUrl,
   };
-  const runCli = (args: string[]) => execFileAsync(process.execPath, [cliPath, ...args], {
-    cwd: home,
-    timeout: 8_000,
-    maxBuffer: 24_000,
-    env,
-  });
+  const runCli = (args: string[], extra: Record<string, unknown> = {}) => runner
+    ? callCliRunner(runner, sessionId, {
+        kind: "cli",
+        args,
+        env: { IBX_PUBLIC_DEMO_API_KEY: demo.apiKey, IBX_BASE_URL: siteUrl, IBX_DISABLE_UPDATE_CHECK: "1" },
+        ...extra,
+      })
+    : execFileAsync(process.execPath, [cliPath, ...args], {
+        cwd: home,
+        timeout: 8_000,
+        maxBuffer: 24_000,
+        env,
+      });
 
   if (demo.created) {
     await Promise.all(initialTasks.map((title) => runCli(["todos", "add", title]).catch(() => undefined)));
@@ -76,8 +85,15 @@ async function seedWorkspace(sessionId: string, siteUrl: string) {
     if (!response.ok || (Number.isFinite(declaredSize) && declaredSize > sampleLimit)) return demo;
     const bytes = Buffer.from(await response.arrayBuffer());
     if (bytes.length === 0 || bytes.length > sampleLimit) return demo;
-    await writeFile(join(home, sampleName), bytes, { mode: 0o600 });
-    await runCli(["files", "upload", sampleName, "--folder", researchFolder._id]).catch(() => undefined);
+    if (runner) {
+      await runCli(["files", "upload", sampleName, "--folder", researchFolder._id], {
+        filesBase64: { [sampleName]: bytes.toString("base64") },
+        overwrite: true,
+      }).catch(() => undefined);
+    } else {
+      await writeFile(join(home, sampleName), bytes, { mode: 0o600 });
+      await runCli(["files", "upload", sampleName, "--folder", researchFolder._id]).catch(() => undefined);
+    }
   } catch {
     // Keep the demo workspace usable even when the public sample is unavailable.
   } finally {

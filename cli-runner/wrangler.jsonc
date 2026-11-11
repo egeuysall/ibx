@@ -1,0 +1,11 @@
+{
+  "name": "ibx-cli-runner",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-10",
+  "workers_dev": false,
+  "containers": [
+    { "class_name": "IbxCli", "image": "./Dockerfile", "instance_type": "basic", "max_instances": 30 }
+  ],
+  "durable_objects": { "bindings": [{ "name": "IBX_CLI", "class_name": "IbxCli" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["IbxCli"] }]
+}

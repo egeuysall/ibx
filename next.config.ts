@@ -1,3 +1,4 @@
+import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
 import type { NextConfig } from "next";
 
 const docsUrl = (process.env.IBX_DOCS_URL || "https://ibx-docs.vercel.app").replace(/\/$/, "");
@@ -14,5 +15,7 @@ const nextConfig: NextConfig = {
     ];
   },
 };
+
+initOpenNextCloudflareForDev();
 
 export default nextConfig;

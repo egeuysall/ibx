@@ -1,7 +1,6 @@
 import Script from "next/script";
 import type { Metadata, Viewport } from "next";
 import { Geist_Mono } from "next/font/google";
-import { Analytics } from "@vercel/analytics/next";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ServiceWorkerRegister } from "@/components/layout/sw-register";
@@ -87,7 +86,6 @@ export default function RootLayout({
             {children}
           </TooltipProvider>
         </ThemeAwareClerkProvider>
-        <Analytics />
       </body>
     </html>
   );

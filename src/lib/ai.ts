@@ -1,3 +1,4 @@
+import { getCloudflareContext } from "@opennextjs/cloudflare";
 import "server-only";
 
 import type { GenerationPreferences } from "@/lib/types";
@@ -692,6 +693,27 @@ type ChatCompletionMessage = {
   content: string;
 };
 
+const WORKERS_AI_MODEL = "@cf/zai-org/glm-4.7-flash";
+
+type WorkersAiBinding = { run: (model: string, input: unknown) => Promise<unknown> };
+
+function getWorkersAi(): WorkersAiBinding | null {
+  try {
+    return (getCloudflareContext().env as { AI?: WorkersAiBinding }).AI ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function requestWorkersAiContent(ai: WorkersAiBinding, messages: ChatCompletionMessage[]) {
+  const result = (await ai.run(WORKERS_AI_MODEL, { messages, temperature: 0, max_tokens: 4096 })) as {
+    choices?: Array<{ message?: { content?: string | null } }>;
+    response?: unknown;
+  };
+  const content = result.choices?.[0]?.message?.content ?? result.response ?? "";
+  return typeof content === "string" ? content : JSON.stringify(content);
+}
+
 async function requestChatCompletionContent(
   apiKey: string,
   model: string,
@@ -699,6 +721,9 @@ async function requestChatCompletionContent(
   timeoutMs: number,
 ) {
   let lastError: unknown = null;
+
+  const workersAi = getWorkersAi();
+  if (workersAi) return requestWorkersAiContent(workersAi, messages);
 
   for (let attempt = 1; attempt <= AI_RETRY_MAX_ATTEMPTS; attempt += 1) {
     try {
@@ -803,10 +828,10 @@ export async function generateTodoAgentPlanFromThought(
   rawText: string,
   options: AgentGenerationOptions,
 ): Promise<TodoAgentPlan> {
-  const apiKey = process.env.AI_GATEWAY_API_KEY;
+  const apiKey = process.env.AI_GATEWAY_API_KEY ?? "";
   const model = process.env.AI_AGENT_MODEL || "openai/gpt-5.4-nano";
 
-  if (!apiKey) {
+  if (!apiKey && !getWorkersAi()) {
     throw new Error("AI_GATEWAY_API_KEY is required.");
   }
 
@@ -973,10 +998,10 @@ export async function generateTodosFromThought(
   rawText: string,
   options: GenerationOptions,
 ) {
-  const apiKey = process.env.AI_GATEWAY_API_KEY;
+  const apiKey = process.env.AI_GATEWAY_API_KEY ?? "";
   const model = process.env.AI_AGENT_MODEL || "openai/gpt-5.4-nano";
 
-  if (!apiKey) {
+  if (!apiKey && !getWorkersAi()) {
     throw new Error("AI_GATEWAY_API_KEY is required.");
   }
 
