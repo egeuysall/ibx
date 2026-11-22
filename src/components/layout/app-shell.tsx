@@ -2363,7 +2363,8 @@ export function AppShell({
     setHasLoadedTodos(true);
 
     try {
-      if (!isOnline || todo.id.startsWith("local-")) {
+      // navigator.onLine can be wrong; try the network and queue only on a real network error.
+      if (todo.id.startsWith("local-")) {
         await queueOfflinePatch();
         options.onQueued?.();
         if (options.offlineMessage) {
