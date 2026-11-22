@@ -8,6 +8,10 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: __dirname,
   },
+  async redirects() {
+    // The icon used to be a route at /apple-icon. Pages and manifests cached before it became a static file still ask for it.
+    return [{ source: "/apple-icon", destination: "/apple-icon.png", permanent: false }];
+  },
   async rewrites() {
     return [
       { source: "/docs", destination: `${docsUrl}/docs` },

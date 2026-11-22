@@ -11,7 +11,10 @@ if (!convexUrl) {
   throw new Error("NEXT_PUBLIC_CONVEX_URL is required.");
 }
 
-const client = new ConvexHttpClient(convexUrl);
+// One client per call, never a shared one. ConvexHttpClient queues its mutations on a promise it keeps between calls. On
+// Workers a promise made while serving one request cannot be waited on from another, so a shared client made a
+// second mutation hang until the runtime cancelled the request (a 500 on delete and patch).
+const client = (): ConvexHttpClient => new ConvexHttpClient(convexUrl);
 
 function serverArgs<Ref extends FunctionReference<"query" | "mutation" | "action">>(
   args: Omit<FunctionArgs<Ref>, "serverToken">,
@@ -28,19 +31,19 @@ export const convex = {
     ref: Ref,
     args: Omit<FunctionArgs<Ref>, "serverToken">,
   ): Promise<FunctionReturnType<Ref>> {
-    return client.query(ref, serverArgs<Ref>(args));
+    return client().query(ref, serverArgs<Ref>(args));
   },
   mutation<Ref extends FunctionReference<"mutation", "public">>(
     ref: Ref,
     args: Omit<FunctionArgs<Ref>, "serverToken">,
   ): Promise<FunctionReturnType<Ref>> {
-    return client.mutation(ref, serverArgs<Ref>(args));
+    return client().mutation(ref, serverArgs<Ref>(args));
   },
   action<Ref extends FunctionReference<"action", "public">>(
     ref: Ref,
     args: Omit<FunctionArgs<Ref>, "serverToken">,
   ): Promise<FunctionReturnType<Ref>> {
-    return client.action(ref, serverArgs<Ref>(args));
+    return client().action(ref, serverArgs<Ref>(args));
   },
 };
 export { api };
