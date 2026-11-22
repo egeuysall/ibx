@@ -1,6 +1,8 @@
 "use client";
 
+import { Clerk } from "@clerk/clerk-js";
 import { ClerkProvider } from "@clerk/nextjs";
+import { ui } from "@clerk/ui";
 import { dark } from "@clerk/ui/themes";
 import { useSyncExternalStore } from "react";
 
@@ -20,5 +22,11 @@ function getTheme() {
 export function ThemeAwareClerkProvider({ children }: { children: React.ReactNode }) {
   const theme = useSyncExternalStore(subscribe, getTheme, () => "light");
 
-  return <ClerkProvider appearance={theme === "dark" ? { theme: dark } : undefined}>{children}</ClerkProvider>;
+  // Bundle clerk-js and its UI instead of hot-loading them from the Clerk CDN. On the deployed site the hot-loaded script finished before
+  // hydration, ClerkProvider never started Clerk, and <SignIn /> rendered nothing.
+  return (
+    <ClerkProvider Clerk={Clerk} ui={ui} appearance={theme === "dark" ? { theme: dark } : undefined}>
+      {children}
+    </ClerkProvider>
+  );
 }
