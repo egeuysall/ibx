@@ -50,7 +50,7 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true, googleBot: { index: true, follow: true, "max-image-preview": "large" } },
   icons: {
     icon: `/icon?size=512&v=${ICON_VERSION}`,
-    apple: `/apple-icon?v=${ICON_VERSION}`,
+    apple: `/apple-icon.png?v=${ICON_VERSION}`,
     shortcut: `/favicon.ico?v=${ICON_VERSION}`,
   },
 };
