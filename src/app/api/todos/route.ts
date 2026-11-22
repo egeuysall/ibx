@@ -9,6 +9,7 @@ import {
   validateCsrfForSessionAuth,
 } from "@/lib/auth-server";
 import { api, convex } from "@/lib/convex-server";
+import { guarded } from "@/lib/route-errors";
 
 const DATE_KEY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_TITLE_LENGTH = 140;
@@ -26,7 +27,7 @@ function parseTodayStartUtc(today: string | null | undefined) {
   return null;
 }
 
-export async function GET(request: NextRequest) {
+async function handleGET(request: NextRequest) {
   const auth = await getRouteAuth(request);
   if (!auth) {
     return unauthorizedJson();
@@ -84,7 +85,7 @@ export async function GET(request: NextRequest) {
   });
 }
 
-export async function POST(request: NextRequest) {
+async function handlePOST(request: NextRequest) {
   const auth = await getRouteAuth(request);
   if (!auth) {
     return unauthorizedJson();
@@ -227,3 +228,6 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json({ ok: true, id: todoId, thoughtId: externalId });
 }
+
+export const GET = guarded("todos.get", handleGET);
+export const POST = guarded("todos.post", handlePOST);

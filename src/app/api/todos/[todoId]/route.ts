@@ -8,6 +8,7 @@ import {
   validateCsrfForSessionAuth,
 } from "@/lib/auth-server";
 import { api, convex } from "@/lib/convex-server";
+import { guarded } from "@/lib/route-errors";
 import type { TodoStatus } from "@/lib/types";
 
 const MAX_NOTES_LENGTH = 4_000;
@@ -108,7 +109,7 @@ async function syncTimeBlockReminder(ownerKey: string | null, todoId: string) {
   });
 }
 
-export async function GET(
+async function handleGET(
   request: NextRequest,
   { params }: { params: Promise<{ todoId: string }> },
 ) {
@@ -140,7 +141,7 @@ export async function GET(
   return NextResponse.json({ todo: serializeTodo(todo) });
 }
 
-export async function PATCH(
+async function handlePATCH(
   request: NextRequest,
   { params }: { params: Promise<{ todoId: string }> },
 ) {
@@ -347,7 +348,7 @@ export async function PATCH(
   return NextResponse.json({ ok: true });
 }
 
-export async function DELETE(
+async function handleDELETE(
   request: NextRequest,
   { params }: { params: Promise<{ todoId: string }> },
 ) {
@@ -383,3 +384,7 @@ export async function DELETE(
 
   return NextResponse.json({ ok: true });
 }
+
+export const GET = guarded("todos.item.get", handleGET);
+export const PATCH = guarded("todos.item.patch", handlePATCH);
+export const DELETE = guarded("todos.item.delete", handleDELETE);
