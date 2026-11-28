@@ -1,7 +1,7 @@
 import { EXIT_CODE } from "../core/constants.js";
 import { getStringOption, hasFlag } from "../core/args.js";
 import { requireConfig } from "../core/config.js";
-import { filterTodosByView, getDateKeyInTimezone, getTodayDateKey, sortTodos } from "../core/dates.js";
+import { filterTodosByView, getDueDateKey, getTodayDateKey, sortTodos } from "../core/dates.js";
 import { CliError } from "../core/errors.js";
 import { requestJson } from "../core/http.js";
 import { resolveAiInput } from "../core/input.js";
@@ -105,7 +105,7 @@ export async function runTodosCommand(parsed: ParsedArgs) {
         (todo) =>
           todo.status === "done" &&
           todo.dueDate !== null &&
-          getDateKeyInTimezone(todo.dueDate) === todayDateKey,
+          getDueDateKey(todo.dueDate) === todayDateKey,
       ),
     );
 

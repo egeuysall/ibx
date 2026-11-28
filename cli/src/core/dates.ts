@@ -18,7 +18,13 @@ export function formatDate(value: number | null) {
     return "no date";
   }
 
-  return getDateKeyInTimezone(value);
+  return getDueDateKey(value);
+}
+
+// A due date is a calendar day stored as midnight UTC, so read it in UTC.
+// Converting it to APP_TIMEZONE moves it to the previous day in the Americas.
+export function getDueDateKey(dueDate: number) {
+  return new Date(dueDate).toISOString().slice(0, 10);
 }
 
 export function getDateKeyInTimezone(timestamp: number, timeZone = APP_TIMEZONE) {
@@ -107,7 +113,7 @@ export function filterTodosByView(items: TodoItem[], view: ViewMode) {
         (todo) =>
           todo.status === "open" &&
           todo.dueDate !== null &&
-          getDateKeyInTimezone(todo.dueDate) === todayDateKey,
+          getDueDateKey(todo.dueDate) === todayDateKey,
       ),
     );
   }
@@ -118,7 +124,7 @@ export function filterTodosByView(items: TodoItem[], view: ViewMode) {
         (todo) =>
           todo.status === "open" &&
           todo.dueDate !== null &&
-          getDateKeyInTimezone(todo.dueDate) >= todayDateKey,
+          getDueDateKey(todo.dueDate) >= todayDateKey,
       ),
     );
   }
